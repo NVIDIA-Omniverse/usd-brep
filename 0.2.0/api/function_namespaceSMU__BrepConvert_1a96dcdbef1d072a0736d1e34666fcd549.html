@@ -1,0 +1,1325 @@
+
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>UsdXformToSmTransform &#8212; USD BRep</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=7f76b32a3354e82990f2" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=7f76b32a3354e82990f2" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/nvidia-sphinx-theme.css?v=933278ad" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=767de534" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/api.css?v=6f210184" />
+    <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../_static/scripts/fontawesome.js?digest=7f76b32a3354e82990f2"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=7f76b32a3354e82990f2" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=7f76b32a3354e82990f2" />
+
+
+
+    <script rel="preload" src="../_static/modal-table.js"></script>
+    <script src="../_static/documentation_options.js?v=1be0d999"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=65e89d2a"></script>
+    <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/function_namespaceSMU__BrepConvert_1a96dcdbef1d072a0736d1e34666fcd549';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.17.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '0.2.0';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/version-patch.js?v=3e13fdd2"></script>
+
+    <link rel="icon" href="../_static/favicon.png"/>
+
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="smuGenerateBrepMetadata" href="function_namespaceSMU__BrepConvert_1aa5a5142c67f58d472e4a4fffca345e6c.html" />
+    <link rel="prev" title="TessellatedMeshPtr" href="typedef_namespaceSMU__BrepConvert_1a81a2d8e480e548d5fbe4c2b1155f20fb.html" />
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+    <meta name="docbuild:last-update" content="Oct 08, 2026"/>
+  
+    
+    <script src="../_static/searchtools.js"></script>
+    <script src="../_static/language_data.js"></script>
+    <script src="../searchindex.js"></script>
+  
+
+
+  </head>
+
+  <body data-default-mode="">
+
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="USD BRep - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="USD BRep - Home"/>
+  
+  
+    <p class="title logo__title">USD BRep</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+
+
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://developer.nvidia.com/usd" title="www" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-solid fa-globe fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">www</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/NVIDIA-Omniverse/usd-brep" title="github" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">github</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../_static/nvidia-logo-horiz-rgb-blk-for-screen.svg" class="logo__image only-light" alt="USD BRep - Home"/>
+    <img src="../_static/nvidia-logo-horiz-rgb-wht-for-screen.svg" class="logo__image only-dark pst-js-only" alt="USD BRep - Home"/>
+  
+  
+    <p class="title logo__title">USD BRep</p>
+  
+</a>
+
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+
+
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-3"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-3"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-3"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-3">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://developer.nvidia.com/usd" title="www" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-solid fa-globe fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">www</span></a>
+        </li>
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="https://github.com/NVIDIA-Omniverse/usd-brep" title="github" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">github</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+
+
+<nav class="bd-docs-nav bd-links"
+     aria-label="Table of Contents">
+  <p class="bd-links__title" role="heading" aria-level="1">Table of Contents</p>
+  <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../docs/python.html">USD BRep Python API</a></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="api.html">USD BRep C++ API</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 has-children"><a class="reference internal" href="classes.html">Classes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="classBrepStagingState.html">BrepStagingState</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classGenericBrepStagingBuilder.html">GenericBrepStagingBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classNaturalBoundaryBuilder.html">NaturalBoundaryBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classSmSdfPathAttribute.html">SmSdfPathAttribute</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classSmTArray.html">SmTArray</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classSmUsdXformAttribute.html">SmUsdXformAttribute</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedBrepCoedgeBuilder.html">StagedBrepCoedgeBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedBrepEdgeVertexBuilder.html">StagedBrepEdgeVertexBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedBrepExtentBuilder.html">StagedBrepExtentBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedBrepTopologyBuilder.html">StagedBrepTopologyBuilder</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedBrepTransform.html">StagedBrepTransform</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedBrepUsdWriter.html">StagedBrepUsdWriter</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classStagedFaceTraversalPlanner.html">StagedFaceTraversalPlanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="macros.html">Macros</a></li>
+<li class="toctree-l2"><a class="reference internal" href="enumerations.html">Enumerations</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="files.html">Files</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_SmuAttribute.h.html">SmuAttribute.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_SmuAttribute.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuAttribute_8h_1aa2a670564ae5b8e549053ae2f1293fed.html">SM_AI_BREP_ARRAY</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuAttribute_8h_1afc667db0d02d14e98fd3b2bf66871b2f.html">SM_AI_MATERIAL_BINDING</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuAttribute_8h_1a719902abb52b040f02612a2d85e537ed.html">SM_AI_XFORM_OP</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuAttribute_8h_1a07de7bae7363266e0de1d66d226cb0cc.html">SmSdfPathAttribute_TYPE</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuAttribute_8h_1a66bdae2e78120a564692be8cd403e7e0.html">SmUsdXformAttribute_TYPE</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_SmuConfig.h.html">SmuConfig.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_SmuConfig.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuConfig_8h_1af6430d3c6d05920c58968f5f00587457.html">SMU_EXPORT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuConfig_8h_1adec36345ec82b3df1ec16d396ab8285e.html">SMU_THREAD_LOCAL</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_SmuConvert.h.html">SmuConvert.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_SmuConvert.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuConvert_8h_1a91b10ab096605f946610906950a3182d.html">SMU_TBLOCK_SIZE</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmuConvert_8h_1a23f568963b90e9d08c165b52de8dafac.html">smu_WriteBuffer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmuConvert_8h_1a5b3e076b686d3bb9bc9653b1b176eec9.html">smu_sprintf</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_SmuTessellate.h.html">SmuTessellate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_SmuTessellate.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_SmuTokens.h.html">SmuTokens.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_SmuTokens.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmuTokens_8h_1a5b342c10b82b8ec455342a9d9c37d8d5.html">SMU_TESS_TOKENS</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_SmuUtilities.h.html">SmuUtilities.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_SmuUtilities.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_UsdBrepDebugTools.h.html">UsdBrepDebugTools.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_UsdBrepDebugTools.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_UsdBrepDebugTools_8h_1a8d994453dbbe2f7daf2489f276c4279e.html">usdBrep_CreateOutputFiles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_UsdBrepDebugTools_8h_1a64cb4497571b3b3adeb2117ac8790be7.html">usdBrep_WriteString</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_UsdBrepSuppressPixarWarningsPop.h.html">UsdBrepSuppressPixarWarningsPop.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_UsdBrepSuppressPixarWarningsPop.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_SM_USD_inc_UsdBrepSuppressPixarWarningsPush.h.html">UsdBrepSuppressPixarWarningsPush.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_SM_USD_inc_UsdBrepSuppressPixarWarningsPush.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepCoedgeBuilder.h.html">BrepCoedgeBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepCoedgeBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepEdgeVertexBuilder.h.html">BrepEdgeVertexBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepEdgeVertexBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepExtentBuilder.h.html">BrepExtentBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepExtentBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepFaceTraversalPlanner.h.html">BrepFaceTraversalPlanner.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepFaceTraversalPlanner.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_BrepFaceTraversalPlanner_8h_1a2d100341803d304f9f178d3639e0840c.html">PlanFaceOuterLoop</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepNaturalBoundaryBuilder.h.html">BrepNaturalBoundaryBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepNaturalBoundaryBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepSourceData.h.html">BrepSourceData.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepSourceData.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="typedef_BrepSourceData_8h_1a23884ab9a9bd8b40a0029657882197ff.html">SourceNaturalBoundaryVertexResolver</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepStagingBuilder.h.html">BrepStagingBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepStagingBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepStagingState.h.html">BrepStagingState.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepStagingState.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1acf575af1471440a73849ea68d622b39b.html">ImpliedBoundaryCase</a></li>
+<li class="toctree-l4"><a class="reference internal" href="typedef_BrepStagingState_8h_1ac453239dc2e83c9aead1abc7d31b6360.html">SourceObjectId</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1aff250be1574a7c6a352ecf69f9d3e239.html">StagedCurveType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1a8eb58b5b63e30a1ac8a982ee3fc14ffe.html">StagedOrientType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1ad046e0e9eb41f664212212ae81e4f2a3.html">StagedRadialEntryType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1a5fadc9fac074199b601672a7ee93df49.html">StagedRegionType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1ae546a571beef23a76f4a903dc95dcace.html">StagedShellPointType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1a93ae88527fff761f07d24ff2705e18e2.html">StagedSurfaceType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1abbb68271d2feaf1f6bbf9316c0372587.html">StagedTrimType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStagingState_8h_1a7368fbb0b7fb1a33218a3a25d476ba1f.html">StagedVertexType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_BrepStagingState_8h_1a8b4fc53daee01ba0d7011abd83b3f0a2.html">kStagedNoObjectIndex</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepStatus.h.html">BrepStatus.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepStatus.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_BrepStatus_8h_1ab6996e3bb1c2ed721a71e5534ac698ae.html">BrepStatus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_BrepStatus_8h_1a49d16a59a3a9b68cb2a532e558063369.html">IsBrepStatusSuccess</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepTopologyBuilder.h.html">BrepTopologyBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepTopologyBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_BrepUsdWriter.h.html">BrepUsdWriter.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_BrepUsdWriter.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_STAGING_inc_StagedBrepTransform.h.html">StagedBrepTransform.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_STAGING_inc_StagedBrepTransform.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepArrayData.h.html">UsdBrepArrayData.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepArrayData.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_UsdBrepArrayData_8h_1a78e8eabf995c3f6c186aba15f28f0c6a.html">USDBREP_NO_OBJECT_INDEX</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepBuilder.h.html">UsdBrepBuilder.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepBuilder.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepConfig.h.html">UsdBrepConfig.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepConfig.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepConfig_8h_1a3c12898ba2fcd3951126ee6fec28c045.html">USDBREP_EXPORT</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepDiagnostics.h.html">UsdBrepDiagnostics.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepDiagnostics.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepDiagnostics_8h_1a795f33c190217cb577ff4b4a68ceb4f4.html">USDBREP_CALL_CONTEXT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepDiagnostics_8h_1a43a047ee4a968d52dea1216578dd23df.html">USDBREP_ERROR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepDiagnostics_8h_1acd8032c69c451ebbb2d72dac0c8eb124.html">USDBREP_LOG_PREFIX</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepDiagnostics_8h_1aa05c150f40e55e5b8e5b169927f50c01.html">USDBREP_STATUS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepDiagnostics_8h_1aae0f13e9d02b2818a980d0953f7f503e.html">USDBREP_WARN</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepHeaders.h.html">UsdBrepHeaders.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepHeaders.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepRead.h.html">UsdBrepRead.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepRead.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepTokens.h.html">UsdBrepTokens.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepTokens.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepTokens_8h_1ac6fd7eaddfc4fc56ced2d9d3bcb9be79.html">USDBREP_CURVE_TOKENS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepTokens_8h_1a8791d39a8125f086e47242b07af68138.html">USDBREP_SURFACE_TOKENS</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepTokens_8h_1a9ce4e5b401ee671c3d0e93a53a12998a.html">USDBREP_TOKENS</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepUtilities.h.html">UsdBrepUtilities.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepUtilities.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_BREP_USD_DATA_inc_UsdBrepWrite.h.html">UsdBrepWrite.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_BREP_USD_DATA_inc_UsdBrepWrite.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_EXPORT_inc_OcctAsciiWriter.h.html">OcctAsciiWriter.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_EXPORT_inc_OcctAsciiWriter.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_EXPORT_inc_OcctExport.h.html">OcctExport.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_EXPORT_inc_OcctExport.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_EXPORT_inc_UsdBrepToOcctModel.h.html">UsdBrepToOcctModel.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_EXPORT_inc_UsdBrepToOcctModel.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctAsciiParser.h.html">OcctAsciiParser.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctAsciiParser.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctBinaryParser.h.html">OcctBinaryParser.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctBinaryParser.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctFileConverter.h.html">OcctFileConverter.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctFileConverter.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctFileRecords.h.html">OcctFileRecords.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctFileRecords.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctFileSource.h.html">OcctFileSource.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctFileSource.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctGeometryConvert.h.html">OcctGeometryConvert.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctGeometryConvert.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_OCCT_BREP_IMPORT_inc_OcctStagingDriver.h.html">OcctStagingDriver.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_OCCT_BREP_IMPORT_inc_OcctStagingDriver.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiBrep.h.html">SmApiBrep.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiBrep.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a7b3c5307b39581a4967149f36d85a614.html">SmApiBoolean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa39a011cb2b2de3a47a4440e2a952576.html">SmApiBoolean2d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa6695785af668256afb7a4851619fe11.html">SmApiBooleanDifference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a47cb70671d82c027de0daf64e5f9725f.html">SmApiBooleanIntersection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa86f31cbe8c8426e5957e5de6034cacb.html">SmApiBooleanLists</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1af750a984d4deced78b009711c4e788f7.html">SmApiBooleanMerge</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a9705ebde62902a44cb54f7549a68b7a6.html">SmApiBooleanTrees</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a20716f09f7d39647354992ad1f08a3c3.html">SmApiBooleanUnion</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a1433b37914dc8d1492c097e79bc78153.html">SmApiBooleanWithCurves</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a1e9f30eb452069c29269fbaa61226fe1.html">SmApiBooleanWithOptions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa5474c241708d86cf58059e8f76c9417.html">SmApiCreateCurveSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa1098d15c8e39a1ba68afeb6715f9b6d.html">SmApiCreateCurveSweepFromEdges</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a3c7dc8ac96f4053f01acd96f9b2530c5.html">SmApiCreateCurveSweepFromFaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1ad69483419150c3d00dac343cbd2a0ac3.html">SmApiCreateDraftSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa306e6d4d296008175037b90a23f4f0a.html">SmApiCreateLinearSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a19122c8a36ff1b497d48580fd6d30996.html">SmApiCreateLinearSweepWithRepetitions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a11afd17a7e7f5f032b9288b2e7c59f4e.html">SmApiCreatePipeSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1abc10938350f69803e70ebe4afd19b893.html">SmApiCreateRotationalSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1ad44b011ea81fef6db4600411e0184932.html">SmApiCreateRotationalSweepWithRepetitions</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a64ac7fbe9499be6ae2e3d97ba454bf6f.html">SmApiCreateSilhouetteCurves</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aaec1d959c59d1fcc730ffc5f0a2fd5c6.html">SmApiCreateSweepAlongPlanarPath</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a11df18dbfb2cd9baf36eb995e1f57946.html">SmApiCreateTaperExtrude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aec9ef3b7b25e1dd117449d66b49c5063.html">SmApiCut</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a7ddb6416744092ecd87559b75f618fe0.html">SmApiFilletEdges</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1adaf9813b8b261f67a2d24e7b73345d37.html">SmApiFilletEdgesPerEdge</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a4e84d8a1ac00a1beefec7a8c3c64e1c4.html">SmApiFilletPreview</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a9e66b1f30ff3f6a5bb5d1f395e92890a.html">SmApiMergeBreps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a62fb2104494f315a09552b936780079d.html">SmApiNonManifoldBoolean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa07d4e1e332cc2bf0a8d8087d04a6eeb.html">SmApiNonManifoldRotationalSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a52a5d286eb87a64f393adbddf6df9722.html">SmApiNonManifoldSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a28a35b5d36ab7a2e10db3e84f3287a61.html">SmApiOffsetBrepFull</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a8234e8c84c79dee3fbeece7dedcc52c0.html">SmApiPiecewiseMerge</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a442dc37854da943b3a90247db1a2785e.html">SmApiProjectAndTrim</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1af6530741594d6b45a9f377eea501786a.html">SmApiProjectBrepOntoPlane</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a5a5ffbe27f76e2c772221827bc49f391.html">SmApiProjectCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1ab4881d5062feb3b50105f4a8dec60ade.html">SmApiSetBevelCorners</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a26b62c8e5254246c89b179d808179e85.html">SmApiShellBrepFull</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a4c09352e6007516b1938a12950069bc4.html">SmApiSimpleFaceStitch</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a06d3c7f2f8b9ea38d65f18771ac40716.html">SmApiStitch</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aece91c17e53fffb08fb5d70a8415d718.html">SmApiStitch</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1ad5df14916178bd92bc2c6c9845ee4cdf.html">SmApiStitchAdvanced</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aff3c7110b83d6d3f7d4e4b1f24c55f5b.html">SmApiStitchIntoShell</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a190313f55299df96ad1f51435c12885e.html">SmApiStitchIntoSolid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1ac064ee3eb41e65a13fa614fad243b8b1.html">SmApiSurfaceSurfaceFillet</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1abd5266098941d53f60aecf3d6227446d.html">SmApiTessellate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1a1041efc8e40670ad2850ca11651d92ee.html">SmApiTessellateBoundaries</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1aa1ae1299e7a564fab6e4d131b1c1b8e5.html">SmApiTurnToNurbs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1abf4424aa7534f7d373438b4f044717f4.html">SmApiUnifyNormals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiBrep_8h_1ab9bfe2c2c9b5795c363509fa3a57a819.html">SmApiVariableRadiusFillet</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiCurves.h.html">SmApiCurves.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiCurves.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a3f4770a49fb820f5236551f3b10bdadd.html">SmApiConvertToLinesAndArcs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1acae1b3feca990985257bfe027be7078f.html">SmApiCreateArc</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1ac0721bf0ba26ba8ec2c89a29a7af79a0.html">SmApiCreateCanonicalCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a7554adfc587423d3ef94c20d370f1ac2.html">SmApiCreateCircle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a7d5124d7083d87ae2eb198f26fa82f87.html">SmApiCreateCircle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1ac8a7e17ccff858daaf0c028efecb95a4.html">SmApiCreateCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a31d23a1cf87048e9a030abf62f895483.html">SmApiCreateCurveApproxPoints</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a0bec165d68f929b3b2423ca6638ad03c.html">SmApiCreateCurveInterpPoints</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a6a9751ba019e2ae842afc5daf46f1c18.html">SmApiCreateEllipse</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a60bba6e182c93b779be59e1b4521ef83.html">SmApiCreateHelix</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a08017a5cde94f676b8f0ea8da27926f2.html">SmApiCreateLine</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1ac240a947b9d1f97fe3e0ba6808ebbc9b.html">SmApiCreateLineSegment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1aad339ed27a032f74e805376084a454fc.html">SmApiCreateRectangle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1aae93b314f465b7a6960c3e73c20cb093.html">SmApiCreateRegularPolygon</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1ad4b6817e9236f06d30c1c4fb6b5ae538.html">SmApiDropCurveToSrf</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1adab7cd6f6cb14a6bdf16de63d41d58b5.html">SmApiEvaluateContinuity</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a476abe8722250d6c277261c5c1d3fcb1.html">SmApiEvaluateCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a1ac10517092bbab17dda5a22013362c5.html">SmApiLiftUVCurveFromSrf</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a835153825545936ace554c676aabb3b9.html">SmApiMakeCurvesCompatible</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a9a11097d4f38f114c153c477f5c7c917.html">SmApiOffsetCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a6a080fd17da8d12e374ba455d575575a.html">SmApiOrderCurves</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a4716c64da259d0df9fabe60989e4386a.html">SmApiProjectCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiCurves_8h_1a078d4edebb6eda08e7d6aa088d7233d1.html">SmApiRemoveCurveKnots</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiFillets.h.html">SmApiFillets.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiFillets.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiFillets_8h_1a7bb9543cd86ad0e602811fe193efeb40.html">SmApiChamferFillet</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiFillets_8h_1a06136a232804dd314aea93d84b966cf4.html">SmApiCircularFillet</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiFillets_8h_1ab3a5831a860e2d929093cc4446f46003.html">SmApiRemoveFillet</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiGeneral.h.html">SmApiGeneral.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiGeneral.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1ab6d9ce09c00daf601897a3ebe48e3dd4.html">SmApiCreateContext</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a029ad132097e70e35c4cc492af3dd5a9.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a098ce06d03ad0e1c6a3194ad7440f2b2.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a29ba761d6314d401c6cabf5e76643e2a.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a7b71a88bcdbd1da0bb081de85a51b165.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a82cd7a659d87374e587dda63564859c6.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a8ab7210a04271a294de87438126ac1d5.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1adcd746b8eb1e491c6a1aedcbda8ac2f2.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1ae8e3587aa7da63e76dff76e2439bdcec.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1aff857a47ea6c9cc4e2c3f62d2dadef4f.html">SmApiDraw</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a9e0d90b055dae290bdae7f5858e6ff50.html">SmApiGetOrCreateContext</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1ace5bc00d939ea07d468d5f3eebd302ab.html">SmApiRotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a93c268008fad475108466500317f9bb5.html">SmApiScale</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1ac97a75a1ee8265ce54dc319f6ee177ca.html">SmApiScaleByPt</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1acc4f84cee8bd3542d1ed0c1b7d2da13f.html">SmApiTransform</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiGeneral_8h_1a5caff03364428094c9efdad9991cfd07.html">SmApiTranslate</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiHeal.h.html">SmApiHeal.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiHeal.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiHeal_8h_1a4930901c3c7f97705c26c14bbed3c1c3.html">SmApiHealBrep</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiImportExport.h.html">SmApiImportExport.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiImportExport.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiImportExport_8h_1aca3425d74f51e3dbd093fba54e85e0bf.html">SmApiReadBrepFromFile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiImportExport_8h_1aca8b7cffee875cff51296670621c8526.html">SmApiReadPartFromFile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiImportExport_8h_1af6da90b9c8babc4682222562576275f8.html">SmApiWriteBrepToFile</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiIntersectors.h.html">SmApiIntersectors.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiIntersectors.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a1479ff54d824746eebab2d7977d5a6b7.html">SmApiIntersectBrepWithPlane</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a9bdbd49259e370f627293fa06a2f984a.html">SmApiIntersectBreps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a06b93858616f6f492abc54de170b25a6.html">SmApiIntersectCurveBrep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a8796e370abd2773c1ac604f741113fc7.html">SmApiIntersectCurveFace</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a15d42bfdef53721bf20ff57b828c6f1e.html">SmApiIntersectCurveSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1aeb2dd0349a0189e65741a0362ac8251b.html">SmApiIntersectCurves</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a20726b54b08efe2be1aa895a5b2740f0.html">SmApiIntersectFaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiIntersectors_8h_1a08cb126e4dc38a27114f8b42c41285c9.html">SmApiIntersectSurfaces</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiPolygons.h.html">SmApiPolygons.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiPolygons.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1a0ebb4a05636a3648b7c543b3352ee950.html">SmApiPolyBoolean</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1ae213d0b7ae90b455960b04336973c658.html">SmApiPolyBooleanDifference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1a734a0470ee2427d1a705247a65703f39.html">SmApiPolyBooleanIntersection</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1a2ff4659471c09ae53eaebd148ca1dad0.html">SmApiPolyBooleanMerge</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1ac8cf473c53610ccc15e92a26b38318da.html">SmApiPolyBooleanUnion</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1a0c7b8a43740049b9a2ca350d13bfa3d8.html">SmApiPolyBrepComputeMassProperties</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1ad5eb62d2d64170991e2da4cc2cb9bcc6.html">SmApiPolyBrepComputeVolume</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1accfa663aeb08bef3379e6b97188baae1.html">SmApiPolyBrepCopy</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPolygons_8h_1a76c2ae1d0c46000c473827103fc572b5.html">SmApiPolyBrepIsManifoldSolid</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiPrimitives.h.html">SmApiPrimitives.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiPrimitives.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a8a1166e6ac618ff956a655b7e2fafdf7.html">SmApiCreateBlendPrimitive</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ae0cd7337ac34d1af2405808e116782fe.html">SmApiCreateBox</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a259796650601b3703ce9c0c3b3c56ff3.html">SmApiCreateCone</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a368ba14054ba75a5e896fd46d2f33188.html">SmApiCreateCone</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ae97bf65fd3af74eaa80c945f048cd78b.html">SmApiCreateConeEllipticEnds</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1aa5f6c4d6d9f140283f79933487019205.html">SmApiCreateCylinder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1adbdb20a662bf1b4f8e346bd74cf63503.html">SmApiCreateCylinder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a1571b5e715f2070e4a8f3d3fee68e8f4.html">SmApiCreateCylindricalBox</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1aae16e763a8c5cd4a35cc7079c2912c4d.html">SmApiCreateOffsetProfile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a3478d0d23c0ee55c95fb6085ece0b6b5.html">SmApiCreatePartialCone</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ae82f9fc38407b8a3ea05590732a9b43f.html">SmApiCreatePartialCylinder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1aa48d05f9617c0ee2be8f8100bd9efcf3.html">SmApiCreatePartialSphere</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ae5347bb8a14315f69fec8dceb46b725f.html">SmApiCreatePartialTorus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a18e2391ea6cbb68efbc70c065b50d7f1.html">SmApiCreatePlanarCircle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a1c5c78f36631970e412fe2179b5142cb.html">SmApiCreatePlane</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a612c3b9861746198aeeaef16de1dfd6f.html">SmApiCreatePlane</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ad3e4f040fa3dea5c8c8453c31d8d1699.html">SmApiCreatePyramid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ad5b32088f42f1367505081b2d221930e.html">SmApiCreateSkinFromFaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a7a0ee0bc139eab72d4d5b8bd8033216a.html">SmApiCreateSkinPrimitive</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1ac0acc784545fc2606c9e7395a515efb4.html">SmApiCreateSphere</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a1fbe1efd28785f551b780d9191d2a866.html">SmApiCreateSphereNoPole</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a0bb215c94b4f562bd2638dd342dcdcac.html">SmApiCreateSwungPrimitive</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a63018499c52d4d22ca2312849f827aab.html">SmApiCreateTorus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiPrimitives_8h_1a64df0a0e79792cf81f5d05b465b960cf.html">SmApiCreateTorus</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiQueries.h.html">SmApiQueries.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiQueries.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a869d2a12987b1228c593ff4d5ae06361.html">SmApiBrepBoundingBox</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1ae7fc5c1dbab82f01c8214f22fa5eda5f.html">SmApiBrepClosestPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1ac59129fb9d57661ba6be5d6cdb950ebd.html">SmApiBrepClosestPointAll</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1aad23c3e529792cd4f3d92516370f2a98.html">SmApiBrepComputeArea</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a362bd689af8a921a617c2b49acc34cf5.html">SmApiBrepComputeMassProperties</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a851dbd37fc5adef0ec9484f807e871e3.html">SmApiBrepComputeVolume</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a193f48f1f5533337072a096f9868d1a2.html">SmApiBrepCopy</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a37dd7d132bbbade6a84cf2a902a2203b.html">SmApiBrepDistance</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a2fe4db2515a35af2a5d7533e47f00984.html">SmApiBrepIsManifoldSolid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1aab7ab11d1a9dbd7c2c2914513e4a461b.html">SmApiBrepMaterialCensus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1aef425aa36dfbd4663be3099009715d5d.html">SmApiBrepRelationship</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1ab071472374b841fc191fa6e0b245c9ae.html">SmApiCurveClosestPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a6e1c1b6e747768adfd928af0472e8038.html">SmApiCurveClosestPointAll</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a2f80fbd70254b2bb0470cd6226b15f97.html">SmApiEdgeBoundingBox</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a13df2694561af54ed5b647693760cc20.html">SmApiEdgeClassifyParameter</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1ad6980dffca1a262dce81e26e1a7794b5.html">SmApiEdgeClosestPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a5f7fd670ac6cd851ac6af97219712301.html">SmApiEdgeComputeLength</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a5b96dbd98dc780e4d1da7b1982d7e080.html">SmApiEdgeParameterRange</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a2c493b4a310c1e76926edd18e95206b8.html">SmApiEdgeTangent</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a6235dba296ca33d0227d47a2bae63944.html">SmApiFaceBoundingBox</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a2dc4109a43f1e54db6c715128db5f464.html">SmApiFaceClassifyUV</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1add98c6c22fea7cc7db544cdda656707d.html">SmApiFaceClosestPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1ad00410bd717be394ec55274530a0f38f.html">SmApiFaceComputeArea</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1af23dd8e5addf1ac6b96c15837788cba4.html">SmApiFaceComputeCentroid</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a84ab741449d4327d794e1dfdce1df027.html">SmApiFaceGetBoundaryLoops</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a7f3a4cef2a50e514a8b78e660a18db2c.html">SmApiFaceInternalPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a485cec864d90e8060397ab01050d0fd3.html">SmApiFindEdge</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a128f7d914ce07ff5867afbb27e8b261f.html">SmApiFindFaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1aedb98ac6f5dcf851e56d11e4a7c21962.html">SmApiGetClosestPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a3bb8e699953f89dd26129417a269f80b.html">SmApiGetEdges</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a461486cb254c4dc1621203973557cd4c.html">SmApiGetFaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a7915367922c92161467d2aeb826fbd6c.html">SmApiSurfaceClosestPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiQueries_8h_1a5269fcef423c270333631378ba973c33.html">SmApiVertexGetPoint</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiSurfaces.h.html">SmApiSurfaces.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiSurfaces.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a061dabaa3659cd7b3670b03cce2cb0d8.html">SmApiCreateExtrude</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a16013fc978b1aaede5759f99efd7830d.html">SmApiCreateOffsetSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a60d82f5503e9c9505f859a48916f825d.html">SmApiCreateRuledSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a2d9eb61313ca8a2dc970245b0135981e.html">SmApiCreateSkin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a5cf9ad0b0bd7615539e910e0241050f1.html">SmApiCreateSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a38ceb6634274274fdeb90b6a1341214c.html">SmApiCreateSurfaceFromCornerPoints</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1aded33c097fcf15a8a3d3d65e349fe2f9.html">SmApiCreateSurfaceFromOrderedPoints</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a5c2b1834154ecee74511896296a429fe.html">SmApiCreateSurfaceFromRandomPoints</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1ab482969194ed98f5ee5bb57586461fc1.html">SmApiCreateSurfaceRevolution</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a36f795fd0a4a05b4cf08fba1d6c8a981.html">SmApiCreateSweep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a5fd8e16fae975414bf91d499a0825ad6.html">SmApiEvaluateSurfaceDerivatives</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1aeb2c006e8be3350e030b3c1b2e242d5f.html">SmApiEvaluateSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiSurfaces_8h_1a4eea0599c0f3da7411747dc2e3d19b94.html">SmApiEvaluateSurfacePoint</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiTessellationParams.h.html">SmApiTessellationParams.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiTessellationParams.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiTrimmedSurfaces.h.html">SmApiTrimmedSurfaces.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiTrimmedSurfaces.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiTrimmedSurfaces_8h_1af3803a3a0435ca20f7c5ef7a49ec1b98.html">SmApiCreatePlanarFaces</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiTrimmedSurfaces_8h_1a5aefba450d572480492a6d8889ae2b1e.html">SmApiTrimProjectParallel</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiTrimmedSurfaces_8h_1a6a0eb6b15e9b5f36ecb5a8a2e936b2dc.html">SmApiTrimSurfaceWith3dCurves</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_SmApiTypes.h.html">SmApiTypes.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_SmApiTypes.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmApiTypes_8h_1afe080eb20608c85c34ea47248a6d712d.html">SMAPI_EXPORT</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmApiTypes_8h_1a48449f1db77abcafbf4da4cb66ab1f5a.html">SM_LARGE_TBLOCK_SIZE</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmApiTypes_8h_1a19722b86a09502ed4089f513f49f3f84.html">SM_TBLOCK_SIZE</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmApiTypes_8h_1a9c739c66ed83f8c07db5fe456eeb0884.html">SmApiStatus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="typedef_SmApiTypes_8h_1a03bdb8ce5895c7e261aadc2529637546.html">TCHAR</a></li>
+<li class="toctree-l4"><a class="reference internal" href="typedef_SmApiTypes_8h_1af632da489ebc3708ec3ab6791ee53fa4.html">ULONG</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmApiTypes_8h_1ae93e0f551028e6dbd780cb5f21e7aa61.html">_T</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_inc_StdAfx.h.html">StdAfx.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_inc_StdAfx.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsd.h.html">SmApiUsd.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsd.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1ae85f3ed2b22e45967573105f82d8f175.html">SmApiUsdAppendBreps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a38c53108a1f8b8c22e085b0550af9d5e.html">SmApiUsdAppendMeshes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a48bb7eda84b3b844bff2e1c6b4ef376c.html">SmApiUsdEnsurePluginRegistered</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a4f5b60aadf160deb3fe08b2653f3ff45.html">SmApiUsdExportBrep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1ac5e90b8154c5c05cd4dd4fa351c58154.html">SmApiUsdExportBreps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a377c935245876f45bd4f844e9df11277.html">SmApiUsdExportMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a9eca567df790c87d0b0f5abc47a99475.html">SmApiUsdExportMeshes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1adbb7b4f0c9295053ff8da910a6b6f68e.html">SmApiUsdHealFile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a00c736c385dc0e877fff9a7696cb5cc8.html">SmApiUsdImportBrep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a6c06b708c18ef4d2440d866056ab176e.html">SmApiUsdImportBreps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1ac2d3858251af08bb27ab8225b9947bde.html">SmApiUsdImportBreps</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a5ee226f1365c087fa8f23d68ff0c37fc.html">SmApiUsdImportMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1a170148da585e72597943548bb6dc20b1.html">SmApiUsdImportMeshes</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsd_8h_1af2a3f23c258eca49e01d90d920eefcb2.html">SmApiUsdTessellateFile</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdConfig.h.html">SmApiUsdConfig.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdConfig.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_SmApiUsdConfig_8h_1af50a632b38979e957eb085932453b657.html">SM_API_USD_EXPORT</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdTessellate.h.html">SmApiUsdTessellate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdTessellate.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdTessellate_8h_1af892bbf100ef5c40ac1e27df0cbe91cb.html">SmApiUsdTessellateBrepArray</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepGeometryEval.h.html">UsdBrepGeometryEval.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepGeometryEval.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepIterator.h.html">UsdBrepIterator.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepIterator.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepKnots.h.html">UsdBrepKnots.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepKnots.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepPacking.h.html">UsdBrepPacking.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepPacking.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepStageUtils.h.html">UsdBrepStageUtils.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepStageUtils.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepTopologyQueries.h.html">UsdBrepTopologyQueries.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepTopologyQueries.h.html">Source file</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_USD_BREP_UTILS_inc_UsdBrepUtilsConfig.h.html">UsdBrepUtilsConfig.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_USD_BREP_UTILS_inc_UsdBrepUtilsConfig.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="define_UsdBrepUtilsConfig_8h_1a83b603f8b019de13e0f13d04daf9f73c.html">USD_BREP_EXPORT</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="functions.html">Functions</a></li>
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="namespaces.html">Namespaces</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3 current active has-children"><a class="reference internal" href="namespace_SMU__BrepConvert.html">SMU_BrepConvert</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a36142b99129bd6d1320a35f826f9af62.html">AppendSmBrepData_ToUsdBrepArrayData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a22d763ac06be67ac5b2a20f2d5a6d390.html">ApplyUsdXformOp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1ae28736a76488659821abb46b5acda1ad.html">ApplyUsdXformOp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1affe53fe48848f6dc7830ef6a11cdc02b.html">ApplyUsdXformOp</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a828c0c8d2f1e1177d56eb3da5e1503f8.html">BrepAppend_SMLibToUsd</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1aa3cb0d1de61f98ef03d9e8728852aed0.html">BrepAppend_SMLibToUsdBrep</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structSMU__BrepConvert_1_1BrepImportResult.html">BrepImportResult</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1addec984eb5cad3b78c0de83de81b0dbc.html">BrepMove_OneUsdBrepToSMLib</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1afba373f967fd8f99488c19d101f65d34.html">BrepMove_OneUsdBrepToSMLibData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1ae742634286925c31d9595534008eb0fe.html">BrepMove_UsdToSMLib</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1aa84451d80a0ae005cd9ef4a3b5825d99.html">BrepMove_UsdToSMLibWithResults</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a6afa5993d7118da3958b6767b12acec7.html">CreateSmBrep_FromUsdCapsule</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a7af69ba6953b4ad351e90feb562d6cce.html">CreateSmBrep_FromUsdCone</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a5dfe9a76871295e56399327d3f40157f.html">CreateSmBrep_FromUsdCube</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1ad872a4076362ee177ab41972babfbecd.html">CreateSmBrep_FromUsdCylinder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a57533bd002547edeb52d53b2e3de1163.html">CreateSmBrep_FromUsdSphere</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a0df29230627d1a7a49b424be4e6a2bc5.html">CreateSmPolyBrep_FromUsdMesh</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a6a0ef636e446526d6e7fe3d42d9efa27.html">GetBoundaryData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a5eff8ebb87f1722061f7ebffbf4d2c25.html">GetMeshData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1ac589c47c8a9d301b7fab5956742212e2.html">GetTessellatedMeshData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a072d63dac13dbfa7cc37e7581029344e.html">PopulateMeshAttr</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1ae0c9d81ccf9156be8b3874a3d266ee3f.html">PopulateMeshAttr</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a1c166a671e62fec7ae314a3ce0618e41.html">SmTransformToUsdXform</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1a4b59e466d80229481faaa87f8d458e6e.html">SmTransformToUsdXform</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structSMU__BrepConvert_1_1TessellatedMeshDeleter.html">TessellatedMeshDeleter</a></li>
+<li class="toctree-l4"><a class="reference internal" href="typedef_namespaceSMU__BrepConvert_1a81a2d8e480e548d5fbe4c2b1155f20fb.html">TessellatedMeshPtr</a></li>
+<li class="toctree-l4 current active"><a class="current reference internal" href="#">UsdXformToSmTransform</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1aa5a5142c67f58d472e4a4fffca345e6c.html">smuGenerateBrepMetadata</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceSMU__BrepConvert_1aeb89e1cf658940253a91d7ab8bd25352.html">smuGenerateMeshMetadata</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="namespace_SmTessellationDefaults.html">SmTessellationDefaults</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceSmTessellationDefaults_1acc66368c4e7a86beb4f74e96fb418f60.html">kChordHeightTol</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceSmTessellationDefaults_1a43feaf6e3d80753ca65702dd1339ede9.html">kCurveAngleTolDeg</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceSmTessellationDefaults_1aba3f3fe06ba51683db3ff1e1506f77e1.html">kMaxAspectRatio</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceSmTessellationDefaults_1a9d286dbabd75a721e717f4fd610e7b7d.html">kMaxEdgeLength</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceSmTessellationDefaults_1acd7ef8a481f3b70e95d5e6a09123ed97.html">kSurfaceAngleTolDeg</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="namespace_UsdBrep.html">UsdBrep</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ac8c9485c80391d01e04a15da65797972.html">AppendBrepToArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ab2541cf8470c9093e5b7bb5756804f04.html">ApproxBoundaryLength</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a36e4a7093df8719b0f25e719a4ad1702.html">BuildFlatKnots</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a88f8234aed1d358a9ef39428c4745b4d.html">CompressFlatKnots</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a0da302d30c6defa9132b02a18d22730c.html">ComputeTrimmedDomain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1aa0090eb024a2a70605b6fa88af3220b3.html">DetectSurfacePeriodicity</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a76558a66a858f15859e40d9731021ca7.html">DetectSurfacePoles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a83c3cd3165ef59709542d440b2563a5c.html">EvalCircleCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ab5faf140b7da707ab776d3cd3ca6341c.html">EvalConeSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a89c434c1def896b62524b4fb293c24d5.html">EvalConeSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ad803d9c4954e96bb08f8d378d5ffd099.html">EvalCylinderSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a19af3aed6e780000869cd514ce809bb6.html">EvalCylinderSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a179df7e2af561e0354365ee2b191d0e6.html">EvalEllipseCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a47070020a7c28d3cad94f95190942d52.html">EvalLineCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a65e7334970558cc32d224a3fe2135966.html">EvalNurbsCurve2d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1abe7ed837275c0bae91b02da4cba74055.html">EvalNurbsCurve3d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1aec52ce03d85e2ee9508de6fc4992bcd4.html">EvalNurbsSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ae66f0eede935929afeafcc5cb886ec82.html">EvalPlaneSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a52dd19b5426c9b487aa8cbcee8dff608.html">EvalPlaneSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a3e0f9568a5bdc326d396144dbe60a9cf.html">EvalSphereSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a928b41eb6de091e8d942b3bd1e88f837.html">EvalSphereSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ab6217bcfeea5a67b15ba8ef854e58d76.html">EvalTorusSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a13787369e3d4986703fff059d2419802.html">EvalTorusSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a9a1fa2e5d8cf6c039434e9dc83117a7d.html">EvaluateCurve2d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a3a0498787cebfe90c97562ecd34c2310.html">EvaluateCurve3d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1adc06a1a0ca4a5c9f8469b80c8d8f9398.html">EvaluateSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a585afb5d515a0f4d53e92466dd38f1b8.html">EvaluateSurfaceBoundary</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a89565baf8e2b90681e6ad669d7361ab6.html">EvaluateSurfaceClamped</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a09b66885780c7eb7d6430ff35c4e5aa8.html">EvaluateSurfaceNormal</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1aba708bf01cd73788dc9b75d629cec1f7.html">EvaluateSurfaceNormalNormalized</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a42757fabcb12167e074c8c7245933f42.html">EvaluateSurfaceNormalized</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a9f1ef7675845b63cf053b2826eb53472.html">FindBrepArrayPrims</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a48794100463dfdbcae128610de91e213.html">GetFaceLoopEdgeuseStart</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1afdd68d2e4821fd3ef84d38dc6a492b27.html">GetPCurveRange</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1abdaaa650d1ce3bcbe4d883a320fd74c0.html">GetSurfaceDomain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1aa2c4b263cee2bd4c2bc13c3d72caae04.html">GetSurfacePeriodicity</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a8ec0ea89245d0a87e4cbb35212082972.html">HasPCurve</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a1542c858adb973aa4a7d90b2e3deb608.html">InverseProjectCone</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a4ee7e833265d02510710a983a23177d7.html">InverseProjectCylinder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ab64d6704080b1f28b681c9ca62c780ac.html">InverseProjectPlane</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a48f9eeffe2b949822cd82497939a9940.html">InverseProjectSphere</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1aa37ba5182011983fbdb547bc30ccb73f.html">InverseProjectSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1af7bafc1ccd35ec927eab1f76f49c26d9.html">InverseProjectSurfaceWithHint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a0568ffd8d283c88ebf1676af0114d60f.html">InverseProjectTorus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a6a8f4d640d76460e76cb84c0299ec1c4.html">IsFaceNormalOutward</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a4a5c6ff79e5b4059acee3c1161122321.html">IsFaceuseOpposite</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a7dff0670c49ae4b09c8fb08200441698.html">LoadAllBrepArrays</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1abbbd28a5fe57ac572a04dcd0b78ced1b.html">LoadBrepArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a8157c08ed623176c9b8669e56b2432e2.html">PeriodicExtraPoles</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1a71282fa92736ca538f2f2f5971bdd79b.html">SampleSurfaceBoundary</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1abce5dd6bb7f279da7797693b2fd039a4.html">SaveBrepArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrep_1ad091d2e11f5708211000dfcd24493dc6.html">SignedArea2D</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_namespaceUsdBrep_1a71fc582bbc16c8b41fddee1b4bc11277.html">UsdBrepDomainEdge</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrep_1_1UsdBrepIterator.html">UsdBrepIterator</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrep_1_1UsdBrepRange.html">UsdBrepRange</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structUsdBrep_1_1UsdBrepSurfaceDomain.html">UsdBrepSurfaceDomain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrep_1_1UsdBrepTopologyQueries.html">UsdBrepTopologyQueries</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrep_1_1UsdBrepView.html">UsdBrepView</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceUsdBrep_1a222a1c6df6f364548c6b2cc8d927103e.html">kPoleFraction</a></li>
+<li class="toctree-l4"><a class="reference internal" href="variable_namespaceUsdBrep_1a2a396b0859a899f6edfad931789887cb.html">kPositionCoincidence</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="namespace_UsdBrepData.html">UsdBrepData</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a18ee4a662cdd28b8e277196ac13a0af3.html">AddAppliedSchema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1aa1cb8058e3608a21976abd4369d5208e.html">AddMultiAppliedSchema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a75b2f59bf03dcaad26e873a6c9c949eb.html">AreOmniSolidSchemasKnown</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a216e5370996bcdcbb81656f0bada4ede.html">BrepReadFromUsdStage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a088d14a0a66257f16350cc83e70e55bf.html">BrepWriteToUsdStage</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1af30f163ecccdf1cbc1818f3e6a61805c.html">Dump_BrepArrayData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a941f1b6342faf63af17a7022f0c5c319.html">Dump_BrepArraySpans</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a4ce5fd2302026b8f4166eeeb5f55020f.html">Dump_PrimProperties</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1af3da80334e150d2a2187d27c6e464bf8.html">Dump_PrimProperties_fromPrimSpecHandle</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1aa7cf93bb30334b3caab4c9eb01cd1709.html">Dump_PrimSpecProperties</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1aebe77ccc00feb738ab08b78d04c478ff.html">GetNameSpacePropertyToken</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a31ae980ffc7e874ddb6ba0699623e34e.html">GetUsdBrepArray_BrepCount</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a1897e00d9680be40ccf50b0821eb81ff.html">IsOmniSolidResourcesPluginRegistered</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1ac681432a8f2eab2016b638a565411e5a.html">RegisterOmniSolidResourcesPlugin</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrepData_1_1UsdBrepArrayData.html">UsdBrepArrayData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrepData_1_1UsdBrepArraySpans.html">UsdBrepArraySpans</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classUsdBrepData_1_1UsdBrepBuilder.html">UsdBrepBuilder</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1a77a6ab010d4b1ab027dc04ee36866b85.html">setAttributeSpec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceUsdBrepData_1abe5aa0ddc4188f9f0ab8b05364e69da4.html">setMultiAppliedAttributeSpec</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="namespace_occt.html">occt</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ae818d50d6f887f2fc7e8d4577600611a.html">BuildOcctModel</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a581a670711a2f6d0c9e0ffe0cdc089f0.html">ConvertCurve2dToNurb</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a644ce29e970e5edc13f3f541e9b6db44.html">ConvertCurve3d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a7f867ff147a26ce77a67c95b72f4c1ff.html">ConvertOcctDataToUsd</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a09f6eabfd2358c0c3d93ae1e04aa3a50.html">ConvertOcctFileToUsd</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a9df64ed06b9d984d57006117bf8254cb.html">ConvertOcctTextToUsd</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a723333bbfb35e629ccdc8803e056404d.html">ConvertSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1aa4ac9228978bf11a089e2689f472e31b.html">CurveTypeName</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1ae1d7f008984c1b4c1b93fc076a271b57.html">EContinuity</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1ac2ffdcf0c859d5a9d62bdcba35ffe971.html">ECurveType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1aa10eb34b51e1497134d021ba27ddcbc9.html">EOrientation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1a5fb205c57805dee35e70a9957c6986b5.html">EShapeType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1ac477693c7a79b382aa965b605edcfede.html">ESurfaceType</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a8f5791715ecc3a7b8a1498ace3666008.html">EvalCurve3dPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a6936814fa40624bfe8725ecfc3121ba3.html">ExportBrepArrayToFile</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ad83d138dcfd5139b9cf95cd784dd8904.html">ExportBrepArrayToText</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a4c9bb2e4e91afaf5529606c63fb99333.html">IsBinaryOcct</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classocct_1_1OcctFileSource.html">OcctFileSource</a></li>
+<li class="toctree-l4"><a class="reference internal" href="classocct_1_1OcctStagingDriver.html">OcctStagingDriver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ac2e1a59c0ff5489eea30feb872774a29.html">ReadOcct</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a2b658d22a199cb9fa3310fd2feaa8787.html">ReadOcctBinary</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a553d05fbf7c7ba031631430aa56807e3.html">ResolveLocation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SCurve2d.html">SCurve2d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SCurve3d.html">SCurve3d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SCurveRepr.html">SCurveRepr</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SDir2.html">SDir2</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SDir3.html">SDir3</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SEdgeData.html">SEdgeData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SFaceData.html">SFaceData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SLocation.html">SLocation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SLocationTerm.html">SLocationTerm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SOcctModel.html">SOcctModel</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPnt2.html">SPnt2</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPnt3.html">SPnt3</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPointRepr.html">SPointRepr</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPolygon3d.html">SPolygon3d</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPolygonOnTriangulation.html">SPolygonOnTriangulation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SShapeRecord.html">SShapeRecord</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SSubShapeRef.html">SSubShapeRef</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SSurface.html">SSurface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1STriangulation.html">STriangulation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SVertexData.html">SVertexData</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a87553be08ae5bf95284961e11c91be08.html">ShapeTypeName</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a431d19094e92cc04f5a7f92537a8daec.html">SurfaceTypeName</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a639fb95bc89898c0d0f8c187c949b6a9.html">WriteOcct</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="structs.html">Structs</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepArrayHealResult.html">SmApiUsdBrepArrayHealResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepImportResult.html">SmApiUsdBrepImportResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdMeshTessellationResult.html">SmApiUsdMeshTessellationResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdTessellatedBrep.html">SmApiUsdTessellatedBrep</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmTessellationParams.html">SmTessellationParams</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceBrepData.html">SourceBrepData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceCoedgeData.html">SourceCoedgeData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceConnectedComponentTopologyReserveData.html">SourceConnectedComponentTopologyReserveData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceCurveData.html">SourceCurveData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceEdgeData.html">SourceEdgeData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceFaceBoundaryContactData.html">SourceFaceBoundaryContactData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceFaceData.html">SourceFaceData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceFaceOuterLoopData.html">SourceFaceOuterLoopData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceLoopBoundaryContactData.html">SourceLoopBoundaryContactData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceLoopData.html">SourceLoopData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceNaturalBoundaryData.html">SourceNaturalBoundaryData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceShellData.html">SourceShellData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceSurfaceData.html">SourceSurfaceData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSourceVertexData.html">SourceVertexData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedBrepData.html">StagedBrepData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedCoedgeBuildResult.html">StagedCoedgeBuildResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedCurveData.html">StagedCurveData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedCurveData2d.html">StagedCurveData2d</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedEdgeData.html">StagedEdgeData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedEdgeRadialValues.html">StagedEdgeRadialValues</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedEdgeuseData.html">StagedEdgeuseData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedFaceData.html">StagedFaceData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedFacePlanningResult.html">StagedFacePlanningResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedFaceuseBuildResult.html">StagedFaceuseBuildResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedFaceuseData.html">StagedFaceuseData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedLoopData.html">StagedLoopData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedRegionData.html">StagedRegionData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedShellData.html">StagedShellData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedSurfaceData.html">StagedSurfaceData</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structStagedVertexData.html">StagedVertexData</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="typedefs.html">Typedefs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="variables.html">Variables</a></li>
+</ul>
+</details></li>
+</ul>
+</div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="api.html" class="nav-link">USD BRep C++ API</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="namespaces.html" class="nav-link">Namespaces</a></li>
+    
+    
+    <li class="breadcrumb-item"><a href="namespace_SMU__BrepConvert.html" class="nav-link">SMU_BrepConvert</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">UsdXformToSmTransform</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="usdxformtosmtransform">
+<h1>UsdXformToSmTransform<a class="headerlink" href="#usdxformtosmtransform" title="Link to this heading">#</a></h1>
+<p>Fully qualified name: <code class="docutils literal notranslate"><span class="pre">SMU_BrepConvert::UsdXformToSmTransform</span></code></p>
+<p>Defined in <a class="reference internal" href="file_BREP_SM_USD_inc_SmuUtilities.h.html#smuutilities-8h"><span class="std std-ref">BREP_SM_USD/inc/SmuUtilities.h</span></a></p>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv4N15SMU_BrepConvert21UsdXformToSmTransformERKN3pxr14UsdGeomXformOpER10SmVector3dR16SmAxis2Placement">
+<span id="_CPPv3N15SMU_BrepConvert21UsdXformToSmTransformERKN3pxr14UsdGeomXformOpER10SmVector3dR16SmAxis2Placement"></span><span id="_CPPv2N15SMU_BrepConvert21UsdXformToSmTransformERKN3pxr14UsdGeomXformOpER10SmVector3dR16SmAxis2Placement"></span><span id="SMU_BrepConvert::UsdXformToSmTransform__pxr::UsdGeomXformOpCR.SmVector3dR.SmAxis2PlacementR"></span><span class="target" id="namespacesmu__brepconvert_1a96dcdbef1d072a0736d1e34666fcd549"></span><span class="n"><span class="pre">SmStatus</span></span><span class="w"> </span><span class="sig-prename descclassname"><a class="reference internal" href="namespace_SMU__BrepConvert.html#_CPPv415SMU_BrepConvert" title="SMU_BrepConvert"><span class="n"><span class="pre">SMU_BrepConvert</span></span></a><span class="p"><span class="pre">::</span></span></span><span class="sig-name descname"><span class="n"><span class="pre">UsdXformToSmTransform</span></span></span><span class="sig-paren">(</span>
+
+<dl>
+<dd><em class="sig-param"><span class="k"><span class="pre">const</span></span><span class="w"> </span><span class="n"><span class="pre">pxr</span></span><span class="p"><span class="pre">::</span></span><span class="n"><span class="pre">UsdGeomXformOp</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">crXformOp</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">SmVector3d</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">rScale</span></span></em>,</dd>
+<dd><em class="sig-param"><span class="n"><span class="pre">SmAxis2Placement</span></span><span class="w"> </span><span class="p"><span class="pre">&amp;</span></span><span class="n sig-param"><span class="pre">rTransform</span></span></em>,</dd>
+</dl>
+
+<span class="sig-paren">)</span><a class="headerlink" href="#_CPPv4N15SMU_BrepConvert21UsdXformToSmTransformERKN3pxr14UsdGeomXformOpER10SmVector3dR16SmAxis2Placement" title="Link to this definition">#</a><br /></dt>
+<dd></dd></dl>
+
+</section>
+
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="typedef_namespaceSMU__BrepConvert_1a81a2d8e480e548d5fbe4c2b1155f20fb.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">TessellatedMeshPtr</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="function_namespaceSMU__BrepConvert_1aa5a5142c67f58d472e4a4fffca345e6c.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">smuGenerateBrepMetadata</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+
+
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N15SMU_BrepConvert21UsdXformToSmTransformERKN3pxr14UsdGeomXformOpER10SmVector3dR16SmAxis2Placement"><code class="docutils literal notranslate"><span class="pre">UsdXformToSmTransform()</span></code></a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../_static/scripts/bootstrap.js?digest=7f76b32a3354e82990f2"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=7f76b32a3354e82990f2"></script>
+
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+<a class="footer-brand logo" href="https://www.nvidia.com">
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-blk-for-screen.svg" class="logo__image only-light" alt="NVIDIA"/>
+  <img src="../_static/nvidia-logo-horiz-rgb-1c-wht-for-screen.svg" class="logo__image only-dark" alt="NVIDIA"/>
+</a></div>
+      
+        <div class="footer-item">
+
+
+
+
+  <p class="copyright">
+    
+      Copyright © 2022-2026, NVIDIA Corporation.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item"><p class="last-updated">
+  Last updated on Oct 08, 2026.
+  <br/>
+</p></div>
+      
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+  </body>
+</html>
