@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+########################################################################################################################
+# All platforms:
+########################################################################################################################
+
+copy = [
+    # USD
+    ["_build/target-deps/usd/$config/bin/**/*.*", "_build/$platform/$config"],
+    ["_build/target-deps/usd/$config/plugin/usd/**/*.*", "_build/$platform/$config/usd/"],
+    ["_build/target-deps/usd/$config/lib/usd/**/*.*", "_build/$platform/$config/usd/"],
+    ["_build/target-deps/python/python312.*", "_build/$platform/$config/"],
+    # `usd_brep` package wrapping the compiled module, staged beside it so the
+    # supported import works from the build tree (tests, tools, and autodoc).
+    ["source/SmPyLib/python/usd_brep/*.py", "_build/$platform/$config/usd_brep/"],
+    ["source/SmPyLib/stubs/usd_brep/*", "_build/$platform/$config/usd_brep/"],
+]
+
+link = []
+
+########################################################################################################################
+# Windows platform:
+########################################################################################################################
+
+# Nothing staged for Windows: the VC runtime DLLs that used to be copied here came from the
+# packman msvc/winsdk packages. Install the Microsoft Visual C++ Redistributable - see README.md.
+
+########################################################################################################################
+# Linux platform:
+########################################################################################################################
+
+[linux-x86_64]
+copy = [
+    # Python
+    ["_build/target-deps/python/lib/*.*", "_build/$platform/$config"],
+]
+
+[linux-aarch64]
+copy = [
+    # Python
+    ["_build/target-deps/python/lib/*.*", "_build/$platform/$config"],
+]
+
+########################################################################################################################
+# macOS platform:
+########################################################################################################################
+
+[macos-universal]
+copy = [
+    ["_build/target-deps/python/lib/*.*", "_build/$platform/$config"],
+    # Stage libusd_* dylibs beside release binaries (global copy rules handle bin/ and usd/ plugins).
+    ["_build/target-deps/usd/$config/lib/*.*", "_build/$platform/$config"],
+]

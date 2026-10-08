@@ -1,0 +1,44 @@
+#usda 1.0
+
+def Xform "World"
+{
+    def BrepArray "empty" (
+        customData = {
+            string source = ""
+        }
+    )
+    {
+        uniform double[] brep:intersectTol3d = [0.00002]
+        uniform uint[] brep:regionCount = [1]
+        uniform double2[] brep:xExtent = [(1e20, -1e20)]
+        uniform double2[] brep:yExtent = [(1e20, -1e20)]
+        uniform double2[] brep:zExtent = [(1e20, -1e20)]
+        uniform token[] edge:curveType = []
+        uniform double2[] edge:range = []
+        uniform int2[] edge:vertexIndices = []
+        uniform uint[] edgeuse:edgeIndex = []
+        uniform uint[] edgeuse:nextRadialEUIndex = []
+        uniform token[] edgeuse:orientationType = []
+        uniform token[] edgeuse:thisRadialEntryType = []
+        uniform float3[] extent = [(0, 0, 0), (-0, -0, -0)]
+        uniform uint[] face:loopCount = []
+        uniform token[] face:surfaceType = []
+        uniform token[] face:trimType = []
+        uniform double2[] face:uRange = []
+        uniform double2[] face:vRange = []
+        uniform uint[] faceuse:faceIndex = []
+        uniform token[] faceuse:orientationType = []
+        uniform uint[] loop:edgeuseCount = []
+        uniform uint[] loop:vertexIndex = []
+        uniform uint[] region:shellCount = [0]
+        uniform token[] region:type = ["voidRegion"]
+        uniform uint[] shell:faceuseCount = []
+        uniform token[] shell:pointType = []
+        uniform uint[] shell:wireEdgeCount = []
+        uniform token[] vertex:pointType = []
+        uniform token[] wireEdge:curveType = []
+        uniform double2[] wireEdge:range = []
+        uniform int2[] wireEdge:vertexIndices = []
+    }
+}
+

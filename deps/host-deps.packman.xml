@@ -1,0 +1,8 @@
+<project toolsVersion="5.6">
+  <dependency name="premake" linkPath="../_build/host-deps/premake" tags="non-redist">
+    <package name="premake" version="5.0.0-beta2+nv1-${platform}" platforms="windows-x86_64 linux-x86_64 linux-aarch64" />
+    <package name="premake" version="5.0.0-beta1+nv1-macos-universal" platforms="macos-aarch64" />
+  </dependency>
+  <!-- msvc and winsdk intentionally omitted: the Windows build uses the host-installed Visual
+       Studio and SDK via msbuild.link_host_toolchain in repo.toml. See README.md. -->
+</project>

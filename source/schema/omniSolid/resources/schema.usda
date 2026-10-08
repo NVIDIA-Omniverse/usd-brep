@@ -1,0 +1,944 @@
+#usda 1.0
+(
+    subLayers = [
+        @usd/schema.usda@,    # defines base class /Typed for IsA schemas
+        @usdGeom/schema.usda@ # defines class /Gprim derived from /Typed
+    ]
+)
+
+over "GLOBAL" (
+    customData = {
+        string libraryName   = "omniSolid"
+        string libraryPath   = "./"
+        string libraryPrefix = "OmniSolid"
+        string tokensPrefix  = "OmniSolid"
+        bool skipCodeGeneration = true 
+    }
+) {
+}
+
+#************************************************************************************
+class BrepArray  "BrepArray" (
+    inherits = </Gprim>
+    doc = """ Solid boundary representation models (Breps) rigorously partition space into regions by connecting sets of surfaces into region boundaries.  Regions are the set of points that can be connected by curves of any shape that don't cross boundaries.  
+              The boundaries between regions must be watertight to prevent the points of each region from being connectable to one another.  Manifold solid objects partition space into one solid region and one or more void regions. 
+              Non-manifold objects can partition space from one to any number of regions, where every point in space classifies to one of the model's regions.  
+              In the world of geometric modeling, where mathematical approximations of shape are rife, gaps between adjacent surfaces are common. 
+              In this model, the connections of adjacent surfaces are explicit objects that can fill the gaps and create the necessary partition of space.
+
+              This model is comprised of 3 parts: shapes, topology objects, and special connectivity objects called "uses." For a thorough description of this model, see the Solid Models USD Proposal.
+    
+              Rules and restrictions on topology and geometry are listed in the proposal. They will be migrated to this schema when the AOUSD Geometry WG is aligned on a design.
+    
+              For compact storage of the radial edge data model redundant elements are removed from the flattened representation.  There are no attributes for Vertexuses and Loopuses.  
+              The lists of Edgeuses represents pairs, so the arrays size() are half the number of Edgeuses in the Brep model.
+
+              Objects related to a single Brep must be consecutive in the BrepArray. For example, if Brep_1 has a total of 3 shells, the Brep_2 startShellIndx for its first region would be the number 3.  
+              Another example, the Edges of Brep_i are the brep:edgeCount[ii] consecutive Edges starting at SUM(brep:edgeCount[n]), for n in [0,ii).  """ 
+) {
+    uniform double[]  brep:intersectTol3d        ( doc = """ Max distance at which two objects intersect and min distance at which two points are distinct. size() = number of Breps. """ )
+    uniform double3[] brep:extent                ( doc = """ Brep_ii's bounding box corner pts {XYZmin, XYZmax}. size() = 2 * number of Breps. """ )
+  # uniform token[]   brep:sourceType            ( allowedTokens =["USD", "STEP",  "Alias",   "ParaSolid", 
+  #                                                                "PRC", "IGES",  "SMLib",   "OpenNurbs",
+  #                                                                "STL", "VDAFS", "DataKit", "SolidWorks", 
+  #                                                                "SAT", "DGN",   "other"]
+  #                                                 doc = """ optional geometry engine source for these Breps. size() = Number of Breps. """ )
+    uniform uint[]    brep:regionCount           ( doc = """ Number of Regions in this Brep. size() = Number of Breps """ )
+    
+    # regions are packed in order used by Breps (1st region perBrep is infinite region)
+    uniform uint[]    region:shellCount          ( doc = """ Region_ii's number of Shells.  1st shell = outerShell, subsequent shells = innerShells. size() = number of regions. """ )
+    uniform token[]   region:type                ( allowedTokens = ["solidRegion", "voidRegion"]
+                                                   doc = """ solidRegion = region_ii points are in the Brep. voidRegion = region_ii points are out of the Brep. size() = number of regions. """ )
+    
+    # shells packed in order used by regions
+    uniform uint[]    shell:faceuseCount         ( doc = """Shell_ii's number of faceuses. size() = number of Shells """ )
+    uniform uint[]    shell:wireEdgeCount        ( doc = """Shell_ii's number of connected wireEdges. size() = number of Shells """ )
+    uniform token[]   shell:pointType            ( allowedTokens = ["BrepPointAPI", "none"]
+                                                             # in the future add ["BrepMultiPointAPI"]
+                                                   doc = """ Shell_ii's point type when shell:facuseCount[ii] and shell:wireEdgeCount[ii] are 0, else ignored. 
+                                                             BrepPointAPI = Shell_ii's shape is a point in the ShellPoint array. 
+                                                             size() = number of Shells. """ )
+                                                                                                  
+    # faceuses packed in order used by shells
+    uniform uint[]    faceuse:faceIndex         ( doc = """ Faceuse_ii's face index into face arrays. size() = number of faceuses = 2 x number of faces.""" )
+    uniform token[]   faceuse:orientationType   ( allowedTokens = ["same", "opposite"]
+                                                  doc = """ same     = the side of the face in the direction pointed to by the face's surface normal.
+                                                            opposite = the opposite side of the face. size() = number of faceuses = 2 x number of faces.""" )
+                                                 
+    # faces not packed in an order
+    uniform uint[]    face:loopCount            ( doc = """ face_ii's number of Loops.  1st loop = outerLoop, subsequent loops = innerLoops. size() = number of faces. """ )
+    uniform token[]   face:surfaceType          ( allowedTokens = ["BrepSurfaceNurbAPI", "BrepSurfacePlaneAPI", "BrepSurfaceCylinderAPI", "BrepSurfaceConeAPI", "BrepSurfaceSphereAPI", "BrepSurfaceTorusAPI"]
+                                                  doc = """ BrepSurface APIs define the surface geometry for each face.
+                                                            BrepSurfaceNurbAPI     = face_ii shape is a 3d NURB function (see BrepSurfaceNurbAPI).
+                                                            BrepSurfacePlaneAPI    = face_ii shape is an analytic 3d plane (see BrepSurfacePlaneAPI).
+                                                            BrepSurfaceCylinderAPI = face_ii shape is an analytic 3d cylinder (see BrepSurfaceCylinderAPI).
+                                                            BrepSurfaceConeAPI     = face_ii shape is an analytic 3d cone (see BrepSurfaceConeAPI).
+                                                            BrepSurfaceSphereAPI   = face_ii shape is an analytic 3d sphere (see BrepSurfaceSphereAPI).
+                                                            BrepSurfaceTorusAPI    = face_ii shape is an analytic 3d torus (see BrepSurfaceTorusAPI).
+                                                            size() = number of faces. """ )
+    uniform token[]   face:trimType             ( allowedTokens = ["rectangular", "general"]
+                                                  doc = """ rectangular = face_ii's outerLoop is a rectangle in the face's parameter space consisting of 4 isoparameter UVTrimCurves. 
+                                                            general     = face_ii's outerLoop is any other shape. size() = number of faces. """ )
+    uniform double2[] face:range                ( doc = """ face_ii's domain range corner pts {UVmin, UVmax}. size() = 2 * number of faces. """ )
+                                                
+    # loops packed in order used by faces
+    uniform uint[]    loop:edgeuseCount         ( doc = """ Loop_ii's number of head-to-tail connected edgeuses. size() = number of Loops. """ )
+    uniform uint[]    loop:vertexIndex          ( doc = """ Loop_ii's vertex index when loop:edgeuseCount[ii] == 0, else ignored.  
+                                                            loop:vertexIndex is required because vertex can be shared with EdgeVertices and wireEdgeVertices. 
+                                                            size() = number of Loops.""" )
+
+    # edgeuse packed in order used by loops
+    uniform uint[]    edgeuse:edgeIndex         ( doc = """ Edgeuse_ii's edge index into edge arrays. size() = Number of one-sided edge_to_face connections. """ )
+    uniform token[]   edgeuse:orientationType   ( allowedTokens = ["same", "opposite"]
+                                                  doc = """ same     = edgeuse's UVTrimCurve runs in the same direction as the edge's curve and
+                                                                       represents the owning edge's binormal side connecting to a face..
+                                                            opposite = edgeuse's UVTrimCurve runs in the opposite direction and
+                                                                       represents the edge's other side connecting to a face.
+                                                            size() = Number of one-sided edge_to_face connections. """ )
+    uniform uint[]    edgeuse:nextRadialEUIndex   ( doc = """ index of the nextRadialEdgeuse in a right-hand-rule traversal around the edgeuse's edge. size() = Number of one-sided edge_to_face connections.""")
+    uniform token[]   edgeuse:thisRadialEntryType ( allowedTokens = ["topEntry", "bottomEntry"]
+                                                    doc = """ - Each BrepArray edgeuse represents a {TopEdgeuse BotEdgeuse} mated pair connecting one side of an edge to the top and bottom sides of a face.
+                                                              - Edges bounding faces mostly connect to the face on just one side of the edge and are represented by just one BrepArray edgeuse, but
+                                                                seam edges that connect closed surfaces and strut edges representing cracks in a face connect to the same face twice and have two BrepArray edgeuses.
+                                                              - A right-hand-rule traversal around this edgeuse's edge, orders the edge-face connetions into a series of {face entry side, face exit side} pairs
+                                                                represented as a set of {entryEdgeuse, exitEdgeuse} pairs as: 
+                                                                      RadialEdgeList = { edgeuse[1st]:{entryTopOrBotEdgeuse, exitBotOrTopEdgeuse}, ..., edgeuse[nth]:{entryTopOrBotEdgeuse, exitBotOrTopEdgeuse} } 
+                                                              - topEntry    = The radial edge traversal enters this edgeuse's face from the top and exits from the bottom as:{ edgeuse[this]:{entryTopEdgeuse, exitBotEdgeuse} }.
+                                                                bottomEntry = The radial edge traversal enters and exits this edgeuse's face in the opposite direction as:{ edgeuse[this]:{entryBotEdgeuse, exitTopEdgeuse} }.
+                                                              - size() = Number of one-sided edge_to_face connections. """)
+
+    # edges not packed in an order
+    uniform token[]   edge:curveType             ( allowedTokens = ["BrepCurve3dNurbAPI", "BrepCurve3dLineAPI", "BrepCurve3dCircleAPI", "BrepCurve3dEllipseAPI"]
+                                                   doc = """ BrepCurve3d APIs define the 3d curve geometry for each edge.
+                                                             BrepCurve3dNurbAPI      = shape for edge_ii is a 3d NURB function (see BrepCurve3dNurbAPI).
+                                                             BrepCurve3dLineAPI      = shape for edge_ii is an analytic 3d line (see BrepCurve3dLineAPI).
+                                                             BrepCurve3dCircleAPI    = shape for edge_ii is an analytic 3d circle (see BrepCurve3dCircleAPI).
+                                                             BrepCurve3dEllipseAPI   = shape for edge_ii is an analytic 3d ellipse (see BrepCurve3dEllipseAPI).
+                                                             size() = Number of edges. """ )
+    uniform double[] edge:range                  ( doc = """ Edge_ii's domain interval bounds {paramMin, paramMax}. size() = 2 * number of Edges. """ )
+    uniform int2[]    edge:vertexIndices         ( doc = """ Edge_ii's vertexIndices = {startVertexIndex, endVertexIndex}.
+                                                              where Vertex_startVertexIndex:position = Edge_ii:Curve(Edge:Range(0)).
+                                                                    Vertex_endVertexIndex:position   = Edge_ii:Curve(Edge:Range(1)).
+                                                              edge:vertexIndices are required because vertices can be shared with loopVertices and wireEdgeVertices.
+                                                              (note: edge:vertexIndices is defined as int2 because uint2 is not defined.  These should be uint values.)
+                                                              size() = number of Edges. """ )
+                                                 
+    # wireEdges packed in order used by shells
+    uniform token[]   wireEdge:curveType         ( allowedTokens = ["BrepCurve3dNurbAPI", "BrepCurve3dLineAPI", "BrepCurve3dCircleAPI", "BrepCurve3dEllipseAPI"]
+                                                   doc = """ BrepCurve3d APIs define the 3d curve geometry for each wireEdge.
+                                                             BrepCurve3dNurbAPI      = shape for wireEdge_ii is a 3d NURB function (see BrepCurve3dNurbAPI).
+                                                             BrepCurve3dLineAPI      = shape for wireEdge_ii is an analytic 3d line (see BrepCurve3dLineAPI).
+                                                             BrepCurve3dCircleAPI    = shape for wireEdge_ii is an analytic 3d circle (see BrepCurve3dCircleAPI).
+                                                             BrepCurve3dEllipseAPI   = shape for wireEdge_ii is an analytic 3d ellipse (see BrepCurve3dEllipseAPI).
+                                                             size() = Number of wireEdges. """ )
+    uniform double[] wireEdge:range              ( doc = """ WireEdge_ii's domain interval bounds {paramMin, paramMax}. size() = 2 * number of WireEdges. """ )
+    uniform int2[]    wireEdge:vertexIndices     ( doc = """ WireEdge_ii's vertexIndices = {startVertexIndex, EndVertexIndex}.
+                                                              where Vertex_startVertexIndex:position = Edge_ii:Curve(Edge:Range(0)).
+                                                                    Vertex_EndVertexIndex:position   = Edge_ii:Curve(Edge:Range(1)).
+                                                              wireEdge:vertexIndices are required because vertices can be shared with loopVertices and edgeVertices.
+                                                              (note: wireEdge:vertexIndices is defined as int2 because uint2 is not defined.  These should be uint values.)
+                                                              size() = number of Edges. """ )
+                                                 
+    # vertices not packed in an order
+    uniform token[]   vertex:pointType           ( allowedTokens = ["BrepPointAPI"]
+                                                         # in the future add ["BrepMultiPointAPI"]
+                                                   doc = """ BrepPointAPI = shape for vertex_ii is a point in the pointType array. size() = number of Vertices. """ )
+
+    # HasAPI(SduSolidTokens->brepPointAPI,              SduSolidTokens->vertexPoint)        packed in order used by vertices
+    # HasAPI(SduSolidTokens->brepPointAPI,              SduSolidTokens->shellPoint)         packed in order used by shellVertices
+    # HasAPI(SduSolidTokens->brepCurve3dNurbAPI,        SduSolidTokens->edge3dNurb)         packed in order used by NURB edges
+    # HasAPI(SduSolidTokens->brepCurve3dNurbAPI,        SduSolidTokens->wireEdge3dNurb)     packed in order used by NURB wireEdges
+    # HasAPI(SduSolidTokens->brepCurve3dLineAPI,        SduSolidTokens->edge3dLine)         packed in order used by line edges
+    # HasAPI(SduSolidTokens->brepCurve3dLineAPI,        SduSolidTokens->wireEdge3dLine)     packed in order used by line wireEdges
+    # HasAPI(SduSolidTokens->brepCurve3dCircleAPI,      SduSolidTokens->edge3dCircle)       packed in order used by circle edges
+    # HasAPI(SduSolidTokens->brepCurve3dCircleAPI,      SduSolidTokens->wireEdge3dCircle)   packed in order used by circle wireEdges
+    # HasAPI(SduSolidTokens->brepCurve3dEllipseAPI,     SduSolidTokens->edge3dEllipse)      packed in order used by ellipse edges
+    # HasAPI(SduSolidTokens->brepCurve3dEllipseAPI,     SduSolidTokens->wireEdge3dEllipse)  packed in order used by ellipse wireEdges
+    # HasAPI(SduSolidTokens->brepCurveUvNurbAPI)                                            packed in order used by edgeuses
+    # HasAPI(SduSolidTokens->brepSurfaceNurbAPI)                                            packed in order used by NURB faces
+    # HasAPI(SduSolidTokens->brepSurfacePlaneAPI)                                           packed in order used by plane faces
+    # HasAPI(SduSolidTokens->brepSurfaceCylinderAPI)                                        packed in order used by cylinder faces
+    # HasAPI(SduSolidTokens->brepSurfaceConeAPI)                                            packed in order used by cone faces
+    # HasAPI(SduSolidTokens->brepSurfaceSphereAPI)                                          packed in order used by sphere faces
+    # HasAPI(SduSolidTokens->brepSurfaceTorusAPI)                                           packed in order used by torus faces
+
+
+} # end class BrepArray "BrepArray"              
+
+#************************************************************************************
+# purpose: point geometry apis for BrepArrays
+# note   :  BrepPointAPI: multipleApply API = associated geometrty of vertices defined by 3d Points
+#             Instance name = vertexPoint  => associated geometry of vertex objects defined by 3d points
+#             Instance name = shellPoint   => associated geometry of vertexShell objects defined by 3d points
+#           
+#          To be added:
+#           BrepMultiPointAPI: multipleApply API = associated geomtery of vertices defined by 3d MultiPoints
+#             Instance name = vertexMultiPoint  => associated geometry of vertex objects defined by 3d multiPoints
+#             Instance name = shellMultiPoint   => associated geometry of vertexShell objects defined by 3d multiPoints
+#************************************************************************************
+class "BrepPointAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed point descriptions of brep objects defined by a 3d point. """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["vertexPoint", "shellPoint"]
+                 }
+)
+{
+    uniform point3d[] point:position (
+        doc = """ for instance = VertexPoint, Vertex_ii's position.      size() = number of Vertices.
+                      instance = ShellPoint,  VertexShell_ii's position. size() = number of VertexShells """
+        customData = {
+            string apiName = "pointPosition"
+        }
+    )
+} # end class "BrepPointAPI"
+
+#************************************************************************************
+# purpose: curve geometry apis for BrepArrays 
+# note   :  BrepCurveUvNurbAPI: singleApply API = associated geometry of edgeuse objects defined by 2d BSpline curves
+#           
+#           BrepCurve3dNurbAPI      : multipleApply API = associated geometry of edges defined by 3d BSpline curves
+#             Instance name = edge3dNurb      => associated 3d NURB curve geometry of edge objects
+#             Instance name = wireEdge3dNurb  => associated 3d NURB curve geometry of wireEdge objects
+#           BrepCurve3dLineAPI      : multipleApply API = associated geometry of edges defined by 3d lines
+#             Instance name = edge3dLine      => associated 3d line curve geometry of edge objects
+#             Instance name = wireEdge3dLine  => associated 3d line curve geometry of wireEdge objects
+#           BrepCurve3dCircleAPI    : multipleApply API = associated geometry of edges defined by 3d circles
+#             Instance name = edge3dCircle      => associated 3d circle curve geometry of edge objects
+#             Instance name = wireEdge3dCircle  => associated 3d circle curve geometry of wireEdge objects
+#           BrepCurve3dEllipseAPI   : multipleApply API = associated geometry of edges defined by 3d ellipses
+#             Instance name = edge3dEllipse      => associated 3d ellipse curve geometry of edge objects
+#             Instance name = wireEdge3dEllipse  => associated 3d ellipse curve geometry of wireEdge objects
+#************************************************************************************
+
+#************************************************************************************
+# BrepCurve3dNurbAPI
+#************************************************************************************
+class "BrepCurve3dNurbAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed NURB curve descriptions of brep:edges and brep:wireEdges defined by 3d BSpline curves.
+
+    This class varies from the UsdGeomNurbCurves primarily in having double precision control vertices. 
+    
+    This schema is analagous to NURB Curves in packages like Maya and Houdini, often used for interchange of rigging
+    and modeling curves. We require 'numSegments + 2 * degree + 1' knots (2 more than maya does). This is to be more
+    consistent with RenderMan's NURB patch specification. """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["edge3dNurb", "wireEdge3dNurb"]
+                 }
+)
+{
+    uniform point3d[] curve3d:nurb:controlVertices (
+        doc = """ packed 3d control vertices for all edge or wireEdge NurbCurves.
+        size() = SUM_ii(curve3dVertexCount[ii]). """
+        customData = {
+            string apiName = "curve3dControlVertices"
+        }
+    ) 
+    
+    uniform uint[] curve3d:nurb:vertexCount (
+        doc = """ Curve3d_ii's number of control vertices.
+        size() = number of this instance's 3dNURB curves. """
+        customData = {
+            string apiName = "curve3dVertexCount"
+        }
+    )
+    
+    uniform uint[] curve3d:nurb:order (
+        doc = """ Curve3d_ii's order. Where, Order = Degree + 1.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        Its value for the 'ii'th curve must be less than or equal to vertexCount[ii].
+        size() = number of this instance's 3dNURB curves. """
+        customData = {
+            string apiName = "curve3dOrder"
+        }
+    )
+    
+    uniform double[] curve3d:nurb:knots (
+        doc = """ Curve3d_ii's knot vector providing curve parameterization.
+        The length of the slice of the array for the iith curve must be ( vertexCount[ii] + order[ii] ), and its entries
+        must take on non-decreasing values. Knots are listed in multiplicity, e.g. [0, 0, 1, 1]."""
+        customData = {
+            string apiName = "curve3dKnots"
+        }
+    )
+    
+    uniform double[] curve3d:nurb:weights (
+        doc = """ Curve3d_ii's "w" weight components for each control vertex. 
+        Must be the same length as the curveControlVertices attribute. Weights must be positive, w>0. 
+        \\note Some DCC's pre-weight the \\em points, but in this schema, \\em points are not pre-weighted.        
+        size() = curve3dControlVertices.size() """
+        customData = {
+            string apiName = "Curve3dWeights"
+        }
+    )
+} # end class "BrepCurve3dNurbAPI"
+
+#************************************************************************************
+# BrepCurve3dLineAPI
+#************************************************************************************
+class "BrepCurve3dLineAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed analytic 3d line descriptions of brep:edges and brep:wireEdges.
+
+    A line is defined by a point on the line and a unit direction vector.
+    The parameterization follows the STEP/PRC convention:
+        C(t) = origin + t * direction
+    where t is the curve parameter and direction is a unit vector.
+    The edge:range attribute provides the parameter bounds {tMin, tMax} for each line edge.
+
+    Both PRC (A3DCrvLineData) and SMLib (SmLine) define lines with a point and direction.
+    SMLib additionally stores a scale factor (curve speed); in this schema the speed is
+    always 1.0, meaning distance along the line equals the parameter change.
+    """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["edge3dLine", "wireEdge3dLine"]
+                 }
+)
+{
+    uniform point3d[] curve3d:line:origin (
+        doc = """ packed origin points for all line curves.
+        C(0) evaluates to this point.
+        size() = number of this instance's 3d line curves. """
+        customData = {
+            string apiName = "curve3dLineOrigin"
+        }
+    )
+
+    uniform vector3d[] curve3d:line:direction (
+        doc = """ packed direction vectors (unit length) for all line curves.
+        size() = number of this instance's 3d line curves. """
+        customData = {
+            string apiName = "curve3dLineDirection"
+        }
+    )
+
+} # end class "BrepCurve3dLineAPI"
+
+#************************************************************************************
+# BrepCurve3dCircleAPI
+#************************************************************************************
+class "BrepCurve3dCircleAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed analytic 3d circle descriptions of brep:edges and brep:wireEdges.
+
+    A circle is defined by a center, an axis (normal to the plane of the circle),
+    a reference direction (in the plane of the circle), and a radius.
+    The parameterization follows the STEP convention:
+        C(t) = center + radius * cos(t) * refDirection
+                      + radius * sin(t) * (axis x refDirection)
+    where t is the angular parameter in radians.
+    The edge:range attribute provides the parameter bounds {tMin, tMax} in radians.
+
+    Both PRC (A3DCrvCircleData) and SMLib (SmCircle) define circles with an axis placement
+    and a radius. PRC uses radians; SMLib uses degrees internally but this schema
+    normalizes to radians.
+    """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["edge3dCircle", "wireEdge3dCircle"]
+                 }
+)
+{
+    uniform point3d[] curve3d:circle:center (
+        doc = """ packed center points for all circle curves.
+        size() = number of this instance's 3d circle curves. """
+        customData = {
+            string apiName = "curve3dCircleCenter"
+        }
+    )
+
+    uniform vector3d[] curve3d:circle:axis (
+        doc = """ packed axis directions (unit vector, normal to circle plane) for all circle curves.
+        Defines the plane of the circle. Z = axis.
+        size() = number of this instance's 3d circle curves. """
+        customData = {
+            string apiName = "curve3dCircleAxis"
+        }
+    )
+
+    uniform vector3d[] curve3d:circle:refDirection (
+        doc = """ packed reference directions (unit vector, in circle plane) for all circle curves.
+        Defines where t = 0 on the circle. Must be orthogonal to axis. X = refDirection.
+        size() = number of this instance's 3d circle curves. """
+        customData = {
+            string apiName = "curve3dCircleRefDirection"
+        }
+    )
+
+    uniform double[] curve3d:circle:radius (
+        doc = """ packed radii of all circle curves. Must be positive.
+        size() = number of this instance's 3d circle curves. """
+        customData = {
+            string apiName = "curve3dCircleRadius"
+        }
+    )
+
+} # end class "BrepCurve3dCircleAPI"
+
+#************************************************************************************
+# BrepCurve3dEllipseAPI
+#************************************************************************************
+class "BrepCurve3dEllipseAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed analytic 3d ellipse descriptions of brep:edges and brep:wireEdges.
+
+    An ellipse is defined by a center, an axis (normal to the plane of the ellipse),
+    a reference direction (toward the semi-major axis), a semi-major radius, and a semi-minor radius.
+    The parameterization follows the STEP convention:
+        C(t) = center + xRadius * cos(t) * refDirection
+                      + yRadius * sin(t) * (axis x refDirection)
+    where t is the angular parameter in radians.
+    The edge:range attribute provides the parameter bounds {tMin, tMax} in radians.
+
+    Both PRC (A3DCrvEllipseData) and SMLib (SmEllipse) define ellipses with an axis placement
+    and two radii. PRC uses radians; SMLib uses degrees internally but this schema
+    normalizes to radians.
+
+    Conflict note: PRC names the radii 'semiAxis1Length' and 'semiAxis2Length' without
+    requiring semiAxis1 >= semiAxis2. SMLib uses 'RadiusAtXAxis' and 'RadiusAtYAxis'.
+    STEP AP242 names them 'semi_axis_1' (along refDirection) and 'semi_axis_2'.
+    This schema uses 'xRadius' (along refDirection) and 'yRadius'
+    without requiring xRadius >= yRadius, matching the STEP convention
+    where the first radius is along the reference direction regardless of magnitude.
+    """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["edge3dEllipse", "wireEdge3dEllipse"]
+                 }
+)
+{
+    uniform point3d[] curve3d:ellipse:center (
+        doc = """ packed center points for all ellipse curves.
+        size() = number of this instance's 3d ellipse curves. """
+        customData = {
+            string apiName = "curve3dEllipseCenter"
+        }
+    )
+
+    uniform vector3d[] curve3d:ellipse:axis (
+        doc = """ packed axis directions (unit vector, normal to ellipse plane) for all ellipse curves.
+        size() = number of this instance's 3d ellipse curves. """
+        customData = {
+            string apiName = "curve3dEllipseAxis"
+        }
+    )
+
+    uniform vector3d[] curve3d:ellipse:refDirection (
+        doc = """ packed reference directions (unit vector, toward semi-major axis) for all ellipse curves.
+        Defines where t = 0 on the ellipse. Must be orthogonal to axis.
+        size() = number of this instance's 3d ellipse curves. """
+        customData = {
+            string apiName = "curve3dEllipseRefDirection"
+        }
+    )
+
+    uniform double[] curve3d:ellipse:xRadius (
+        doc = """ packed x radii (radius along refDirection vector) of all ellipse curves. Must be positive.
+        size() = number of this instance's 3d ellipse curves. """
+        customData = {
+            string apiName = "curve3dEllipseXRadius"
+        }
+    )
+
+    uniform double[] curve3d:ellipse:yRadius (
+        doc = """ packed y radii (radius along Cross(axis, refDirection) vector of all ellipse curves. Must be positive.
+        size() = number of this instance's 3d ellipse curves. """
+        customData = {
+            string apiName = "curve3dEllipseYRadius"
+        }
+    )
+
+} # end class "BrepCurve3dEllipseAPI"
+
+#************************************************************************************
+# BrepCurveUvNurbAPI
+#************************************************************************************
+class "BrepCurveUvNurbAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed 2d NURB UV curve descriptions of brep:edgeuses defined by 2d BSpline curves.
+              UV curves follow edgeuse traversal: same follows the 3d edge direction; opposite reverses it. """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform double2[] brep:curveUv:nurb:controlVertices (
+        doc = """ packed 2d control vertices for all edgeuse UV NurbCurves.
+        size() = SUM_ii(curveUvVertexCount[ii]). """
+        customData = {
+            string apiName = "curveUvControlVertices"
+        }
+    ) 
+    
+    uniform uint[] brep:curveUv:nurb:vertexCount (
+        doc = """ CurveUv_ii's number of control vertices.
+        size() = number of UV NURB curves. """
+        customData = {
+            string apiName = "curveUvVertexCount"
+        }
+    )
+    
+    uniform uint[] brep:curveUv:nurb:order (
+        doc = """ CurveUv_ii's order. Where, Order = Degree + 1.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        Its value for the 'ii'th curve must be less than or equal to vertexCount[ii].
+        size() = number of this instance's UV NURB curves. """
+        customData = {
+            string apiName = "curveUvOrder"
+        }
+    )
+    
+    uniform double[] brep:curveUv:nurb:knots (
+        doc = """ CurveUv_ii's knot vector providing curve parameterization.
+        The length of the slice of the array for the iith curve must be ( vertexCount[ii] + order[ii] ), and its entries
+        must take on non-decreasing values. Knots are listed in multiplicity, e.g. [0, 0, 1, 1]."""
+        customData = {
+            string apiName = "curveUvKnots"
+        }
+    )
+    
+    uniform double[] brep:curveUv:nurb:weights (
+        doc = """ CurveUv_ii's "w" weight components for each control vertex. 
+        Must be the same length as the edgeCurveControlVertices attribute. Weights must be positive, w>0. 
+        \\note Some DCC's pre-weight the \\em points, but in this schema, \\em points are not pre-weighted.        
+        size() = CurveUvControlVertices.size() """
+        customData = {
+            string apiName = "curveUvWeights"
+        }
+    )
+} # end class "BrepCurveUvNurbAPI"
+
+#************************************************************************************
+# purpose: surface geometry apis for BrepArrays 
+# note   :  BrepSurfaceNurbAPI    : singleApply API = associated geometry of face objects defined by 3d BSpline surfaces
+#           BrepSurfacePlaneAPI   : singleApply API = associated geometry of face objects defined by analytic 3d planes
+#           BrepSurfaceCylinderAPI: singleApply API = associated geometry of face objects defined by analytic 3d cylinders
+#           BrepSurfaceConeAPI    : singleApply API = associated geometry of face objects defined by analytic 3d cones
+#           BrepSurfaceSphereAPI  : singleApply API = associated geometry of face objects defined by analytic 3d spheres
+#           BrepSurfaceTorusAPI   : singleApply API = associated geometry of face objects defined by analytic 3d tori
+#************************************************************************************
+
+#************************************************************************************
+# BrepSurfaceNurbAPI
+#************************************************************************************
+class "BrepSurfaceNurbAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed 3d NURBs Surface descriptions of brep:faces defined by 3d BSpline surfaces.
+
+    These attributes vary from the UsdGeomNurbPatch primarily in having double precision control vertices. 
+
+    The encoding mostly follows that of RiNuPatch and RiTrimCurve:
+    https://renderman.pixar.com/resources/current/RenderMan/geometricPrimitives.html#rinupatch , with some minor
+    renaming and coalescing for clarity.
+
+    The layout of control vertices in the \\em points attribute is row-major with U considered rows, and V columns.
+
+    The authored points, orders, knots, weights, and ranges are all that is required to render the nurbs patch.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:nurb:controlVertices (
+        doc = """ packed control vertices of the all Nurb Surfaces.
+        The layout is row-major with U considered rows, and V columns.
+        size() = SUM_ii(uVertexCount[ii] * vVertexCount[ii]). """
+        customData = {
+            string apiName = "surfaceControlVertices"
+        }
+    )
+
+    uniform uint[] brep:surface:nurb:uVertexCount (
+        doc = """surface_ii's number of control vertices in U dir.
+        size() = number of NURB surfaces. """
+        customData = {
+            string apiName = "surfaceUVertexCount"
+        }
+    )
+
+    uniform uint[] brep:surface:nurb:vVertexCount (
+        doc = """surface_ii's number of control vertices in V dir.
+        size() = number of NURB surfaces. """
+        customData = {
+            string apiName = "surfaceVVertexCount"
+        }
+    )
+    
+    uniform uint[] brep:surface:nurb:uOrder (
+        doc = """Order in the U direction.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        size() = surface_ii's order in the U dir. Where, Order = Degree + 1."""
+        customData = {
+            string apiName = "surfaceUOrder"
+        }
+    )
+    
+    uniform uint[] brep:surface:nurb:vOrder (
+        doc = """Order in the V direction.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        size() = surface_ii's order in the V dir. Where, Order = Degree + 1."""
+        customData = {
+            string apiName = "surfaceVOrder"
+        }
+    )
+    
+    uniform double[] brep:surface:nurb:uKnots (
+        doc = """surface_ii's knot vector in U direction providing U parameterization.
+        The length of the slice of the array for the iith surface must be ( uVertexCount[ii] + uOrder[ii] ), and its entries
+        must take on non-decreasing values.  Knots are listed in multiplicity, e.g. [0, 0, 1, 1].
+        size() = SUM_ii(surfaceUVertexCount[ii]) + SUM_ii(surfaceUOrder[ii]). """
+        customData = {
+            string apiName = "surfaceUKnots"
+        }
+    )
+
+    uniform double[] brep:surface:nurb:vKnots (
+        doc = """surface_ii's knot vector in V direction providing V parameterization.
+        The length of the slice of the array for the iith surface must be ( vVertexCount[ii] + vOrder[ii] ), and its entries
+        must take on non-decreasing values.  Knots are listed in multiplicity, e.g. [0, 0, 1, 1].
+        size() = SUM_ii(surfaceVVertexCount) + SUM_ii(surfaceVOrder[ii]). """
+        customData = {
+            string apiName = "surfaceVKnots"
+        }
+    )
+
+    uniform double[] brep:surface:nurb:weights (
+        doc = """ surface_ii's "w" weight components for each control vertex. Must be the same length as the surfaceControlVertices attribute. 
+        All weights must be positive, w>0. 
+        \\note Some DCC's pre-weight the \\em points, but in this schema, \\em points are not pre-weighted. """ 
+        customData = {
+            string apiName = "surfaceWeights"
+        }
+    )
+
+} # end class "BrepSurfaceNurbAPI" 
+
+#************************************************************************************
+# BrepSurfaceSphereAPI
+#************************************************************************************
+class "BrepSurfaceSphereAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated analytic 3d sphere surface descriptions of brep:faces.
+
+    A sphere surface is defined by a center point, a pole axis, a reference direction, and a radius.
+    The parameterization follows the standard geographic convention:
+        S(u,v) = center + radius * [ cos(v) * cos(u) * refDirection
+                                   + cos(v) * sin(u) * (axis x refDirection)
+                                   + sin(v) * axis ]
+    where u is longitude (radians) and v is latitude (radians).
+    The surface normal points outward (away from center).
+    The face:range attribute provides the UV trim domain bounds in radians for each sphere face.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:sphere:center (
+        doc = """ packed center points of all sphere surfaces.
+        size() = number of sphere surfaces. """
+        customData = {
+            string apiName = "surfaceSphereCenter"
+        }
+    )
+
+    uniform vector3d[] brep:surface:sphere:axis (
+        doc = """ packed pole axis (unit vector, north pole direction) for all sphere surfaces.
+        Defines the V parameterization direction: V = +pi/2 at the north pole, V = -pi/2 at the south pole.
+        size() = number of sphere surfaces. """
+        customData = {
+            string apiName = "surfaceSphereAxis"
+        }
+    )
+
+    uniform vector3d[] brep:surface:sphere:refDirection (
+        doc = """ packed reference direction (unit vector, in the equatorial plane) for all sphere surfaces.
+        Defines where U = 0 on the equator. Must be orthogonal to axis.
+        size() = number of sphere surfaces. """
+        customData = {
+            string apiName = "surfaceSphereRefDirection"
+        }
+    )
+
+    uniform double[] brep:surface:sphere:radius (
+        doc = """ packed radii of all sphere surfaces. Must be positive.
+        size() = number of sphere surfaces. """
+        customData = {
+            string apiName = "surfaceSphereRadius"
+        }
+    )
+
+} # end class "BrepSurfaceSphereAPI"
+
+#************************************************************************************
+# BrepSurfacePlaneAPI
+#************************************************************************************
+class "BrepSurfacePlaneAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated analytic 3d plane surface descriptions of brep:faces.
+
+    A plane is defined by a position (origin), a reference direction (X axis), and a normal direction (Z axis).
+    The Y axis is implied as Z cross X (forming a right-handed frame after orthonormalization).
+    The parameterization follows the STEP convention:
+        S(u,v) = origin + u * refDirection + v * (axis x refDirection)
+    where u and v are unbounded real parameters.
+    The surface normal equals the axis direction.
+    The face:range attribute provides the UV trim domain bounds for each plane face.
+
+    This definition is compatible with both PRC (A3DSurfPlaneData) and SMLib (SmPlane)
+    which both use an axis placement (origin, X axis, Z axis) to define the plane.
+    Note: SMLib additionally stores a UV scale factor that scales the U and V directions
+    independently. In this schema, UV scale is always 1.0; any scaling is absorbed into
+    the face:range domain bounds.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:plane:origin (
+        doc = """ packed origin points of all plane surfaces.
+        S(0,0) evaluates to this point.
+        size() = number of plane surfaces. """
+        customData = {
+            string apiName = "surfacePlaneOrigin"
+        }
+    )
+
+    uniform vector3d[] brep:surface:plane:axis (
+        doc = """ packed normal direction (unit vector) for all plane surfaces.
+        Defines the surface normal direction. Z = axis.
+        size() = number of plane surfaces. """
+        customData = {
+            string apiName = "surfacePlaneAxis"
+        }
+    )
+
+    uniform vector3d[] brep:surface:plane:refDirection (
+        doc = """ packed reference direction (unit vector, in the plane) for all plane surfaces.
+        Defines where U = 0. Must be orthogonal to axis. X = refDirection.
+        size() = number of plane surfaces. """
+        customData = {
+            string apiName = "surfacePlaneRefDirection"
+        }
+    )
+
+} # end class "BrepSurfacePlaneAPI"
+
+#************************************************************************************
+# BrepSurfaceCylinderAPI
+#************************************************************************************
+class "BrepSurfaceCylinderAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated analytic 3d cylinder surface descriptions of brep:faces.
+
+    A cylinder is defined by a position (origin on the axis), an axis direction,
+    a reference direction, and a radius. The parameterization follows the STEP convention:
+        S(u,v) = origin + radius * cos(u) * refDirection
+                        + radius * sin(u) * (axis x refDirection)
+                        + v * axis
+    where u is the angular parameter in radians and v is the linear height parameter.
+    The surface normal points outward (away from the axis).
+    The face:range attribute provides the UV trim domain bounds {uMin, vMin, uMax, vMax}
+    in radians for u and linear units for v.
+
+    Both PRC and SMLib define the cylinder using an axis placement and radius.
+    PRC uses radians for the angular parameter; SMLib (SmCylinder) uses degrees internally
+    but this schema normalizes to radians.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:cylinder:origin (
+        doc = """ packed origin points (on the cylinder axis) for all cylinder surfaces.
+        size() = number of cylinder surfaces. """
+        customData = {
+            string apiName = "surfaceCylinderOrigin"
+        }
+    )
+
+    uniform vector3d[] brep:surface:cylinder:axis (
+        doc = """ packed axis direction (unit vector) for all cylinder surfaces.
+        Defines the V parameterization direction (height).
+        size() = number of cylinder surfaces. """
+        customData = {
+            string apiName = "surfaceCylinderAxis"
+        }
+    )
+
+    uniform vector3d[] brep:surface:cylinder:refDirection (
+        doc = """ packed reference direction (unit vector, perpendicular to axis) for all cylinder surfaces.
+        Defines where U = 0 on the circular cross-section. Must be orthogonal to axis.
+        size() = number of cylinder surfaces. """
+        customData = {
+            string apiName = "surfaceCylinderRefDirection"
+        }
+    )
+
+    uniform double[] brep:surface:cylinder:radius (
+        doc = """ packed radii of all cylinder surfaces. Must be positive.
+        size() = number of cylinder surfaces. """
+        customData = {
+            string apiName = "surfaceCylinderRadius"
+        }
+    )
+
+} # end class "BrepSurfaceCylinderAPI"
+
+#************************************************************************************
+# BrepSurfaceConeAPI
+#************************************************************************************
+class "BrepSurfaceConeAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated analytic 3d cone surface descriptions of brep:faces.
+
+    A cone is defined by a position (origin), an axis direction, a reference direction,
+    a radius at the origin, and a semi-angle. The parameterization follows the STEP convention:
+        R(v)   = radius + v * tan(semiAngle)
+        S(u,v) = origin + R(v) * cos(u) * refDirection
+                        + R(v) * sin(u) * (axis x refDirection)
+                        + v * axis
+    where u is the angular parameter in radians, v is the linear height parameter,
+    and semiAngle is the half-angle between the axis and the cone surface.
+    When semiAngle is 0, the cone degenerates to a cylinder.
+    The surface normal points outward (away from the axis).
+    The face:range attribute provides the UV trim domain bounds in radians (u) and linear units (v).
+
+    Both PRC and SMLib define the cone with an axis placement, base radius, and semi-angle.
+    PRC uses radians for the angular parameter; SMLib (SmCone) uses degrees internally
+    but this schema normalizes to radians.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:cone:origin (
+        doc = """ packed origin points (on the cone axis at the base circle) for all cone surfaces.
+        size() = number of cone surfaces. """
+        customData = {
+            string apiName = "surfaceConeOrigin"
+        }
+    )
+
+    uniform vector3d[] brep:surface:cone:axis (
+        doc = """ packed axis direction (unit vector) for all cone surfaces.
+        Defines the V parameterization direction. The cone opens in the positive axis direction
+        when semiAngle is positive.
+        size() = number of cone surfaces. """
+        customData = {
+            string apiName = "surfaceConeAxis"
+        }
+    )
+
+    uniform vector3d[] brep:surface:cone:refDirection (
+        doc = """ packed reference direction (unit vector, perpendicular to axis) for all cone surfaces.
+        Defines where U = 0 on the circular cross-section. Must be orthogonal to axis.
+        size() = number of cone surfaces. """
+        customData = {
+            string apiName = "surfaceConeRefDirection"
+        }
+    )
+
+    uniform double[] brep:surface:cone:radius (
+        doc = """ packed base radii (radius at v=0, at the origin) of all cone surfaces. Must be non-negative.
+        size() = number of cone surfaces. """
+        customData = {
+            string apiName = "surfaceConeRadius"
+        }
+    )
+
+    uniform double[] brep:surface:cone:semiAngle (
+        doc = """ packed semi-angles in radians for all cone surfaces.
+        The half-angle between the cone axis and the cone surface.
+        Range: (-pi/2, pi/2). Positive means radius increases with positive V.
+        size() = number of cone surfaces. """
+        customData = {
+            string apiName = "surfaceConeSemiAngle"
+        }
+    )
+
+} # end class "BrepSurfaceConeAPI"
+
+#************************************************************************************
+# BrepSurfaceTorusAPI
+#************************************************************************************
+class "BrepSurfaceTorusAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated analytic 3d torus surface descriptions of brep:faces.
+
+    A torus is defined by a position (origin), an axis direction, a reference direction,
+    a major radius, and a minor radius. The parameterization follows the STEP convention:
+        S(u,v) = origin + (majorRadius + minorRadius * cos(v)) * cos(u) * refDirection
+                        + (majorRadius + minorRadius * cos(v)) * sin(u) * (axis x refDirection)
+                        + minorRadius * sin(v) * axis
+    where u is the major (sweep) angle in radians and v is the minor (tube) angle in radians.
+    The surface normal points outward.
+    The face:range attribute provides the UV trim domain bounds in radians.
+
+    Both PRC and SMLib define the torus with an axis placement, major radius, and minor radius.
+    PRC uses radians for both angular parameters; SMLib (SmTorus) uses degrees internally
+    but this schema normalizes to radians.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["OmniSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:torus:origin (
+        doc = """ packed center points of all torus surfaces.
+        size() = number of torus surfaces. """
+        customData = {
+            string apiName = "surfaceTorusOrigin"
+        }
+    )
+
+    uniform vector3d[] brep:surface:torus:axis (
+        doc = """ packed axis direction (unit vector) for all torus surfaces.
+        Defines the symmetry axis of the torus. The minor circle is swept around this axis.
+        size() = number of torus surfaces. """
+        customData = {
+            string apiName = "surfaceTorusAxis"
+        }
+    )
+
+    uniform vector3d[] brep:surface:torus:refDirection (
+        doc = """ packed reference direction (unit vector, perpendicular to axis) for all torus surfaces.
+        Defines where U = 0 for the major sweep angle. Must be orthogonal to axis.
+        size() = number of torus surfaces. """
+        customData = {
+            string apiName = "surfaceTorusRefDirection"
+        }
+    )
+
+    uniform double[] brep:surface:torus:majorRadius (
+        doc = """ packed major radii of all torus surfaces. Must be positive.
+        Distance from the torus center to the center of the tube cross-section.
+        size() = number of torus surfaces. """
+        customData = {
+            string apiName = "surfaceTorusMajorRadius"
+        }
+    )
+
+    uniform double[] brep:surface:torus:minorRadius (
+        doc = """ packed minor radii of all torus surfaces. Must be positive.
+        Radius of the tube cross-section.
+        size() = number of torus surfaces. """
+        customData = {
+            string apiName = "surfaceTorusMinorRadius"
+        }
+    )
+
+} # end class "BrepSurfaceTorusAPI"

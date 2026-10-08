@@ -1,0 +1,391 @@
+#usda 1.0
+(
+    subLayers = [
+        @usd/schema.usda@,    
+        @usdGeom/schema.usda@ 
+    ]
+)
+
+over "GLOBAL" (
+    customData = {
+        string libraryName   = "prelimUsdSolid"
+        string libraryPath   = "./"
+        string libraryPrefix = "PrelimUsdSolid"
+        string tokensPrefix  = "PrelimUsdSolid"
+        bool skipCodeGeneration = true 
+    }
+) {
+}
+
+#************************************************************************************
+class BrepArray  "BrepArray" (
+    inherits = </Gprim>
+    doc = """ Solid boundary representation models (Breps) rigorously partition space into regions by connecting sets of surfaces into region boundaries.  Regions are the set of points that can be connected by curves of any shape that don't cross boundaries.  
+              The boundaries between regions must be watertight to prevent the points of each region from being connectable to one another.  Manifold solid objects partition space into one solid region and one or more void regions. 
+              Non-manifold objects can partition space from one to any number of regions, where every point in space classifies to one of the model's regions.  
+              In the world of geometric modeling, where mathematical approximations of shape are rife, gaps between adjacent surfaces are common. 
+              In this model, the connections of adjacent surfaces are explicit objects that can fill the gaps and create the necessary partition of space.
+
+              This model is comprised of 3 parts: shapes, topology objects, and special connectivity objects called "uses." For a thorough description of this model, see the Solid Models USD Proposal.
+    
+              Rules and restrictions on topology and geometry are listed in the proposal. They will be migrated to this schema when the AOUSD Geometry WG is aligned on a design.
+    
+              For compact storage of the radial edge data model redundant elements are removed from the flattened representation.  There are no attributes for Vertexuses and Loopuses.  
+              The lists of Edgeuses represents pairs, so the arrays size() are half the number of Edgeuses in the Brep model.
+
+              Objects related to a single Brep must be consecutive in the BrepArray. For example, if Brep_1 has a total of 3 shells, the Brep_2 startShellIndx for its first region would be the number 3.  
+              Another example, the Edges of Brep_i are the brep:edgeCount[ii] consecutive Edges starting at SUM(brep:edgeCount[n]), for n in [0,ii).  """ 
+) {
+    uniform double[]  brep:intersectTol3d        ( doc = """ Max distance at which two objects intersect and min distance at which two points are distinct. size() = number of Breps. """ )
+    uniform double3[] brep:extent                ( doc = """ Brep_ii's bounding box corner pts {XYZmin, XYZmax}. size() = 2 * number of Breps. """ )
+    uniform uint[]    brep:regionCount           ( doc = """ Number of Regions in this Brep. size() = Number of Breps """ )
+    
+    uniform uint[]    region:shellCount          ( doc = """ Region_ii's number of Shells.  1st shell = outerShell, subsequent shells = innerShells. size() = number of regions. """ )
+    uniform token[]   region:type                ( allowedTokens = ["solidRegion", "voidRegion"]
+                                                   doc = """ solidRegion = region_ii points are in the Brep. voidRegion = region_ii points are out of the Brep. size() = number of regions. """ )
+    
+    uniform uint[]    shell:faceuseCount         ( doc = """Shell_ii's number of faceuses. size() = number of Shells """ )
+    uniform uint[]    shell:wireEdgeCount        ( doc = """Shell_ii's number of connected wireEdges. size() = number of Shells """ )
+    uniform token[]   shell:pointType            ( allowedTokens = ["BrepPointAPI", "none"]
+                                                             # in the future add ["BrepMultiPointAPI"]
+                                                   doc = """ Shell_ii's point type when shell:faceuseCount[ii] and shell:wireEdgeCount[ii] are 0, else ignored. 
+                                                             BrepPointAPI = Shell_ii's shape is a point in the ShellPoint array. 
+                                                             size() = number of Shells. """ )
+                                                                                                  
+    uniform uint[]    faceuse:faceIndex         ( doc = """ Faceuse_ii's face index into face arrays. size() = number of faceuses = 2 x number of faces.""" )
+    uniform token[]   faceuse:orientationType   ( allowedTokens = ["same", "opposite"]
+                                                  doc = """ same     = the side of the face in the direction pointed to by the face's surface normal.
+                                                            opposite = the opposite side of the face. size() = number of faceuses = 2 x number of faces.""" )
+                                                 
+    uniform uint[]    face:loopCount            ( doc = """ face_ii's number of Loops.  1st loop = outerLoop, subsequent loops = innerLoops. size() = number of faces. """ )
+    uniform token[]   face:surfaceType          ( allowedTokens = ["BrepSurfaceNurbAPI"]
+                                                  doc = """ BrepSurfaceNurbAPI = face_ii's shape is a NURB function in the associated surfaceType array. Currently only NURB surfaces allowed. In the future analytics will be added. 
+                                                            size() = number of faces. """ )
+    uniform token[]   face:trimType             ( allowedTokens = ["rectangular", "general"]
+                                                  doc = """ rectangular = face_ii's outerLoop is a rectangle in the face's parameter space consisting of 4 isoparameter UVTrimCurves. 
+                                                            general     = face_ii's outerLoop is any other shape. size() = number of faces. """ )
+    uniform double2[] face:range                ( doc = """ face_ii's domain range corner pts {UVmin, UVmax}. size() = 2 * number of faces. """ )
+                                                
+    uniform uint[]    loop:edgeuseCount         ( doc = """ Loop_ii's number of head-to-tail connected edgeuses. size() = number of Loops. """ )
+    uniform uint[]    loop:vertexIndex          ( doc = """ Loop_ii's vertex index when loop:edgeuseCount[ii] == 0, else ignored.  
+                                                            loop:vertexIndex is required because vertex can be shared with EdgeVertices and wireEdgeVertices. 
+                                                            size() = number of Loops.""" )
+
+    uniform uint[]    edgeuse:edgeIndex         ( doc = """ Edgeuse_ii's edge index into edge arrays. size() = Number of one-sided edge_to_face connections. """ )
+    uniform token[]   edgeuse:orientationType   ( allowedTokens = ["same", "opposite"]
+                                                  doc = """ same     = edgeuse's UVTrimCurve runs in the same direction as the edge's curve and
+                                                                       represents the owning edge's binormal side connecting to a face.
+                                                            opposite = edgeuse's UVTrimCurve runs in the opposite direction and
+                                                                       represents the edge's other side connecting to a face.
+                                                            size() = Number of one-sided edge_to_face connections. """ )
+    uniform uint[]    edgeuse:nextRadialEUIndex   ( doc = """ index of the nextRadialEdgeuse in a right-hand-rule traversal around the edgeuse's edge. size() = Number of one-sided edge_to_face connections.""")
+    uniform token[]   edgeuse:thisRadialEntryType ( allowedTokens = ["topEntry", "bottomEntry"]
+                                                    doc = """ - Each BrepArray edgeuse represents a {TopEdgeuse BotEdgeuse} mated pair connecting one side of an edge to the top and bottom sides of a face.
+                                                              - Edges bounding faces mostly connect to the face on just one side of the edge and are represented by just one BrepArray edgeuse, but
+                                                                seam edges that connect closed surfaces and strut edges representing cracks in a face connect to the same face twice and have two BrepArray edgeuses.
+                                                              - A right-hand-rule traversal around this edgeuse's edge, orders the edge-face connections into a series of {face entry side, face exit side} pairs
+                                                                represented as a set of {entryEdgeuse, exitEdgeuse} pairs as: 
+                                                                      RadialEdgeList = { edgeuse[1st]:{entryTopOrBotEdgeuse, exitBotOrTopEdgeuse}, ..., edgeuse[nth]:{entryTopOrBotEdgeuse, exitBotOrTopEdgeuse} } 
+                                                              - topEntry    = The radial edge traversal enters this edgeuse's face from the top and exits from the bottom as:{ edgeuse[this]:{entryTopEdgeuse, exitBotEdgeuse} }.
+                                                                bottomEntry = The radial edge traversal enters and exits this edgeuse's face in the opposite direction as:{ edgeuse[this]:{entryBotEdgeuse, exitTopEdgeuse} }.
+                                                              - size() = Number of one-sided edge_to_face connections. """)
+
+    uniform token[]   edge:curveType             ( allowedTokens = ["BrepCurve3dNurbAPI"]
+                                                         # in the future add ["BrepCircle3dAPI", "BrepLine3dAPI", and more]
+                                                   doc = """ BrepCurve3dNurbAPI = shape for edge_ii is a NURB function in the associated curveType array. 
+                                                             Currently only NURB curves are allowed. In the future analytics will be added. 
+                                                             size() = Number of edges. """ )
+    uniform double[]  edge:range                 ( doc = """ Edge_ii's domain interval bounds {paramMin, paramMax}. size() = 2 * number of Edges. """ )
+    uniform int2[]    edge:vertexIndices         ( doc = """ Edge_ii's vertexIndices = {startVertexIndex, endVertexIndex}.
+                                                              where Vertex_startVertexIndex:position = Edge_ii:Curve(Edge:Range(0)).
+                                                                    Vertex_endVertexIndex:position   = Edge_ii:Curve(Edge:Range(1)).
+                                                              edge:vertexIndices are required because vertices can be shared with loopVertices and wireEdgeVertices.
+                                                              (note: edge:vertexIndices is defined as int2 because uint2 is not defined.  These should be uint values.)
+                                                              size() = number of Edges. """ )
+                                                 
+    uniform token[]   wireEdge:curveType         ( allowedTokens = ["BrepCurve3dNurbAPI"]
+                                                         # in the future add ["BrepCircle3dAPI", "BrepLine3dAPI", and more]
+                                                   doc = """ BrepCurve3dNurbAPI = shape for wireEdge_ii is a NURB function in the associated curveType array. 
+                                                             Currently only NURB curves are allowed. In the future analytics will be added. 
+                                                             size() = Number of wireEdges. """ )
+    uniform double[]  wireEdge:range             ( doc = """ WireEdge_ii's domain interval bounds {paramMin, paramMax}. size() = 2 * number of WireEdges. """ )
+    uniform int2[]    wireEdge:vertexIndices     ( doc = """ WireEdge_ii's vertexIndices = {startVertexIndex, EndVertexIndex}.
+                                                              where Vertex_startVertexIndex:position = WireEdge_ii:Curve(WireEdge:Range(0)).
+                                                                    Vertex_EndVertexIndex:position   = WireEdge_ii:Curve(WireEdge:Range(1)).
+                                                              wireEdge:vertexIndices are required because vertices can be shared with loopVertices and edgeVertices.
+                                                              (note: wireEdge:vertexIndices is defined as int2 because uint2 is not defined.  These should be uint values.)
+                                                              size() = number of WireEdges. """ )
+                                                 
+    uniform token[]   vertex:pointType           ( allowedTokens = ["BrepPointAPI"]
+                                                         # in the future add ["BrepMultiPointAPI"]
+                                                   doc = """ BrepPointAPI = shape for vertex_ii is a point in the pointType array. size() = number of Vertices. """ )
+} # end class BrepArray "BrepArray"              
+
+#************************************************************************************
+# purpose: point geometry apis for BrepArrays
+# note   :  BrepPointAPI: multipleApply API = associated geometry of vertices defined by 3d Points
+#             Instance name = vertexPoint  => associated geometry of vertex objects defined by 3d points
+#             Instance name = shellPoint   => associated geometry of vertexShell objects defined by 3d points
+#           
+#          To be added:
+#           BrepMultiPointAPI: multipleApply API = associated geometry of vertices defined by 3d MultiPoints
+#             Instance name = vertexMultiPoint  => associated geometry of vertex objects defined by 3d multiPoints
+#             Instance name = shellMultiPoint   => associated geometry of vertexShell objects defined by 3d multiPoints
+#************************************************************************************
+class "BrepPointAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed point descriptions of brep objects defined by a 3d point. """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["PrelimUsdSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["vertexPoint", "shellPoint"]
+                 }
+)
+{
+    uniform point3d[] point:position (
+        doc = """ for instance = VertexPoint, Vertex_ii's position.      size() = number of Vertices.
+                      instance = ShellPoint,  VertexShell_ii's position. size() = number of VertexShells """
+        customData = {
+            string apiName = "pointPosition"
+        }
+    )
+} # end class "BrepPointAPI"
+
+#************************************************************************************
+# purpose: curve geometry apis for BrepArrays 
+# note   :  BrepCurveUvNurbAPI: singleApply API = associated geometry of edgeuse objects defined by 2d BSpline curves
+#           
+#           BrepCurve3dNurbAPI  : multipleApply API = associated geometry of edges defined by 3d BSpline curves
+#             Instance name = edgeCurve3dNurb   => associated 3d NURB curve geometry of edge objects
+#             Instance name = wireEdgeCurveNurb => associated 3d NURB curve geometry of wireEdge objects
+#
+#          To be added:
+#           BrepCurve3dLineAPI  : multipleApply API = associated geometry of edges defined by 3d line curves
+#             Instance name = edgeCurve3dLine     => associated 3d line curve geometry of edge objects
+#             Instance name = wireEdgeCurve3dLine => associated 3d line curve geometry of wireEdge objects
+#
+#           BrepCurve3dCircleAPI: multipleApply API = associated geometry of edges defined by 3d circle curves
+#             Instance name = edgeCurve3dCircle     => associated 3d circle curve geometry of edge objects
+#             Instance name = wireEdgeCurve3dCircle => associated 3d circle curve geometry of wireEdge objects
+#           and more
+#************************************************************************************
+class "BrepCurve3dNurbAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed NURB curve descriptions of brep:edges and brep:wireEdges defined by 3d BSpline curves.
+
+    This class varies from the UsdGeomNurbCurves primarily in having double precision control vertices. 
+    
+    This schema is analogous to NURB Curves in packages like Maya and Houdini, often used for interchange of rigging
+    and modeling curves. We require 'numSegments + 2 * degree + 1' knots (2 more than maya does). This is to be more
+    consistent with RenderMan's NURB patch specification. """
+    customData = { token apiSchemaType = "multipleApply"
+                   token propertyNamespacePrefix = "brep"
+                   token[] apiSchemaCanOnlyApplyTo = ["PrelimUsdSolidBrepArray"]
+                   token[] apiSchemaAllowedInstanceNames = ["edge3dNurb", "wireEdge3dNurb"]
+                 }
+)
+{
+    uniform point3d[] curve3d:nurb:controlVertices (
+        doc = """ packed 3d control vertices for all edge or wireEdge NurbCurves.
+        size() = SUM_ii(curve3dVertexCount[ii]). """
+        customData = {
+            string apiName = "curve3dControlVertices"
+        }
+    ) 
+    
+    uniform uint[] curve3d:nurb:vertexCount (
+        doc = """ Curve3d_ii's number of control vertices.
+        size() = number of this instance's 3dNURB curves. """
+        customData = {
+            string apiName = "curve3dVertexCount"
+        }
+    )
+    
+    uniform uint[] curve3d:nurb:order (
+        doc = """ Curve3d_ii's order. Where, Order = Degree + 1.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        Its value for the 'ii'th curve must be less than or equal to vertexCount[ii].
+        size() = number of this instance's 3dNURB curves. """
+        customData = {
+            string apiName = "curve3dOrder"
+        }
+    )
+    
+    uniform double[] curve3d:nurb:knots (
+        doc = """ Curve3d_ii's knot vector providing curve parameterization.
+        The length of the slice of the array for the iith curve must be ( vertexCount[ii] + order[ii] ), and its entries
+        must take on non-decreasing values. Knots are listed in multiplicity, e.g. [0, 0, 1, 1]."""
+        customData = {
+            string apiName = "curve3dKnots"
+        }
+    )
+    
+    uniform double[] curve3d:nurb:weights (
+        doc = """ Curve3d_ii's "w" weight components for each control vertex. 
+        Must be the same length as the curveControlVertices attribute. Weights must be positive, w>0. 
+        \\note Some DCC's pre-weight the \\em points, but in this schema, \\em points are not pre-weighted.        
+        size() = curve3dControlVertices.size() """
+        customData = {
+            string apiName = "Curve3dWeights"
+        }
+    )
+} # end class "BrepCurve3dNurbAPI"
+
+#************************************************************************************
+class "BrepCurveUvNurbAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed 2d NURB UV curve descriptions of brep:edgeuses defined by 2d BSpline curves. """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["PrelimUsdSolidBrepArray"]
+                 }
+)
+{
+    uniform double2[] brep:curveUv:nurb:controlVertices (
+        doc = """ packed 2d control vertices for all edgeuse UV NurbCurves.
+        size() = SUM_ii(curveUvVertexCount[ii]). """
+        customData = {
+            string apiName = "curveUvControlVertices"
+        }
+    ) 
+    
+    uniform uint[] brep:curveUv:nurb:vertexCount (
+        doc = """ CurveUv_ii's number of control vertices.
+        size() = number of UV NURB curves. """
+        customData = {
+            string apiName = "curveUvVertexCount"
+        }
+    )
+    
+    uniform uint[] brep:curveUv:nurb:order (
+        doc = """ CurveUv_ii's order. Where, Order = Degree + 1.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        Its value for the 'ii'th curve must be less than or equal to vertexCount[ii].
+        size() = number of this instance's UV NURB curves. """
+        customData = {
+            string apiName = "curveUvOrder"
+        }
+    )
+    
+    uniform double[] brep:curveUv:nurb:knots (
+        doc = """ CurveUv_ii's knot vector providing curve parameterization.
+        The length of the slice of the array for the iith curve must be ( vertexCount[ii] + order[ii] ), and its entries
+        must take on non-decreasing values. Knots are listed in multiplicity, e.g. [0, 0, 1, 1]."""
+        customData = {
+            string apiName = "curveUvKnots"
+        }
+    )
+    
+    uniform double[] brep:curveUv:nurb:weights (
+        doc = """ CurveUv_ii's "w" weight components for each control vertex. 
+        Must be the same length as the edgeCurveControlVertices attribute. Weights must be positive, w>0. 
+        \\note Some DCC's pre-weight the \\em points, but in this schema, \\em points are not pre-weighted.        
+        size() = CurveUvControlVertices.size() """
+        customData = {
+            string apiName = "curveUvWeights"
+        }
+    )
+} # end class "BrepCurveUvNurbAPI"
+
+#************************************************************************************
+# purpose: surface geometry apis for BrepArrays 
+# note   :  BrepSurfaceNurbAPI    : singleApply API = associated geometry of face objects defined by 3d BSpline surfaces
+#          To be added:
+#           BrepSurfacePlaneAPI   : singleApply API = associated geometry of face objects defined by 3d BSpline planes
+#           BrepSurfaceCylinderAPI: singleApply API = associated geometry of face objects defined by 3d BSpline cylinders
+#           BrepSurfaceConeAPI    : singleApply API = associated geometry of face objects defined by 3d BSpline cones
+#           BrepSurfaceSphereAPI  : singleApply API = associated geometry of face objects defined by 3d BSpline spheres
+#           BrepSurfaceTorusAPI   : singleApply API = associated geometry of face objects defined by 3d BSpline tori
+#           and more
+#************************************************************************************
+class "BrepSurfaceNurbAPI" (
+    inherits = </APISchemaBase>
+    doc = """ Associated and packed 3d NURBs Surface descriptions of brep:faces defined by 3d BSpline surfaces.
+
+    These attributes vary from the UsdGeomNurbPatch primarily in having double precision control vertices. 
+
+    The encoding mostly follows that of RiNuPatch and RiTrimCurve:
+    https://renderman.pixar.com/resources/current/RenderMan/geometricPrimitives.html#rinupatch , with some minor
+    renaming and coalescing for clarity.
+
+    The layout of control vertices in the \\em points attribute is row-major with U considered rows, and V columns.
+
+    The authored points, orders, knots, weights, and ranges are all that is required to render the nurbs patch.
+    """
+    customData = { token apiSchemaType = "singleApply"
+                   token[] apiSchemaCanOnlyApplyTo = ["PrelimUsdSolidBrepArray"]
+                 }
+)
+{
+    uniform point3d[] brep:surface:nurb:controlVertices (
+        doc = """ packed control vertices of the all Nurb Surfaces.
+        The layout is row-major with U considered rows, and V columns.
+        size() = SUM_ii(uVertexCount[ii] * vVertexCount[ii]). """
+        customData = {
+            string apiName = "surfaceControlVertices"
+        }
+    )
+
+    uniform uint[] brep:surface:nurb:uVertexCount (
+        doc = """surface_ii's number of control vertices in U dir.
+        size() = number of NURB surfaces. """
+        customData = {
+            string apiName = "surfaceUVertexCount"
+        }
+    )
+
+    uniform uint[] brep:surface:nurb:vVertexCount (
+        doc = """surface_ii's number of control vertices in V dir.
+        size() = number of NURB surfaces. """
+        customData = {
+            string apiName = "surfaceVVertexCount"
+        }
+    )
+    
+    uniform uint[] brep:surface:nurb:uOrder (
+        doc = """Order in the U direction.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        size() = surface_ii's order in the U dir. Where, Order = Degree + 1."""
+        customData = {
+            string apiName = "surfaceUOrder"
+        }
+    )
+    
+    uniform uint[] brep:surface:nurb:vOrder (
+        doc = """Order in the V direction.
+        Order must be positive and is equal to the degree of the polynomial basis to be evaluated, plus 1.
+        size() = surface_ii's order in the V dir. Where, Order = Degree + 1."""
+        customData = {
+            string apiName = "surfaceVOrder"
+        }
+    )
+    
+    uniform double[] brep:surface:nurb:uKnots (
+        doc = """surface_ii's knot vector in U direction providing U parameterization.
+        The length of the slice of the array for the iith surface must be ( uVertexCount[ii] + uOrder[ii] ), and its entries
+        must take on non-decreasing values.  Knots are listed in multiplicity, e.g. [0, 0, 1, 1].
+        size() = SUM_ii(surfaceUVertexCount[ii]) + SUM_ii(surfaceUOrder[ii]). """
+        customData = {
+            string apiName = "surfaceUKnots"
+        }
+    )
+
+    uniform double[] brep:surface:nurb:vKnots (
+        doc = """surface_ii's knot vector in V direction providing V parameterization.
+        The length of the slice of the array for the iith surface must be ( vVertexCount[ii] + vOrder[ii] ), and its entries
+        must take on non-decreasing values.  Knots are listed in multiplicity, e.g. [0, 0, 1, 1].
+        size() = SUM_ii(surfaceVVertexCount) + SUM_ii(surfaceVOrder[ii]). """
+        customData = {
+            string apiName = "surfaceVKnots"
+        }
+    )
+
+    uniform double[] brep:surface:nurb:weights (
+        doc = """ surface_ii's "w" weight components for each control vertex. Must be the same length as the surfaceControlVertices attribute. 
+        All weights must be positive, w>0. 
+        \\note Some DCC's pre-weight the \\em points, but in this schema, \\em points are not pre-weighted. """ 
+        customData = {
+            string apiName = "surfaceWeights"
+        }
+    )
+
+} # end class "BrepSurfaceNurbAPI" 

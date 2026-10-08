@@ -1,0 +1,12 @@
+// Linear Variable Radius Tests with extrusion_old.IGS - Rail Misses adjacent edge + self intersection of offset
+1    // Number of filleting operations
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion_old.iwb   // File which contains a solid
+2  27  0.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0 0.001 3 1 1 3.8 3.8 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement

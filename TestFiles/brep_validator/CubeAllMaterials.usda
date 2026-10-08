@@ -1,0 +1,125 @@
+#usda 1.0
+
+def Xform "World"
+{
+    def BrepArray "CubeMats" (
+        prepend apiSchemas = ["MaterialBindingAPI", "BrepPointAPI:vertexPoint", "BrepCurve3dNurbAPI:edge3dNurb", "BrepSurfaceNurbAPI"]
+        customData = {
+            string source = ""
+        }
+    )
+    {
+        uniform point3d[] brep:edge3dNurb:curve3d:nurb:controlVertices = [(1, 0, 1), (1, 1, 1), (0, 1, 1), (1, 1, 1), (0, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 0), (1, 1, 0), (1, 1, 0), (1, 1, 1), (0, 0, 0), (0, 0, 1), (0, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1), (1, 0, 1), (0, 1, 0), (0, 1, 1), (0, 1, 0), (1, 1, 0)]
+        uniform double[] brep:edge3dNurb:curve3d:nurb:knots = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:edge3dNurb:curve3d:nurb:order = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+        uniform uint[] brep:edge3dNurb:curve3d:nurb:vertexCount = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+        uniform double[] brep:edge3dNurb:curve3d:nurb:weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        uniform double3[] brep:extent = [(-0.00001, -0.00001, -0.00001), (1.00001, 1.00001, 1.00001)]
+        uniform double[] brep:intersectTol3d = [0.00002]
+        uniform uint[] brep:regionCount = [2]
+        uniform point3d[] brep:surface:nurb:controlVertices = [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 1), (1, 1, 1), (0, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 0), (1, 0, 1), (1, 1, 0), (1, 1, 1), (0, 0, 0), (0, 0, 1), (1, 0, 0), (1, 0, 1), (0, 1, 0), (1, 1, 0), (0, 1, 1), (1, 1, 1)]
+        uniform double[] brep:surface:nurb:uKnots = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:surface:nurb:uOrder = [2, 2, 2, 2, 2, 2]
+        uniform uint[] brep:surface:nurb:uVertexCount = [2, 2, 2, 2, 2, 2]
+        uniform double[] brep:surface:nurb:vKnots = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:surface:nurb:vOrder = [2, 2, 2, 2, 2, 2]
+        uniform uint[] brep:surface:nurb:vVertexCount = [2, 2, 2, 2, 2, 2]
+        uniform double[] brep:surface:nurb:weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        uniform point3d[] brep:vertexPoint:point:position = [(1, 1, 1), (0, 0, 1), (0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 1, 1), (0, 1, 0), (1, 1, 0)]
+        uniform token[] edge:curveType = ["BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI"]
+        uniform double[] edge:range = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+        uniform int2[] edge:vertexIndices = [(4, 0), (5, 0), (2, 6), (1, 5), (3, 7), (7, 0), (2, 1), (2, 3), (3, 4), (1, 4), (6, 5), (6, 7)]
+        uniform uint[] edgeuse:edgeIndex = [2, 11, 4, 7, 3, 9, 0, 1, 6, 3, 10, 2, 8, 4, 5, 0, 6, 7, 8, 9, 10, 1, 5, 11]
+        uniform uint[] edgeuse:nextRadialEUIndex = [11, 23, 13, 17, 9, 19, 15, 21, 16, 4, 20, 0, 18, 2, 22, 6, 8, 3, 12, 5, 10, 7, 14, 1]
+        uniform token[] edgeuse:orientationType = ["same", "same", "opposite", "opposite", "opposite", "same", "same", "opposite", "same", "same", "opposite", "opposite", "opposite", "same", "same", "opposite", "opposite", "same", "same", "opposite", "same", "same", "opposite", "opposite"]
+        uniform token[] edgeuse:thisRadialEntryType = ["topEntry", "topEntry", "bottomEntry", "bottomEntry", "topEntry", "bottomEntry", "topEntry", "topEntry", "bottomEntry", "bottomEntry", "topEntry", "bottomEntry", "bottomEntry", "topEntry", "topEntry", "bottomEntry", "topEntry", "topEntry", "topEntry", "topEntry", "bottomEntry", "bottomEntry", "bottomEntry", "bottomEntry"]
+        uniform float3[] extent = [(-0.00001, -0.00001, -0.00001), (1.00001, 1.00001, 1.00001)]
+        uniform uint[] face:loopCount = [1, 1, 1, 1, 1, 1]
+        uniform double2[] face:range = [(0, 0), (1, 1), (0, 0), (1, 1), (0, 0), (1, 1), (0, 0), (1, 1), (0, 0), (1, 1), (0, 0), (1, 1)]
+        uniform token[] face:surfaceType = ["BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI"]
+        uniform token[] face:trimType = ["general", "general", "general", "general", "general", "general"]
+        uniform uint[] faceuse:faceIndex = [5, 4, 2, 0, 3, 1, 5, 1, 4, 0, 3, 2]
+        uniform token[] faceuse:orientationType = ["same", "same", "same", "same", "same", "same", "opposite", "opposite", "opposite", "opposite", "opposite", "opposite"]
+        uniform uint[] loop:edgeuseCount = [4, 4, 4, 4, 4, 4]
+        uniform uint[] loop:vertexIndex = [9999999, 9999999, 9999999, 9999999, 9999999, 9999999]
+        rel material:binding = </World/Looks/ABS_Hard_Leather_Brown>
+        uniform uint[] region:shellCount = [1, 1]
+        uniform token[] region:type = ["voidRegion", "solidRegion"]
+        uniform uint[] shell:faceuseCount = [6, 6]
+        uniform token[] shell:pointType = ["none", "none"]
+        uniform uint[] shell:wireEdgeCount = [0, 0]
+        uniform token[] vertex:pointType = ["BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI"]
+        uniform token[] wireEdge:curveType = []
+        uniform double[] wireEdge:range = []
+        uniform int2[] wireEdge:vertexIndices = []
+
+        def GeomSubset "subset_0" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform int[] indices = [0, 1, 2]
+            rel material:binding = </World/Looks/ABS_Hard_Leather_Brown>
+        }
+
+        def GeomSubset "subset_1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform int[] indices = [3, 4, 5]
+            rel material:binding = </World/Looks/ABS_Hard_Leather_Deep_Green>
+        }
+    }
+
+    def "Looks"
+    {
+        def Material "ABS_Hard_Leather_Brown" (
+            prepend references = @../usd_TestFiles/Materials.usda@</World/Looks/ABS_Hard_Leather_Brown>
+        )
+        {
+        }
+
+        def Material "ABS_Hard_Leather_Deep_Green" (
+            prepend references = @../usd_TestFiles/Materials.usda@</World/Looks/ABS_Hard_Leather_Deep_Green>
+        )
+        {
+        }
+    }
+
+    def Mesh "Mesh" (
+        prepend apiSchemas = ["MaterialBindingAPI"]
+    )
+    {
+        custom rel BrepSource = </World/CubeMats>
+        uniform vector3f[] extent = [(0, 0, 0), (1, 1, 1)]
+        uniform int[] faceVertexCounts = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]
+        uniform int[] faceVertexIndices = [0, 2, 3, 2, 0, 1, 0, 5, 4, 5, 0, 3, 4, 7, 6, 7, 4, 5, 3, 7, 5, 7, 3, 2, 1, 7, 2, 7, 1, 6, 0, 6, 1, 6, 0, 4]
+        rel material:binding = </World/Looks/ABS_Hard_Leather_Brown>
+        uniform vector3f[] points = [(0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0), (0, 0, 1), (1, 0, 1), (0, 1, 1), (1, 1, 1)]
+        uniform normal3f[] primvars:normals = [(0, 0, -1), (0, -1, 0), (-1, 0, 0), (0, 0, -1), (0, 1, 0), (-1, 0, 0), (0, 0, -1), (1, 0, 0), (0, 1, 0), (0, 0, -1), (0, -1, 0), (1, 0, 0), (0, -1, 0), (0, 0, 1), (-1, 0, 0), (0, -1, 0), (0, 0, 1), (1, 0, 0), (0, 0, 1), (0, 1, 0), (-1, 0, 0), (0, 0, 1), (1, 0, 0), (0, 1, 0)] (
+            interpolation = "faceVarying"
+        )
+        uniform int[] primvars:normals:indices = [0, 6, 9, 6, 0, 3, 1, 15, 12, 15, 1, 10, 13, 21, 18, 21, 13, 16, 11, 22, 17, 22, 11, 7, 4, 23, 8, 23, 4, 19, 2, 20, 5, 20, 2, 14]
+        uniform token subdivisionScheme = "none"
+
+        def GeomSubset "subset_0" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform int[] indices = [0, 1, 4, 5, 10, 11]
+            rel material:binding = </World/Looks/ABS_Hard_Leather_Brown>
+        }
+
+        def GeomSubset "subset_1" (
+            prepend apiSchemas = ["MaterialBindingAPI"]
+        )
+        {
+            uniform token elementType = "face"
+            uniform int[] indices = [2, 3, 6, 7, 8, 9]
+            rel material:binding = </World/Looks/ABS_Hard_Leather_Deep_Green>
+        }
+    }
+}
+

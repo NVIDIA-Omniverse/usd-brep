@@ -1,0 +1,126 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary cameraSettings = {
+            dictionary Front = {
+                double3 position = (0, 0, 50000)
+                double radius = 500
+            }
+            dictionary Perspective = {
+                double3 position = (3.0057564486200157, 4.026222146503824, 4.041561879314335)
+                double3 target = (-0.08659245540393457, -0.34774851919902616, 0.20022885105482668)
+            }
+            dictionary Right = {
+                double3 position = (-50000, 0, 0)
+                double radius = 500
+            }
+            dictionary Top = {
+                double3 position = (0, 50000, 0)
+                double radius = 500
+            }
+            string boundCamera = "/OmniverseKit_Persp"
+        }
+        dictionary omni_layer = {
+            string authoring_layer = "./Materials.usda"
+            dictionary locked = {
+            }
+            dictionary muteness = {
+            }
+        }
+        dictionary renderSettings = {
+            float3 "rtx:debugView:pixelDebug:textColor" = (0, 1e18, 0)
+            float3 "rtx:fog:fogColor" = (0.75, 0.75, 0.75)
+            float3 "rtx:index:regionOfInterestMax" = (0, 0, 0)
+            float3 "rtx:index:regionOfInterestMin" = (0, 0, 0)
+            float3 "rtx:post:backgroundZeroAlpha:backgroundDefaultColor" = (0, 0, 0)
+            float3 "rtx:post:colorcorr:contrast" = (1, 1, 1)
+            float3 "rtx:post:colorcorr:gain" = (1, 1, 1)
+            float3 "rtx:post:colorcorr:gamma" = (1, 1, 1)
+            float3 "rtx:post:colorcorr:offset" = (0, 0, 0)
+            float3 "rtx:post:colorcorr:saturation" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:blackpoint" = (0, 0, 0)
+            float3 "rtx:post:colorgrad:contrast" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:gain" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:gamma" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:lift" = (0, 0, 0)
+            float3 "rtx:post:colorgrad:multiply" = (1, 1, 1)
+            float3 "rtx:post:colorgrad:offset" = (0, 0, 0)
+            float3 "rtx:post:colorgrad:whitepoint" = (1, 1, 1)
+            float3 "rtx:post:lensDistortion:lensFocalLengthArray" = (10, 30, 50)
+            float3 "rtx:post:lensFlares:anisoFlareFalloffX" = (450, 475, 500)
+            float3 "rtx:post:lensFlares:anisoFlareFalloffY" = (10, 10, 10)
+            float3 "rtx:post:lensFlares:cutoffPoint" = (2, 2, 2)
+            float3 "rtx:post:lensFlares:haloFlareFalloff" = (10, 10, 10)
+            float3 "rtx:post:lensFlares:haloFlareRadius" = (75, 75, 75)
+            float3 "rtx:post:lensFlares:isotropicFlareFalloff" = (50, 50, 50)
+            float3 "rtx:post:tonemap:whitepoint" = (1, 1, 1)
+            float3 "rtx:raytracing:indexdirect:svoBrickSize" = (32, 32, 32)
+            float3 "rtx:raytracing:inscattering:singleScatteringAlbedo" = (0.9, 0.9, 0.9)
+            float3 "rtx:raytracing:inscattering:transmittanceColor" = (0.5, 0.5, 0.5)
+            float3 "rtx:sceneDb:ambientLightColor" = (0.1, 0.1, 0.1)
+        }
+    }
+    endTimeCode = 0
+    startTimeCode = -1
+)
+
+def Xform "World"
+{
+    def Scope "Looks"
+    {
+        def Material "ABS_Hard_Leather_Brown"
+        {
+            token outputs:mdl:displacement.connect = </World/Looks/ABS_Hard_Leather_Brown/Shader.outputs:out>
+            token outputs:mdl:surface.connect = </World/Looks/ABS_Hard_Leather_Brown/Shader.outputs:out>
+            token outputs:mdl:volume.connect = </World/Looks/ABS_Hard_Leather_Brown/Shader.outputs:out>
+            token outputs:surface.connect = </World/Looks/ABS_Hard_Leather_Brown/PreviewSurface.outputs:surface>
+
+            # UsdPreviewSurface approximation of the MDL material, for renderers without MDL (e.g. Storm in usdview).
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.3, 0.15, 0.07)
+                float inputs:roughness = 0.6
+                token outputs:surface
+            }
+
+            def Shader "Shader"
+            {
+                uniform token info:implementationSource = "sourceAsset"
+                uniform asset info:mdl:sourceAsset = @https://omniverse-content-production.s3.us-west-2.amazonaws.com/Materials/2023_1/vMaterials_2/Leather/ABS_Hard_Leather.mdl@
+                uniform token info:mdl:sourceAsset:subIdentifier = "ABS_Hard_Leather_Brown"
+                token outputs:out (
+                    renderType = "material"
+                )
+            }
+        }
+
+        def Material "ABS_Hard_Leather_Deep_Green"
+        {
+            token outputs:mdl:displacement.connect = </World/Looks/ABS_Hard_Leather_Deep_Green/Shader.outputs:out>
+            token outputs:mdl:surface.connect = </World/Looks/ABS_Hard_Leather_Deep_Green/Shader.outputs:out>
+            token outputs:mdl:volume.connect = </World/Looks/ABS_Hard_Leather_Deep_Green/Shader.outputs:out>
+            token outputs:surface.connect = </World/Looks/ABS_Hard_Leather_Deep_Green/PreviewSurface.outputs:surface>
+
+            # UsdPreviewSurface approximation of the MDL material, for renderers without MDL (e.g. Storm in usdview).
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor = (0.04, 0.22, 0.1)
+                float inputs:roughness = 0.6
+                token outputs:surface
+            }
+
+            def Shader "Shader"
+            {
+                uniform token info:implementationSource = "sourceAsset"
+                uniform asset info:mdl:sourceAsset = @https://omniverse-content-production.s3.us-west-2.amazonaws.com/Materials/2023_1/vMaterials_2/Leather/ABS_Hard_Leather.mdl@
+                uniform token info:mdl:sourceAsset:subIdentifier = "ABS_Hard_Leather_Deep_Green"
+                token outputs:out (
+                    renderType = "material"
+                )
+            }
+        }
+    }
+}
+

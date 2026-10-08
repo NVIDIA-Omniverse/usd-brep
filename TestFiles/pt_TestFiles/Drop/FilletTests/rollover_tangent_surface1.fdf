@@ -1,0 +1,27 @@
+// Variable Radius Tests with box.IGS
+1    // Number of filleting operations
+// *****************************************************************************************
+// ****************** filleting operation - Regression        ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Fillet/box_with_large_fillet.iwb   // File which contains a solid
+2  15  0.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+1 0.001 3 2 1 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+14 // Number of control points
+1.5 -0.5 // Control Points
+1.5 0.0 
+1.5 0.1
+1.5 0.2
+1.5 0.3
+1.5 0.4
+2.0 0.6
+3.0 1.0
+2.0 1.4
+0.5 1.6
+0.5 2.0
+0.5 3.0
+0.5 3.1
+0.5 3.2
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement

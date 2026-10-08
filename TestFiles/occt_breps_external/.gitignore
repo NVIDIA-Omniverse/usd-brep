@@ -1,0 +1,8 @@
+# Third-party / proprietary `.brep` sample files (e.g. copied from the OpenCASCADE
+# distribution under data/occ) live here for LOCAL testing only. Their data license is
+# incompatible with this repository, so they must never be committed or shared.
+#
+# Ignore everything in this directory except this policy file and the README.
+*
+!.gitignore
+!README.md

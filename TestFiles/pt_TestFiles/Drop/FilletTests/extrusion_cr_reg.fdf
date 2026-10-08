@@ -1,0 +1,12 @@
+// Constant Radius Regression with extrusion.IGS
+1    // Number of filleting operations
+// *****************************************************************************************
+// ****************** filleting operation - Regression        ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  15  0.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+9 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0.001 2 0.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement

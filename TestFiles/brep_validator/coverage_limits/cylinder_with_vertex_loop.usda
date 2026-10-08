@@ -1,0 +1,65 @@
+#usda 1.0
+# Structurally readable, not a geometrically valid face. Seam validity needs the kernel.
+(
+    defaultPrim = "FullPeriodCylinderZeroEdgeuseLoop"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def BrepArray "FullPeriodCylinderZeroEdgeuseLoop" (
+    prepend apiSchemas = [
+        "BrepPointAPI:vertexPoint",
+        "BrepSurfaceCylinderAPI",
+    ]
+)
+{
+    uniform float3[] extent = [(-1, -1, 0), (1, 1, 1)]
+    uniform double[] brep:intersectTol3d = [0.001]
+    uniform double3[] brep:extent = [(-1, -1, 0), (1, 1, 1)]
+    uniform uint[] brep:regionCount = [1]
+
+    uniform uint[] region:shellCount = [1]
+    uniform token[] region:type = ["solidRegion"]
+
+    uniform uint[] shell:faceuseCount = [2]
+    uniform uint[] shell:wireEdgeCount = [0]
+    uniform token[] shell:pointType = ["none"]
+
+    uniform uint[] faceuse:faceIndex = [0, 0]
+    uniform token[] faceuse:orientationType = ["same", "opposite"]
+
+    uniform uint[] face:loopCount = [1]
+    uniform token[] face:surfaceType = ["BrepSurfaceCylinderAPI"]
+    uniform token[] face:trimType = ["rectangular"]
+    uniform double2[] face:range = [(0, 0), (6.283185307179586, 1)]
+
+    # A full-period cylinder face whose single loop carries zero edgeuses, so the whole
+    # edgeuse:edgeIndex stream is empty. This is a "no seam" full-period face BA_761 must flag,
+    # and it exercises the path where edgeuse:edgeIndex is empty (loop:edgeuseCount == 0).
+    uniform uint[] loop:edgeuseCount = [0]
+    uniform uint[] loop:vertexIndex = [0]
+
+    uniform uint[] edgeuse:edgeIndex = []
+    uniform token[] edgeuse:orientationType = []
+    uniform uint[] edgeuse:nextRadialEUIndex = []
+    uniform token[] edgeuse:thisRadialEntryType = []
+
+    uniform token[] edge:curveType = []
+    uniform double[] edge:range = []
+    uniform int2[] edge:vertexIndices = []
+
+    uniform token[] wireEdge:curveType = []
+    uniform double[] wireEdge:range = []
+    uniform int2[] wireEdge:vertexIndices = []
+
+    uniform token[] vertex:pointType = ["BrepPointAPI"]
+
+    uniform point3d[] brep:vertexPoint:point:position = [
+        (1, 0, 0),
+    ]
+
+    uniform point3d[] brep:surface:cylinder:origin = [(0, 0, 0)]
+    uniform vector3d[] brep:surface:cylinder:axis = [(0, 0, 1)]
+    uniform vector3d[] brep:surface:cylinder:refDirection = [(1, 0, 0)]
+    uniform double[] brep:surface:cylinder:radius = [1]
+}

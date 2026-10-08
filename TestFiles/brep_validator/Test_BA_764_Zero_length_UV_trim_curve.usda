@@ -1,0 +1,75 @@
+#usda 1.0
+(
+    defaultPrim = "ZeroLengthUvTrimCurve"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def BrepArray "ZeroLengthUvTrimCurve" (
+    prepend apiSchemas = [
+        "BrepPointAPI:vertexPoint",
+        "BrepCurve3dLineAPI:edge3dLine",
+        "BrepCurveUvNurbAPI",
+        "BrepSurfacePlaneAPI",
+    ]
+)
+{
+    uniform float3[] extent = [(0, 0, 0), (1, 0, 0)]
+    uniform double[] brep:intersectTol3d = [0.001]
+    uniform double3[] brep:extent = [(0, 0, 0), (1, 0, 0)]
+    uniform uint[] brep:regionCount = [1]
+
+    uniform uint[] region:shellCount = [1]
+    uniform token[] region:type = ["solidRegion"]
+
+    uniform uint[] shell:faceuseCount = [2]
+    uniform uint[] shell:wireEdgeCount = [0]
+    uniform token[] shell:pointType = ["none"]
+
+    uniform uint[] faceuse:faceIndex = [0, 0]
+    uniform token[] faceuse:orientationType = ["same", "opposite"]
+
+    uniform uint[] face:loopCount = [1]
+    uniform token[] face:surfaceType = ["BrepSurfacePlaneAPI"]
+    uniform token[] face:trimType = ["general"]
+    uniform double2[] face:range = [(0, 0), (1, 1)]
+
+    uniform uint[] loop:edgeuseCount = [1]
+    uniform uint[] loop:vertexIndex = [0]
+
+    uniform uint[] edgeuse:edgeIndex = [0]
+    uniform token[] edgeuse:orientationType = ["same"]
+    uniform uint[] edgeuse:nextRadialEUIndex = [0]
+    uniform token[] edgeuse:thisRadialEntryType = ["topEntry"]
+
+    uniform token[] edge:curveType = ["BrepCurve3dLineAPI"]
+    uniform double[] edge:range = [0, 1]
+    uniform int2[] edge:vertexIndices = [(0, 1)]
+
+    uniform token[] wireEdge:curveType = []
+    uniform double[] wireEdge:range = []
+    uniform int2[] wireEdge:vertexIndices = []
+
+    uniform token[] vertex:pointType = ["BrepPointAPI", "BrepPointAPI"]
+
+    uniform point3d[] brep:vertexPoint:point:position = [
+        (0, 0, 0),
+        (1, 0, 0),
+    ]
+
+    uniform point3d[] brep:edge3dLine:curve3d:line:origin = [(0, 0, 0)]
+    uniform vector3d[] brep:edge3dLine:curve3d:line:direction = [(1, 0, 0)]
+
+    uniform uint[] brep:curveUv:nurb:order = [2]
+    uniform uint[] brep:curveUv:nurb:vertexCount = [2]
+    uniform double2[] brep:curveUv:nurb:controlVertices = [
+        (0.5, 0.5),
+        (0.5, 0.5),
+    ]
+    uniform double[] brep:curveUv:nurb:knots = [0, 0, 1, 1]
+    uniform double[] brep:curveUv:nurb:weights = [1, 1]
+
+    uniform point3d[] brep:surface:plane:origin = [(0, 0, 0)]
+    uniform vector3d[] brep:surface:plane:axis = [(0, 0, 1)]
+    uniform vector3d[] brep:surface:plane:refDirection = [(1, 0, 0)]
+}

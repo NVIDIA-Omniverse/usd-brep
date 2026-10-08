@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[project]
+name = "solidmodeling-gui"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+gui = [
+    "numpy==2.4.6",
+    "PySide6-Essentials==6.11.1",
+    "pyvista==0.48.4",
+    "pyvistaqt==0.11.4",
+    "vtk==9.6.2",
+]
+
+[tool.uv]
+package = false
+required-environments = [
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    # No macOS GitLab runners; uncomment to test locally.
+    # "sys_platform == 'darwin'",
+]
+
+[tool.black]
+line-length = 120

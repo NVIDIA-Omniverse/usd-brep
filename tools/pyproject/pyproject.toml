@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Template for the usd-brep wheel. `repo py_package` copies this into the staging
+# directory and substitutes the version, which is derived from the repo VERSION
+# file (see tools/repoman/wheel_version.py).
+
+[project]
+name = "usd-brep"
+version = "0.0.0" # replaced at package time
+description = "BRep solid modeling with native OpenUSD import and export."
+readme = "README.md"
+# Covers everything the wheel vendors; full texts ship in PACKAGE-LICENSES:
+# Apache-2.0 (NVIDIA code, oneTBB), TOST-1.0 (OpenUSD), BSD-3-Clause (pybind11),
+# plus code OpenUSD embeds: BSD-2-Clause (LZ4), BSD-3-Clause (double-conversion,
+# Half), MIT (RapidJSON, PEGTL, robin-map), BSL-1.0 (pxr_boost).
+license = "Apache-2.0 AND LicenseRef-TOST-1.0 AND BSD-2-Clause AND BSD-3-Clause AND MIT AND BSL-1.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "PACKAGE-LICENSES/*"]
+requires-python = ">=3.12,<3.13"
+# No OpenUSD dependency: the wheel vendors its own, and no PyPI distribution
+# ships OpenUSD 25.11 to depend on. No OpenUSD object crosses the binding
+# boundary -- every USD entry point takes a file path -- so a caller's own
+# OpenUSD need not match. See the README on sharing a process with one: a
+# different version is namespace-isolated, the same version is not.
+dependencies = []
+
+# `pip install usd-brep[validation]` adds the validator that runs the BrepArray schema
+# rules (`brep_validator`), with PyPI usd-core as its OpenUSD (the validator finds no USD
+# without one). That OpenUSD is the validator's, not usd_brep's, so the extra is optional.
+[project.optional-dependencies]
+validation = ["usd-validation-nvidia[usd]>=1.22.0,<2"]
+
+[project.urls]
+Homepage = "https://github.com/NVIDIA-Omniverse/usd-brep"
+Documentation = "https://github.com/NVIDIA-Omniverse/usd-brep"
+
+# usd-validation-nvidia loads every entry in this group (the key name is arbitrary), so
+# `nvidia_usd_validate` runs BrepValidator once the `validation` extra is installed.
+[project.entry-points."omni.asset_validator"]
+brep_validator = "brep_validator.plugin:BrepValidatorPlugin"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+# The resource folders under usd/ and omniSolid/ hold no Python, but Python
+# can import any directory, so setuptools treats them as packages too. Discover
+# them as namespace packages; listing only usd_brep warns once per folder.
+[tool.setuptools.packages.find]
+include = ["usd_brep*", "brep_validator"]
+namespaces = true
+
+[tool.setuptools.package-data]
+usd_brep = ["*.pyd", "*.dll", "*.so*", "*.pyi", "py.typed", "usd/**/*", "omniSolid/**/*"]

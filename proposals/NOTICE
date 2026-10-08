@@ -1,0 +1,21 @@
+Vendored OpenUSD proposals: UsdSolid and cad_geometry
+
+UsdSolid/ and cad_geometry/ are unmodified snapshots of two proposals from the
+Alliance for OpenUSD (AOUSD) Geometry Working Group, submitted to Pixar's
+OpenUSD-proposals repository on 2026-05-20:
+
+- cad_geometry: "Boundary Representation Geometry in OpenUSD - Problem
+  Statement", pull request #108
+  https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/108
+  Copyright (c) 2026, Alliance for OpenUSD (AOUSD), Geometry Working Group.
+
+- UsdSolid: "Solid Models in USD", pull request #109
+  https://github.com/PixarAnimationStudios/OpenUSD-proposals/pull/109
+
+The snapshot is commit 811f03c603b06d3b175515a4bf991dee8f42f651, the head of
+pull request #109, which also carries cad_geometry unchanged from pull
+request #108.
+
+Proposals submitted to OpenUSD-proposals are subject to the OpenUSD Technical
+Proposal Supplemental Terms:
+https://openusd.org/release/contributing_supplemental.html

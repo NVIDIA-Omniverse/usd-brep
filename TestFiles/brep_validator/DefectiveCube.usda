@@ -1,0 +1,83 @@
+#usda 1.0
+
+def Xform "World"
+{
+    def BrepArray "DefectiveCube" (
+        prepend apiSchemas = ["BrepPointAPI:vertexPoint", "BrepCurve3dNurbAPI:edge3dNurb", "BrepSurfaceNurbAPI"]
+        customData = {
+            string source = "Intentionally defective for testing validation"
+        }
+    )
+    {
+        uniform point3d[] brep:edge3dNurb:curve3d:nurb:controlVertices = [(1, 0, 1), (1, 1, 1), (0, 1, 1), (1, 1, 1), (0, 0, 0), (0, 1, 0), (0, 0, 1), (0, 1, 1), (1, 0, 0), (1, 1, 0), (1, 1, 0), (1, 1, 1), (0, 0, 0), (0, 0, 1), (0, 0, 0), (1, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1), (1, 0, 1), (0, 1, 0), (0, 1, 1), (0, 1, 0), (1, 1, 0)]
+        uniform double[] brep:edge3dNurb:curve3d:nurb:knots = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:edge3dNurb:curve3d:nurb:order = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+        uniform uint[] brep:edge3dNurb:curve3d:nurb:vertexCount = [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+        uniform double[] brep:edge3dNurb:curve3d:nurb:weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        
+        # ERROR 1: BA.002 - Negative tolerance value (should be positive)
+        uniform double[] brep:intersectTol3d = [-0.00002]
+        
+        # ERROR 2: BA.001 - Inconsistent array sizes (regionCount has wrong size)
+        uniform uint[] brep:regionCount = [2, 1]  # Should be size 1 to match other brep arrays
+        
+        uniform point3d[] brep:surface:nurb:controlVertices = [(0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 1, 0), (0, 0, 1), (1, 0, 1), (0, 1, 1), (1, 1, 1), (0, 0, 0), (0, 0, 1), (0, 1, 0), (0, 1, 1), (1, 0, 0), (1, 1, 0), (1, 0, 1), (1, 1, 1), (0, 0, 0), (1, 0, 0), (0, 0, 1), (1, 0, 1), (0, 1, 0), (0, 1, 1), (1, 1, 0), (1, 1, 1)]
+        uniform double[] brep:surface:nurb:uKnots = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:surface:nurb:uOrder = [2, 2, 2, 2, 2, 2]
+        uniform uint[] brep:surface:nurb:uVertexCount = [2, 2, 2, 2, 2, 2]
+        uniform double[] brep:surface:nurb:vKnots = [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:surface:nurb:vOrder = [2, 2, 2, 2, 2, 2]
+        uniform uint[] brep:surface:nurb:vVertexCount = [2, 2, 2, 2, 2, 2]
+        uniform double[] brep:surface:nurb:weights = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        
+        # ERROR 3: BA.004 - Invalid brep type token
+        
+        uniform point3d[] brep:vertexPoint:point:position = [(1, 1, 1), (0, 0, 1), (0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 1, 1), (0, 1, 0), (1, 1, 0)]
+        
+        # ERROR 4: BA.005, BA.006 - Invalid brep:extent order (Xmax < Xmin, Ymax < Ymin)
+        uniform double3[] brep:extent = [(1.00001, 2.0, -0.00001), (-0.00001, 1.0, 1.00001)]  # X: max < min (error), Y: max < min (error), Z: max > min
+        
+        uniform token[] edge:curveType = ["BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI"]
+        # ERROR 5a: BA.039 - Invalid edge:range order (max < min for some edges)
+        uniform double[] edge:range = [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1.5, 0.5]  # Last edge has invalid order (max < min)
+        
+        # ERROR 5b: BA.037 - Invalid vertex indices (referencing vertices that don't exist)
+        uniform int2[] edge:vertexIndices = [(4, 0), (5, 0), (2, 6), (1, 5), (3, 7), (7, 0), (2, 1), (2, 3), (3, 4), (1, 4), (6, 5), (99, 100)]  # Last edge references invalid vertices 99, 100
+        
+        uniform uint[] edgeuse:edgeIndex = [2, 11, 4, 7, 3, 9, 0, 1, 6, 3, 10, 2, 8, 4, 5, 0, 6, 7, 8, 9, 10, 1, 5, 11]
+        uniform uint[] edgeuse:nextRadialEUIndex = [11, 23, 13, 17, 9, 19, 15, 21, 16, 4, 20, 0, 18, 2, 22, 6, 8, 3, 12, 5, 10, 7, 14, 1]
+        
+        # ERROR 6: BA.022 - Invalid edgeuse orientation token
+        uniform token[] edgeuse:orientationType = ["same", "same", "opposite", "opposite", "opposite", "same", "same", "opposite", "same", "same", "opposite", "opposite", "opposite", "same", "same", "opposite", "opposite", "same", "same", "opposite", "same", "same", "opposite", "invalidOrientation"]  # Last token is invalid
+        
+        uniform token[] edgeuse:thisRadialEntryType = ["topEntry", "topEntry", "bottomEntry", "bottomEntry", "topEntry", "bottomEntry", "topEntry", "topEntry", "bottomEntry", "bottomEntry", "topEntry", "bottomEntry", "bottomEntry", "topEntry", "topEntry", "bottomEntry", "topEntry", "topEntry", "topEntry", "topEntry", "bottomEntry", "bottomEntry", "bottomEntry", "bottomEntry"]
+        uniform float3[] extent = [(-0.00001, -0.00001, -0.00001), (1.00001, 1.00001, 1.00001)]
+        uniform uint[] face:loopCount = [1, 1, 1, 1, 1, 1]
+        uniform token[] face:surfaceType = ["BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI"]
+        uniform token[] face:trimType = ["general", "general", "general", "general", "general", "general"]
+        # ERROR 6: BA.026, BA.027 - Invalid face:range order for U and V ranges  
+        uniform double2[] face:range = [(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (1.5, 0.5), (0.8, 0.2)]  # Last two faces have invalid U and V range orders
+        
+        # ERROR 7: BA.012 - Invalid face indices (referencing faces that don't exist)
+        uniform uint[] faceuse:faceIndex = [5, 4, 2, 0, 3, 1, 5, 1, 4, 0, 3, 99]  # Last faceuse references invalid face 99
+        
+        uniform token[] faceuse:orientationType = ["same", "same", "same", "same", "same", "same", "opposite", "opposite", "opposite", "opposite", "opposite", "opposite"]
+        uniform uint[] loop:edgeuseCount = [4, 4, 4, 4, 4, 4]
+        uniform uint[] loop:vertexIndex = [9999999, 9999999, 9999999, 9999999, 9999999, 9999999]
+        uniform uint[] region:shellCount = [1, 1]
+        
+        # ERROR 8: BA.007 - Invalid region type token
+        uniform token[] region:type = ["invalidRegion", "solidRegion"]  # First token is invalid, should be solidRegion or voidRegion
+        
+        uniform uint[] shell:faceuseCount = [6, 6]
+        uniform token[] shell:pointType = ["none", "none"]
+        uniform uint[] shell:wireEdgeCount = [0, 0]
+        
+        # ERROR 9: BA.032 - Invalid vertex point type token
+        uniform token[] vertex:pointType = ["BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "BrepPointAPI", "invalidPointType"]  # Last token is invalid
+        
+        uniform token[] wireEdge:curveType = []
+        uniform double[] wireEdge:range = []
+        uniform int2[] wireEdge:vertexIndices = []
+    }
+}

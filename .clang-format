@@ -1,0 +1,104 @@
+AccessModifierOffset: -4
+AlignAfterOpenBracket: BlockIndent
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlinesLeft: false
+AlignTrailingComments: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortLambdasOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: false
+AlwaysBreakBeforeMultilineStrings: true
+AlwaysBreakTemplateDeclarations: true
+BinPackArguments: false
+BinPackParameters: false
+BreakBeforeBinaryOperators: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: true
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterObjCDeclaration: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  BeforeCatch: true
+  BeforeElse: true
+  BeforeLambdaBody: true
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakBeforeTernaryOperators: false
+BreakConstructorInitializers: BeforeColon
+BreakStringLiterals: false
+ColumnLimit: 150
+CommentPragmas: ''
+ConstructorInitializerAllOnOneLineOrOnePerLine: true
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 4
+Cpp11BracedListStyle: false
+DerivePointerBinding: false
+EmptyLineAfterAccessModifier: Always
+EmptyLineBeforeAccessModifier: Always
+FixNamespaceComments: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '"(.*).h"'
+    Priority:        2
+  - Regex:           '<usdex\/.+>'
+    Priority:        3
+  - Regex:           '<Omni(.*).h>'
+    Priority:        5
+    CaseSensitive:   true
+  - Regex:           '<omni\/.+>'
+    Priority:        6
+  - Regex:           '<pxr\/.+>'
+    Priority:        7
+  - Regex:           '<pybind11\/.+>'
+    Priority:        8
+  - Regex:           '<.+>'
+    Priority:        9
+IndentCaseLabels: true
+IndentPPDirectives: AfterHash
+IndentFunctionDeclarationAfterType: false
+IndentWidth: 4
+InsertBraces: true
+InsertNewlineAtEOF: true
+SortIncludes: true
+LambdaBodyIndentation: Signature
+Language: Cpp
+MaxEmptyLinesToKeep: 2
+NamespaceIndentation: None
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: true
+PackConstructorInitializers: NextLine
+PenaltyBreakAssignment: 300
+PenaltyBreakBeforeFirstCallParameter: 0
+PenaltyBreakComment: 1
+PenaltyBreakFirstLessLess: 0
+PenaltyBreakString: 1
+PenaltyExcessCharacter: 100
+PenaltyReturnTypeOnItsOwnLine: 400
+PointerAlignment: Left
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: false
+SpacesInParentheses: false
+Standard: Cpp11
+ReflowComments: true
+TabWidth: 4
+UseTab: Never
+WhitespaceSensitiveMacros:
+  - "TF_DEFINE_PRIVATE_TOKENS"

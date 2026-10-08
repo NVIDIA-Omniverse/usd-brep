@@ -1,0 +1,5 @@
+<project toolsVersion="5.6">
+  <dependency name="usd-${config}" linkPath="../_build/target-deps/usd/${config}">
+    <package name="usd.py312.${platform_target_abi}.stock.${config}" version="0.25.11-gl.18041+v25.11.363a7c8d" />
+  </dependency>
+</project>

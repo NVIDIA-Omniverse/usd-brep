@@ -1,0 +1,56 @@
+#usda 1.0
+
+def Xform "World"
+{
+    def BrepArray "brep" (
+        prepend apiSchemas = ["BrepPointAPI:vertexPoint", "BrepCurve3dNurbAPI:edge3dNurb", "BrepSurfaceNurbAPI"]
+        customData = {
+            string source = ""
+        }
+    )
+    {
+        uniform point3d[] brep:edge3dNurb:curve3d:nurb:controlVertices = [(3, 0, 0), (0, 0, 5), (3, 0, 0), (3, 3, 0), (0, 3, 0), (-2.9999999999999996, 3, 0), (-3, 0, 0), (-2.9999999999999996, -3, 0), (0, -3, 0), (3, -3, 0), (3, 0, 0)]
+        uniform double[] brep:edge3dNurb:curve3d:nurb:knots = [0, 0, 5, 5, 0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1]
+        uniform uint[] brep:edge3dNurb:curve3d:nurb:order = [2, 3]
+        uniform uint[] brep:edge3dNurb:curve3d:nurb:vertexCount = [2, 9]
+        uniform double[] brep:edge3dNurb:curve3d:nurb:weights = [1, 1, 1, 0.7071067811865476, 1, 0.7071067811865476, 1, 0.7071067811865476, 1, 0.7071067811865476, 1]
+        uniform double3[] brep:extent = [(-3.00001, -3.00001, -0.000010000000000903656), (3.000010000000001, 3.00001, 5.00001)]
+        uniform double[] brep:intersectTol3d = [0.00002]
+        uniform uint[] brep:regionCount = [2]
+        uniform point3d[] brep:surface:nurb:controlVertices = [(3, 0, 0), (0, 0, 5), (3, 3, 0), (0, 0, 5), (0, 3, 0), (0, 0, 5), (-2.9999999999999996, 3, 0), (0, 0, 5), (-3, 0, 0), (0, 0, 5), (-2.9999999999999996, -3, 0), (0, 0, 5), (0, -3, 0), (0, 0, 5), (3, -3, 0), (0, 0, 5), (3, 0, 0), (0, 0, 5), (4.666904755831213, -4.666904755831215, 0), (4.666904755831213, 4.666904755831213, 0), (-4.666904755831215, -4.666904755831215, 0), (-4.666904755831215, 4.666904755831213, 0)]
+        uniform double[] brep:surface:nurb:uKnots = [0, 0, 0, 0.25, 0.25, 0.5, 0.5, 0.75, 0.75, 1, 1, 1, 0, 0, 1, 1]
+        uniform uint[] brep:surface:nurb:uOrder = [3, 2]
+        uniform uint[] brep:surface:nurb:uVertexCount = [9, 2]
+        uniform double[] brep:surface:nurb:vKnots = [0, 0, 5, 5, 0, 0, 1, 1]
+        uniform uint[] brep:surface:nurb:vOrder = [2, 2]
+        uniform uint[] brep:surface:nurb:vVertexCount = [2, 2]
+        uniform double[] brep:surface:nurb:weights = [1, 1, 0.7071067811865476, 0.7071067811865476, 1, 1, 0.7071067811865476, 0.7071067811865476, 1, 1, 0.7071067811865476, 0.7071067811865476, 1, 1, 0.7071067811865476, 0.7071067811865476, 1, 1, 1, 1, 1, 1]
+        uniform point3d[] brep:vertexPoint:point:position = [(0, 0, 5), (3, 0, 0)]
+        uniform token[] edge:curveType = ["BrepCurve3dNurbAPI", "BrepCurve3dNurbAPI"]
+        uniform double[] edge:range = [0, 5, 0, 1]
+        uniform int2[] edge:vertexIndices = [(1, 0), (1, 1)]
+        uniform uint[] edgeuse:edgeIndex = [0, 1, 0, 1]
+        uniform uint[] edgeuse:nextRadialEUIndex = [2, 3, 0, 1]
+        uniform token[] edgeuse:orientationType = ["opposite", "same", "same", "opposite"]
+        uniform token[] edgeuse:thisRadialEntryType = ["topEntry", "topEntry", "bottomEntry", "bottomEntry"]
+        uniform float3[] extent = [(-3.00001, -3.00001, -0.00001), (3.00001, 3.00001, 5.00001)]
+        uniform uint[] face:loopCount = [1, 1]
+        uniform double2[] face:range = [(0, 0), (1, 5), (0, 0), (1, 1)]
+        uniform token[] face:surfaceType = ["BrepSurfaceNurbAPI", "BrepSurfaceNurbAPI"]
+        uniform token[] face:trimType = ["general", "general"]
+        uniform uint[] faceuse:faceIndex = [0, 1, 0, 1]
+        uniform token[] faceuse:orientationType = ["same", "same", "opposite", "opposite"]
+        uniform uint[] loop:edgeuseCount = [3, 1]
+        uniform uint[] loop:vertexIndex = [9999999, 9999999]
+        uniform uint[] region:shellCount = [1, 1]
+        uniform token[] region:type = ["voidRegion", "solidRegion"]
+        uniform uint[] shell:faceuseCount = [2, 2]
+        uniform token[] shell:pointType = ["none", "none"]
+        uniform uint[] shell:wireEdgeCount = [0, 0]
+        uniform token[] vertex:pointType = ["BrepPointAPI", "BrepPointAPI"]
+        uniform token[] wireEdge:curveType = []
+        uniform double[] wireEdge:range = []
+        uniform int2[] wireEdge:vertexIndices = []
+    }
+}
+

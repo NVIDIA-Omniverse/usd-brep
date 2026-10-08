@@ -1,0 +1,49 @@
+{
+    "Plugins": [
+        {
+            "Info": {
+                "Types": {
+                    "HdUsdBrepArrayProceduralPlugin": {
+                        "bases": [
+                            "HdGpGenerativeProceduralPlugin"
+                        ],
+                        "displayName": "usdBrepTessellation",
+                        "priority": 0
+                    },
+                    "HdUsdBrepArrayAdapter": {
+                        "bases": [
+                            "UsdImagingInstanceablePrimAdapter"
+                        ],
+                        "primTypeName": "BrepArray"
+                    },
+                    "HdUsdBrepDisplaySceneIndexPlugin": {
+                        "bases": [
+                            "HdSceneIndexPlugin"
+                        ],
+                        "loadWithRenderer": "",
+                        "displayName": "SMLib boundary display",
+                        "priority": 0
+                    }
+                }
+            },
+            "LibraryPath": "@PLUG_INFO_LIBRARY_PATH@",
+            "Name": "hdUsdBrep",
+            "ResourcePath": ".",
+            "Root": ".",
+            "Type": "library"
+        },
+        {
+            "Type": "python",
+            "Name": "hdUsdBrepUsdview",
+            "Info": {
+                "Types": {
+                    "hdUsdBrepUsdview.BrepDisplayPlugin": {
+                        "bases": [
+                            "pxr.Usdviewq.plugin.PluginContainer"
+                        ]
+                    }
+                }
+            }
+        }
+    ]
+}

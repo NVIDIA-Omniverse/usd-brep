@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Repo-local tools. repo_man discovers a tool only from a repo_tools.toml, and
+# only when it declares both `command` and `entry_point`; settings live in the
+# matching repo.toml section. `entry_point` resolves against sys.path, onto which
+# tools/repoman/repoman.py puts its own directory.
+
+[repo_py_package]
+command = "py_package"
+entry_point = "py_package:setup_repo_tool"
+ai_description = "Build the usd-brep Python wheel"

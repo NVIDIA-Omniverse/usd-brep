@@ -1,0 +1,3 @@
+BasedOnStyle: InheritParentConfig
+# USD warning suppression must be active when template headers are first read.
+SortIncludes: false

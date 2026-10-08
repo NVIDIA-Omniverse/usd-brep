@@ -1,0 +1,362 @@
+// Linear Variable Radius Tests with extrusion.IGS
+36    // Number of filleting operations
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  -40.0 -60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+10 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  -20.0 -60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+11 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 1 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  0.0 -60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+12 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 1 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  20.0 -60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+13 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  40.0 -60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+14 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  -40.0 -40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+15 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  -20.0 -40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+16 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 1 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  24  0.0 -40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+17 0.001 3 1 1 0.5 0.3 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 1 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.igs   // File which contains a solid
+2  26  20.0 -40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+18 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 1 1 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  26  40.0 -40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+19 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  -40.0 -20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  28  -20.0 -20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+1 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 1 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  28  0.0 -20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+2 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 1 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  20.0 -20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+3 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  40.0 -20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+4 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  -40.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+5 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  -20.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+6 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  0.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+7 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  20.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+8 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - 1 edge            ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iws   // File which contains a solid
+2  28  40.0 0.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+1 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+9 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  -40.0 20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  -20.0 20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+1 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../igesfiles/solids/extrusion.iwb   // File which contains a solid
+2 22  0.0 20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+2 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  35  20.0 20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+3 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 1 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  30  40.0 20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+4 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  33  60.0 20.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+5 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  33  -40.0 40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+6 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  -20.0 40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+7 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2 31 0.0 40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+8 0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  24  20.0 40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0 0.001 3 1 1 0.5 0.2 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 1 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  22  40.0 40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+1 0.001 3 1 1 0.5 0.2 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Face ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  30  60.0 40.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+2 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+2 0.001 3 1 1 0.5 0.2 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Brep ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  48  -40.0 60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+3 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+2 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Brep ******************************
+// *****************************************************************************************
+../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  48  -20.0 60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+3 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Brep ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  48  0.0 60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+3 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+1 0.10 0 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement
+// *****************************************************************************************
+// ****************** filleting operation - all edges of Brep ******************************
+// *****************************************************************************************
+../../TestFiles/pt_TestFiles/Solids/extrusion.iwb   // File which contains a solid
+2  48  20.0 60.0 0.0 // 1 - Surface filleting, 2 - Topology filleting - Number of expected edges in result - Transformation
+1 // Number of Topology fillet Definitions
+//------------------------------------------------------------------------------------------------
+3 // 0-Vertex, 1-Edge, 2-Face, 3-Brep, 4-Edge & Face, 5-Vert & Face, 6-Vert & Edge, 7-2 edges
+0.001 3 1 1 0.5 1.5 // Edge Index, Tolerance, fillet Solver Type, (Law Type, Orient)
+3 0.10 1 0 // Cross Section Type (1-Linear, 2 Circular, 3 Approx Circ), approx tol, Mirror, Complement

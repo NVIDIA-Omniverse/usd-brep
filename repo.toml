@@ -1,0 +1,432 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+########################################################################################################################
+# Repo base settings
+########################################################################################################################
+
+[repo]
+
+logging = "warn"
+
+[repo.tokens]
+# Sets the Linux glibc/ABI target to 2.35 (Ubuntu 22, _GLIBCXX_USE_CXX11_ABI=1)
+"platform:linux-x86_64".abi = "2.35"
+"platform:linux-aarch64".abi = "2.35"
+"platform:windows-x86_64".abi = "v142"
+
+
+[repo.folders]
+
+version_file = "VERSION"
+
+
+########################################################################################################################
+# Build
+########################################################################################################################
+
+[repo_build]
+
+# Public / local Linux builds: do not relaunch inside linbuild Docker.
+docker.enabled = false
+
+clean.folders = [
+    "${root}/_build",
+    "${root}/_compiler",
+    "${root}/_repo",
+]
+
+# List of packman manifests to pull (in order)
+# related to compilation
+fetch.packman_host_files_to_pull = [
+    "${root}/deps/host-deps.packman.xml",
+]
+
+# List of packman manifests to pull (in order)
+# related to code dependencies.
+# Mostly you should just add more dependencies to the
+# target-deps file but you can add additional
+# manifest files for dependencies that should be tracked
+# seperately.
+fetch.packman_target_files_to_pull = [
+    "${root}/deps/target-deps-python.packman.xml",
+    "${root}/deps/target-deps.packman.xml",
+]
+fetch."platform:macos-universal".packman_target_files_to_pull = [
+    "${root}/deps/target-deps-python-macos.packman.xml",
+]
+
+msbuild.sln_file = "usd-brep.sln"
+
+# Use the host-installed Visual Studio / Windows SDK instead of the packman msvc and
+# winsdk packages. If discovery fails, set msbuild.vs_path / msbuild.winsdk_path here.
+msbuild.link_host_toolchain = true
+msbuild.vs_version = "vs2019"  # "vs2019" | "vs2022" | "" (vswhere); pinned to match Kit (MSVC 14.2x)
+
+# ABI=1 in premake since 107.0:
+premake.linux_x86_64_cxx_abi = true
+
+
+########################################################################################################################
+# Test
+########################################################################################################################
+
+[repo_test]
+
+# Archive produced by `repo package` (written to _build/packages/); `repo test`
+# extracts it to run the packaged test suite against the published layout.
+archive_pattern = "${root}/_build/packages/usd_brep@*${config}.7z"
+
+default_config = "release"
+
+default_suite = "usd_brep"
+
+env_vars = [
+  [ "OMNISOLID_PLUGIN_PATH", "${root}/_build/schema/omniSolid/resources"],
+]
+
+#-----------------------------------------------------------------------------------------------------------------------
+# Test Suite:   USD BRep aggregate tests
+# Description:  Delegates to the top-level tests.sh / tests.bat runner -- the same script CI invokes.
+#               It runs the project's test suite serially; see tests.sh for the exact sub-suites.
+#
+#               Prerequisite: a populated _build tree. Run `./prebuild.sh` (build + USD schema)
+#               or `./repo.sh build` first; tests.sh does not build.
+#-----------------------------------------------------------------------------------------------------------------------
+
+[repo_test.suites.usd_brep]
+kind = "executable"
+
+# ${shell_ext} is .sh on linux/macOS and .bat on windows; ${platform} is e.g. linux-x86_64.
+executable = "${root}/tests${shell_ext}"
+args = ["${platform}"]
+
+# tests.sh runs many sub-suites serially; give it generous headroom (seconds).
+timeout = 3600
+
+
+########################################################################################################################
+# Formatting
+########################################################################################################################
+
+[repo_format]
+
+# Off at tool level to spare unscoped text-file languages (md/sh/bat/lua/ps1); re-enabled per-language for cpp/python below.
+maintain_legal_blurbs = false
+
+license_preamble = '''
+SPDX-FileCopyrightText: Copyright (c) {years} NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+'''
+
+license_text = ""
+
+# Per-directory formatting scope (repo_format 3.x). This is an explicit
+# include list: only the directories named below are formatted/verified.
+
+[repo_format.cpp]
+# Re-enable legal-blurb maintenance for the scoped C++ dirs (overrides the tool-level default above).
+maintain_legal_blurbs = true
+files.include = [
+    "source/BREP_STAGING/**",
+    "source/BREP_USD_DATA/**",
+    "source/OCCT_BREP_EXPORT/**",
+    "source/OCCT_BREP_IMPORT/**",
+    "source/USD_BREP_UTILS/**",
+    "source/HYDRA_USD_BREP/**",
+    "tests/HYDRA_USD_BREP_test/**",
+]
+files.exclude = [
+    # Keep GitHub-excluded internal notes outside legal-header maintenance.
+    "source/OCCT_BREP_IMPORT/occt_brep_import_plan.md",
+    "source/OCCT_BREP_IMPORT/occt_brep_import_status.md",
+    "source/OCCT_BREP_EXPORT/occt_brep_export_status.md",
+]
+
+[repo_format.python]
+# Re-enable legal-blurb maintenance for the scoped Python dirs (overrides the tool-level default above).
+maintain_legal_blurbs = true
+files.include = [
+    "source/BREP_STAGING/**",
+    "source/BREP_USD_DATA/**",
+    "source/OCCT_BREP_EXPORT/**",
+    "source/OCCT_BREP_IMPORT/**",
+    "source/USD_BREP_UTILS/**",
+    "source/HYDRA_USD_BREP/**",
+    "tests/HYDRA_USD_BREP_test/**",
+]
+files.exclude = [
+    # Keep GitHub-excluded internal notes outside legal-header maintenance.
+    "source/OCCT_BREP_IMPORT/occt_brep_import_plan.md",
+    "source/OCCT_BREP_IMPORT/occt_brep_import_status.md",
+    "source/OCCT_BREP_EXPORT/occt_brep_export_status.md",
+]
+
+# Black's version is pinned transitively, not here: repo_format (pinned in
+# deps/repo-deps.packman.xml) vendors a fixed black, so every
+# runner uses the same formatter. The 3.x schema exposes no per-file black
+# version key -- line_length / python_version / run_isort are the only knobs --
+# so the old (already-ignored) `black_version` key was dropped.
+[repo_format.python.black]
+line_length = 120
+run_isort = true
+
+########################################################################################################################
+# Package
+########################################################################################################################
+
+[repo_package]
+
+[repo_package.packages.usd_brep]
+
+build_version = "${file:${config_root}/VERSION}"
+omniverse_flow_version_scheme = true
+append_git_hash = false
+package_per_config = true
+manylinux_platform = "2_35"
+
+# Assumes package consumers provide their own carb and dependencies of those,
+# so only deliver the relevant binaries build with this package
+
+files = [
+    ["LICENSE", "PACKAGE-LICENSES/LICENSE"],
+    ["THIRD_PARTY_NOTICES.md", "PACKAGE-LICENSES/THIRD_PARTY_NOTICES.md"],
+    # Windows libraries
+    ["_build/$${platform}/$${config}/SMLib*", "lib"],
+    # SM_API[.-]* matches SM_API.* / SM_API-* but not SM_API_USD* or SM_API_test*.
+    ["_build/$${platform}/$${config}/SM_API[.-]*", "lib"],
+    # SM_API_USD[.-]* matches SM_API_USD.* but not SM_API_USD_test*.
+    ["_build/$${platform}/$${config}/SM_API_USD[.-]*", "lib"],
+    ["_build/$${platform}/$${config}/BREP_SM_USD*", "lib"],
+    ["_build/$${platform}/$${config}/BREP_USD_DATA*", "lib"],
+    # USD_BREP_UTILS[.-]* matches USD_BREP_UTILS.* but not usd_brep_utils_test* (Windows globs ignore case).
+    ["_build/$${platform}/$${config}/USD_BREP_UTILS[.-]*", "lib"],
+    # BREP_STAGING and OCCT_BREP_IMPORT/EXPORT are static libraries consumed at link time.
+    ["_build/$${platform}/$${config}/BREP_STAGING*", "lib"],
+    ["_build/$${platform}/$${config}/OCCT_BREP_IMPORT*", "lib"],
+    ["_build/$${platform}/$${config}/OCCT_BREP_EXPORT*", "lib"],
+    # Linux libraries
+    ["_build/$${platform}/$${config}/libSMLib*", "lib"],
+    ["_build/$${platform}/$${config}/libSM_API[.-]*", "lib"],
+    ["_build/$${platform}/$${config}/libSM_API_USD[.-]*", "lib"],
+    ["_build/$${platform}/$${config}/libBREP_SM_USD*", "lib"],
+    ["_build/$${platform}/$${config}/libBREP_USD_DATA*", "lib"],
+    ["_build/$${platform}/$${config}/libUSD_BREP_UTILS*", "lib"],
+    ["_build/$${platform}/$${config}/libBREP_STAGING*", "lib"],
+    ["_build/$${platform}/$${config}/libOCCT_BREP_IMPORT*", "lib"],
+    ["_build/$${platform}/$${config}/libOCCT_BREP_EXPORT*", "lib"],
+    # hdUsdBrep Hydra plugin: BrepArray display in usdview / Storm. plugInfo.json loads the
+    # library from ../../, so the manifest sits two levels below it, in lib/plugins/hdUsdBrep.
+    # HYDRA_USD_BREP[.-]* matches the plugin library but not HYDRA_USD_BREP_test*.
+    ["_build/$${platform}/$${config}/HYDRA_USD_BREP[.-]*", "lib"],
+    ["_build/$${platform}/$${config}/libHYDRA_USD_BREP[.-]*", "lib"],
+    ["_build/$${platform}/$${config}/plugins/hdUsdBrep/*", "lib/plugins/hdUsdBrep"],
+    # The usdview plugin module the same plugInfo.json registers; importable via PYTHONPATH=<pkg>/python.
+    ["_build/$${platform}/$${config}/hdUsdBrepUsdview/*.py", "python/hdUsdBrepUsdview"],
+    # Launcher: python tools/scripts/usdview_hdusdbrep.py <asset>, using your OpenUSD's usdview.
+    ["tools/scripts/usdview_hdusdbrep.py", "tools/scripts"],
+    # Healer: python tools/scripts/usd_brep_heal.py <input> <output>, a wrapper for usd.heal_file.
+    ["tools/scripts/usd_brep_heal.py", "tools/scripts"],
+    # OpenUSD runtime, staged by source/SM_API_USD/premake5.lua, as usd-optimize does: the
+    # package runs without an external OpenUSD. Put lib/ and extraLibs/ on the library search
+    # path and python/ and usdpy/ on PYTHONPATH; consumers supply only a Python 3.12 interpreter.
+    ["_build/$${platform}/$${config}/extraLibs/**", "extraLibs"],
+    # OpenUSD's renderer and image plugins, found through its built-in ../plugin/usd path.
+    ["_build/$${platform}/$${config}/plugin/**", "plugin"],
+    ["_build/target-deps/usd/$${config}/lib/python/**", "usdpy"],
+    # License texts for the third-party components bundled in the OpenUSD package (MaterialX,
+    # oneTBB, CPython, Alembic, Imath, OpenSubdiv, zlib, ...), which extraLibs/ and usdpy/ ship.
+    ["_build/target-deps/usd/$${config}/PACKAGE-LICENSES/**", "PACKAGE-LICENSES/OpenUSD"],
+    # License texts for the libraries built into the CPython runtime library in extraLibs/
+    # (zlib, bzip2 and liblzma on Linux).
+    ["_build/target-deps/python/PACKAGE-LICENSES/**", "PACKAGE-LICENSES/Python"],
+    # Python binding module (_omni_solid.pyd on Windows,
+    # _omni_solid.cpython-*-<arch>-linux-gnu.so on Linux; no lib prefix).
+    # Importable via PYTHONPATH=<pkg>/python; dependent libs resolve from <pkg>/lib.
+    ["_build/$${platform}/$${config}/_omni_solid*", "python"],
+    ["_build/$${platform}/$${config}/_smlib_dev*", "python"],
+    # `usd_brep` is the supported import; it wraps the module above and does the
+    # import-time setup (library search path, OMNISOLID_PLUGIN_PATH) that a bare
+    # `import _omni_solid` leaves to the caller. Sits beside the module so both
+    # names resolve from the same PYTHONPATH entry.
+    ["source/SmPyLib/python/usd_brep/*.py", "python/usd_brep"],
+    ["source/SmPyLib/stubs/usd_brep/*", "python/usd_brep"],
+    # Test binaries and runners for the public C API and USD API.
+    ["_build/$${platform}/$${config}/SM_API_test*", "tests/bin"],
+    ["_build/$${platform}/$${config}/SM_API_USD_test*", "tests/bin"],
+    ["_build/$${platform}/$${config}/libSM_API_test*", "tests/bin"],
+    ["_build/$${platform}/$${config}/libSM_API_USD_test*", "tests/bin"],
+    ["tests/SM_API_test/*", "tests/SM_API_test"],
+    ["tests/SM_API_test/inc/*", "tests/SM_API_test/inc"],
+    ["tests/SM_API_test/src/*", "tests/SM_API_test/src"],
+    ["tests/SM_API_USD_test/*", "tests/SM_API_USD_test"],
+    ["tests/SM_API_USD_test/inc/*", "tests/SM_API_USD_test/inc"],
+    ["tests/SM_API_USD_test/src/*", "tests/SM_API_USD_test/src"],
+    ["_build/$${platform}/$${config}/brep_geometry_validator*", "bin"],
+    ["TestFiles/usd_TestFiles/sphere_nurbs.usda", "TestFiles/usd_TestFiles"],
+    # Referenced by the TestFiles/brep_validator fixtures, including the SM_API_USD_test input.
+    ["TestFiles/usd_TestFiles/Materials.usda", "TestFiles/usd_TestFiles"],
+    # Headers
+    ["source/SMLib/inc/*.h","include/SMLib"],
+    ["source/SM_API/inc/*.h","include/SM_API"],
+    ["source/SM_API_USD/inc/*.h","include/SM_API_USD"],
+    ["source/BREP_SM_USD/inc/*.h","include/BREP_SM_USD"],
+    ["source/BREP_USD_DATA/inc/*.h","include/BREP_USD_DATA"],
+    ["source/USD_BREP_UTILS/inc/*.h","include/USD_BREP_UTILS"],
+    ["source/BREP_STAGING/inc/*.h","include/BREP_STAGING"],
+    ["source/OCCT_BREP_IMPORT/inc/*.h","include/OCCT_BREP_IMPORT"],
+    ["source/OCCT_BREP_EXPORT/inc/*.h","include/OCCT_BREP_EXPORT"],
+    # brep_validator: importable BrepArray schema-validation tooling (core lib, CLI, tests, fixtures).
+    # Folded in here so usd_brep publishes a single package; ships in every config (Python is config-agnostic).
+    ["tools/brep_validator/*", "brep_validator"],
+    ["tools/brep_validator_cli/*", "brep_validator_cli"],
+    ["tools/brep_validator_test/*", "brep_validator_test"],
+    ["tools/brep_validator_test/utils/*", "brep_validator_test/utils"],
+    ["TestFiles/brep_validator/*", "TestFiles/brep_validator"],
+    ["TestFiles/brep_validator/coverage_limits/*", "TestFiles/brep_validator/coverage_limits"],
+    # Agent skills/docs/operations/commands, so package consumers get the same guidance as the repo.
+    [".agents/**", ".agents"],
+    # Runnable examples referenced by the operation guides and skills.
+    ["Examples/**", "Examples"],
+    ["_build/$${platform}/$${config}/sm_api_boolean_bounds_example*", "bin"],
+    ["_build/$${platform}/$${config}/smlib_step_derivatives_example*", "bin"],
+    # Vendored UsdSolid proposal and provenance: design context for BrepArray schema guidance.
+    ["proposals/README.md", "proposals"],
+    ["proposals/NOTICE", "proposals"],
+    ["proposals/UsdSolid/**", "proposals/UsdSolid"],
+    ["proposals/cad_geometry/**", "proposals/cad_geometry"],
+    ["_build/schema/", ""],
+]
+
+files_exclude = [
+    ["**/*.pdb"],
+    ["**/*.exp"],
+    ["**/*.ilk"],
+    ["**/__pycache__/**"],
+    ["**/*.pyc"],
+]
+"release".files_strip = [
+    ["**/*.so"],
+]
+"release".files_strip_exclude = [
+    ["**/libtbb*.so"],  # strip: File format not recognized since these are symlinks
+]
+
+########################################################################################################################
+# Docs
+########################################################################################################################
+
+[repo_docs]
+
+enabled = true
+project = "usd-brep"
+name = "USD BRep"
+copyright_start = 2022
+config = "release"
+enable_dark_theme_switcher = true
+copybutton_enabled = true
+
+# napoleon renders "See Also:" as raw lines, so an entry wrapped onto an indented continuation
+# line breaks the build. Parse it like "Args:" instead, where continuations are fine.
+sphinx_conf_py_extra = """
+autodoc_member_order = 'bysource'
+napoleon_custom_sections = [("See Also", "params_style")]
+"""
+
+# Sphinx scans the whole repo for .rst/.md; anything not a rendered page must be listed.
+sphinx_exclude_patterns = [
+    # Build / tooling trees
+    "_build",
+    "_compiler",
+    "_repo",
+    ".agents",
+    ".venv",  # local uv env; site-packages .rst/.md would be rendered and fail the build
+    "deps",
+    "tools",
+    "source",
+    "tests",
+    "Examples",
+    "TestFiles",
+    "TestFilesSmb",
+    # Design context, not user documentation
+    "proposals",
+    # Root markdown that is not part of the rendered docs
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "CITATION.md",
+    "CLAUDE.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "KNOWN_ISSUES.md",
+    "README.md",
+    "SECURITY.md",
+    "THIRD_PARTY_NOTICES.md",
+]
+
+# Doxygen builds the C++ API reference only, rooted at api/api. The Python API reference is
+# docs/python.rst, rendered by autodoc from the compiled _omni_solid (see python_paths below).
+use_fast_doxygen_conversion = true
+only_preprocessor_enabled = true
+api_output_directory = "api"
+api_root_page = {docname = "api", title = "USD BRep C++ API", toc_docnames = "*"}
+
+# Public API layers only; source/SMLib/inc is the low-level kernel, deliberately left out.
+doxygen_input = [
+    "source/SM_API/inc/*.h",
+    "source/SM_API_USD/inc/*.h",
+    "source/BREP_SM_USD/inc/*.h",
+    "source/BREP_USD_DATA/inc/*.h",
+    "source/USD_BREP_UTILS/inc/*.h",
+    "source/BREP_STAGING/inc/*.h",
+    "source/OCCT_BREP_IMPORT/inc/*.h",
+    "source/OCCT_BREP_EXPORT/inc/*.h",
+]
+
+# Expand macros away, else doxygen reads them as part of the declaration.
+doxygen_predefined = [
+    "SMAPI_EXPORT=",
+    "SM_API_USD_EXPORT=",
+    "SMU_EXPORT=",
+    "USDBREP_EXPORT=",
+    "USD_BREP_EXPORT=",
+    "OCCT_BREP_EXPORT=",
+    "OCCT_BREP_EXPORT_OCCT_EXPORT=",
+    "SM_COMMON_FOR_EXPORT(cl,sc,ty,export)=",
+    # pxr macros, otherwise read as a function and as part of the return type.
+    "TF_DECLARE_PUBLIC_TOKENS(...)=",
+    "PXR_NAMESPACE_USING_DIRECTIVE=",
+]
+
+# SHOW_FILES emits file entities, and the macro/function indices link to them, but
+# repo_docs excludes kind=file by default -- leaving the links dangling.
+api_item_filters = [
+    { rule = "include", attribute = "kind", matching = "file", group = "kind-file" },
+]
+
+doxygen_conf_extra = """
+SHOW_FILES  = YES
+EXTRACT_ALL = YES
+"""
+
+sphinx_generate_doxygen_groups = true
+sphinx_generate_doxygen_pages = true
+
+# Lets the autodoc step import usd_brep; the package, the module it wraps, and their
+# libraries all share one flat dir.
+library_paths = [
+    "${root}/_build/${platform}/${config}",
+    "${root}/_build/target-deps/usd/${config}/lib",
+    "${root}/_build/target-deps/usd/${config}/bin",
+]
+python_paths = [
+    "${root}/_build/${platform}/${config}",
+    "${root}/_build/target-deps/usd/${config}/lib/python",
+]
+python_path = "${root}/_build/target-deps/python/python${exe_ext}"
+
+social_media = [
+    [ "www", "https://developer.nvidia.com/usd" ],
+    [ "github", "https://github.com/NVIDIA-Omniverse/usd-brep" ]
+]
+social_media_set = ""
+
