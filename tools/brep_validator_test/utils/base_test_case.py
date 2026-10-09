@@ -15,25 +15,30 @@ def _prepend_env_path(var_name: str, value: Path) -> None:
     os.environ[var_name] = f"{value_str}{os.pathsep}{current}" if current else value_str
 
 
-def _ensure_usd_validation_nvidia() -> None:
-    # brep_validator needs `omni.capabilities` and `usd_validation_nvidia`, both
-    # shipped by the usd-validation-nvidia pip package. Install it into the
-    # bundled interpreter on first run (so it imports without PYTHONPATH tweaks),
-    # mirroring scene-optimizer-core's test runner.
+def _ensure_usd_validation_nvidia(repo_root: Path) -> None:
+    # Install usd-validation-nvidia into _build/pydeps, as tests.sh does: pip refuses
+    # to install into packman's Python, which is externally managed (PEP 668).
     if importlib.util.find_spec("usd_validation_nvidia") is not None:
         return
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--quiet",
-            "--disable-pip-version-check",
-            "usd-validation-nvidia>=1.22.0,<2",
-        ],
-        check=True,
-    )
+    pydeps = repo_root / "_build" / "pydeps" / "usd-validation-nvidia-1.22-2"
+    if not (pydeps / "usd_validation_nvidia").is_dir():
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "--disable-pip-version-check",
+                "--target",
+                str(pydeps),
+                "usd-validation-nvidia>=1.22.0,<2",
+            ],
+            check=True,
+        )
+    sys.path.insert(0, str(pydeps))
+    _prepend_env_path("PYTHONPATH", pydeps)
+    importlib.invalidate_caches()
 
 
 def _find_package_root(start: Path) -> Path:
@@ -71,7 +76,7 @@ def bootstrap_environment() -> Path:
     if omnisolid_root.exists():
         os.environ["OMNISOLID_PLUGIN_PATH"] = str(omnisolid_root)
 
-    _ensure_usd_validation_nvidia()
+    _ensure_usd_validation_nvidia(repo_root)
 
     return repo_root
 

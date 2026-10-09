@@ -4307,6 +4307,312 @@ static SmStatus my_test_face_line_intersect_growth()
   return SM_SUCCESS;
 }
 
+// A circular loop on a cylinder without its seam exercises the legacy
+// single-periodic endpoint choice used during healing. Test both UV directions.
+static SmStatus my_test_single_periodic_vertexuse
+ (SmBoolean         bSwapUV,    // in : TRUE = cylinder closed in V, FALSE = closed in U
+  const SmExtent1d &crInterval) // in : curve and trim parameter interval
+{
+  MYPRINTF(_T("\n********** Entered: my_test_single_periodic_vertexuse"));
+  SmContext         sContext;
+  SmBrepConstructor sBuilder;
+  SmBrep           *pBrep = sBuilder.StartBrep(sContext);
+  SmObjDelete       sCleanup(pBrep);
+  SmShell          *pOuter = NULL,*pInner = NULL;
+  SER(sBuilder.StartShell(pOuter,pInner));
+  SmFace     *pFace = sBuilder.StartFace(SM_OT_SAME);
+  SmCylinder *pCylinder = new(sContext) SmCylinder
+    (SmPoint3d(0,0,0),  // in : cylinder origin
+     SmVector3d(1,0,0), // in : cylinder X axis
+     SmVector3d(0,1,0), // in : cylinder Y axis
+     1.,               // in : radius
+     0.,               // in : start angle in degrees
+     360.,             // in : end angle in degrees
+     1.,               // in : height
+     bSwapUV,          // in : TRUE = rotation in V, FALSE = rotation in U
+     FALSE,            // in : retain generator direction
+     FALSE,            // in : use an analytic generator
+     &sContext);       // in : context for the surface
+  SmExtent2d sDomain = pCylinder->GetNaturalUVDomain();
+  SER(sBuilder.SetFaceSurface(pCylinder,sDomain));
+  NER(sBuilder.StartLoop(SM_OT_SAME));
+  SmVertex *pVertex = sBuilder.StartVertexOfLoop(SmPoint3d(1,0,.5));
+  NER(sBuilder.StartEdge(SM_OT_SAME,NULL,pVertex,pVertex));
+
+  SmAxis2Placement sAxes;
+  SmCircle        *pCircle = NULL;
+  sAxes.Translate(SmVector3d(0,0,.5));
+  SER(SmCircle::CreateCanonical(sContext,sAxes,1.,pCircle));
+  SER(pCircle->EditParameterization(crInterval));
+  SER(sBuilder.SetEdgeCurve(pCircle,FALSE));
+  SER(sBuilder.SetLimits(SmVertexNode(pVertex->GetPoint()),SmVertexNode(pVertex->GetPoint())));
+  SER(sBuilder.EndEdge());
+  SER(sBuilder.EndLoop());
+  SER(sBuilder.EndFace());
+  SER(sBuilder.EndShell(TRUE));
+  SER(sBuilder.EndBrep());
+
+  SmTArray<SmLoop*>    sLoops;
+  SmTArray<SmEdgeuse*> sEdgeuses;
+  pFace->GetLoops(sLoops);
+  if(sLoops.GetSize() != 1) { return SM_ERR; }
+  sLoops[0]->GetEdgeuses(sEdgeuses);
+  if(sEdgeuses.GetSize() != 1) { return SM_ERR; }
+
+  // Supply the derived trim explicitly: this intermediate face intentionally
+  // lacks its seam and is not ready for full face validation or trim generation.
+  SmPoint3d sStart(bSwapUV ? (sDomain.GetUMin() + sDomain.GetUMax()) / 2. : sDomain.GetUMin(),
+                  bSwapUV ? sDomain.GetVMin() : (sDomain.GetVMin() + sDomain.GetVMax()) / 2.,0.);
+  SmPoint3d sEnd = sStart;
+  if(bSwapUV) { sEnd.y = sDomain.GetVMax(); }
+  else        { sEnd.x = sDomain.GetUMax(); }
+  SmBSplineCurve *pTrim = NULL;
+  SER(SmBSplineCurve::CreateLineSegment(sContext,2,sStart,sEnd,pTrim));
+  SER(pTrim->EditParameterization(crInterval));
+  sEdgeuses[0]->SetUVTrimCurve(pTrim,0.);
+  for(ULONG lSide = 0; lSide < 2; ++lSide)
+    {
+      SmEdgeuse *pEdgeuse = lSide ? sEdgeuses[0]->GetMate() : sEdgeuses[0];
+      SmPoint3d  sExpected = pEdgeuse->GetOrientation() == SM_OT_SAME ? sStart : sEnd;
+      SmPoint2d  sUV;
+      SER(pEdgeuse->GetVertexuse()->ComputeUVPoint(sUV,FALSE));
+      if(sUV.DistanceBetween(SmPoint2d(sExpected.x,sExpected.y)) > SM_EFF_ZERO_PARAM) { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
+static SmStatus my_test_doubly_periodic_vertexuse_corners
+ (const SmExtent1d &crMajorInterval, // in : parameter interval of the major-circle seam
+  const SmExtent1d &crMinorInterval) // in : parameter interval of the minor-circle seam
+{
+  MYPRINTF(_T("\n********** Entered: my_test_doubly_periodic_vertexuse_corners"));
+  SmContext         sContext;
+  SmBrepConstructor sBuilder;
+  SmBrep           *pBrep = sBuilder.StartBrep(sContext);
+  SmObjDelete       sCleanup(pBrep);
+  SmShell          *pOuter = NULL,*pInner = NULL;
+  SmTorus          *pTorus = NULL;
+  pBrep->SetTolerance(1e-7,FALSE);
+  SER(sBuilder.StartShell(pOuter,pInner));
+  SmFace *pFace = sBuilder.StartFace(SM_OT_SAME);
+  SER(SmTorus::CreateCanonical
+    (sContext,           // in : context for the surface
+     SmAxis2Placement(), // in : canonical torus placement
+     3.0,                // in : major radius
+     1.0,                // in : minor radius
+     pTorus));           // out: torus surface
+  SER(sBuilder.SetFaceSurface(pTorus,pTorus->GetNaturalUVDomain()));
+  NER(sBuilder.StartLoop(SM_OT_SAME));
+
+  SmVertex        *pVertex = sBuilder.StartVertexOfLoop(SmPoint3d(4,0,0));
+  SmEdge          *pEdges[2] = {NULL,NULL};
+  SmAxis2Placement sMinorAxes;
+  sMinorAxes.SetCanonical(SmPoint3d(3,0,0),SmVector3d(1,0,0),SmVector3d(0,0,1));
+  for(ULONG lUse = 0; lUse < 4; ++lUse)
+    {
+      ULONG lEdge = lUse % 2;
+      pEdges[lEdge] = sBuilder.StartEdge
+        (lUse < 2 ? SM_OT_SAME : SM_OT_OPPOSITE, // in : edgeuse orientation around the natural boundary
+         pEdges[lEdge],                        // in : existing seam edge, or NULL to create it
+         pVertex,                              // in : start vertex
+         pVertex);                             // in : end vertex
+      NER(pEdges[lEdge]);
+      if(lUse < 2)
+        {
+          SmCircle *pCircle = NULL;
+          SER(SmCircle::CreateCanonical
+            (sContext,                                   // in : context for the curve
+             lEdge ? sMinorAxes : SmAxis2Placement(),     // in : minor or major circle placement
+             lEdge ? 1.0 : 4.0,                           // in : seam circle radius
+             pCircle));                                  // out: seam circle
+          SER(pCircle->EditParameterization(lEdge ? crMinorInterval : crMajorInterval));
+          SER(sBuilder.SetEdgeCurve(pCircle,FALSE));
+          SER(sBuilder.SetLimits(SmVertexNode(pVertex->GetPoint()),SmVertexNode(pVertex->GetPoint())));
+        }
+      SER(sBuilder.EndEdge());
+    }
+  SER(sBuilder.EndLoop());
+  SER(sBuilder.EndFace());
+  SER(sBuilder.EndShell(TRUE));
+  SER(sBuilder.EndBrep());
+
+  double dMeanCurve,dMaxCurve,dMeanVertex,dMaxVertex,dMeanUV,dMaxUV;
+  SER(pFace->CreateUVTrimCurves
+    (FALSE,       // in : preserve edge and vertex tolerances
+     NULL,        // in : generate UV trims
+     NULL,        // in : no supplied trim orientations
+     dMeanCurve,  // out: mean curve-to-surface gap
+     dMaxCurve,   // out: maximum curve-to-surface gap
+     dMeanVertex, // out: mean vertex-to-trim gap
+     dMaxVertex,  // out: maximum vertex-to-trim gap
+     dMeanUV,     // out: mean UV endpoint gap
+     dMaxUV));    // out: maximum UV endpoint gap
+  SmAssertArray sReports;
+  if(   pBrep->ValidatePointers(&sReports) != SM_SUCCESS
+     || !pBrep->AssertValid(&sReports,SM_LEVEL_2,SM_WALK)
+     || sReports.GetSize()) { return SM_ERR; }
+
+  // Record the valid loop's UV endpoints before moving any derived trims.
+  // 3D proximity cannot distinguish the four equivalent periodic corners.
+  SmTArray<SmLoop*>    sLoops;
+  SmTArray<SmEdgeuse*> sEdgeuses;
+  SmPoint2d           sExpectedCorners[4][2];
+  SmVector3d          sSideShifts[4];
+  SmExtent2d          sDomain = pTorus->GetNaturalUVDomain();
+  pFace->GetLoops(sLoops);
+  if(sLoops.GetSize() != 1) { return SM_ERR; }
+  sLoops[0]->GetEdgeuses(sEdgeuses);
+  if(sEdgeuses.GetSize() != 4) { return SM_ERR; }
+  for(ULONG lUse = 0; lUse < 4; ++lUse)
+    {
+      SmPoint3d sStart,sEnd;
+      SER(sEdgeuses[lUse]->NormalizedEvaluate(0.,TRUE,sStart,NULL,FALSE));
+      SER(sEdgeuses[lUse]->NormalizedEvaluate(1.,TRUE,sEnd,NULL,FALSE));
+      sExpectedCorners[lUse][0].Set(sStart.x,sStart.y);
+      sExpectedCorners[lUse][1].Set(sEnd.x,sEnd.y); // The mate starts at this edgeuse's end.
+      if(smos_Fabs(sEnd.x - sStart.x) < SM_EFF_ZERO_PARAM)
+        {
+          sSideShifts[lUse].Set
+            (SM_ARE_SAME_TO_TOL(sStart.x,sDomain.GetUMin(),SM_EFF_ZERO_PARAM) ? sDomain.XLength() : -sDomain.XLength(),
+             0.,0.);
+        }
+      else
+        {
+          sSideShifts[lUse].Set
+            (0.,
+             SM_ARE_SAME_TO_TOL(sStart.y,sDomain.GetVMin(),SM_EFF_ZERO_PARAM) ? sDomain.YLength() : -sDomain.YLength(),
+             0.);
+        }
+    }
+
+  // Independently choose either periodic side for each of the four trims.
+  // Check all four vertexuses and their mates for each of the 16 combinations.
+  ULONG lPreviousMask = 0;
+  for(ULONG lMask = 0; lMask < 16; ++lMask)
+    {
+      for(ULONG lUse = 0; lUse < 4; ++lUse)
+        {
+          if((lMask ^ lPreviousMask) & (1u << lUse))
+            {
+              SmAxis2Placement sShift;
+              sShift.Translate((lMask & (1u << lUse)) ? sSideShifts[lUse] : -sSideShifts[lUse]);
+              SER(sEdgeuses[lUse]->GetUVTrimCurve()->Transform(sShift));
+            }
+        }
+      lPreviousMask = lMask;
+      for(ULONG lUse = 0; lUse < 4; ++lUse)
+        {
+          for(ULONG lSide = 0; lSide < 2; ++lSide)
+            {
+              SmEdgeuse *pEdgeuse = lSide ? sEdgeuses[lUse]->GetMate() : sEdgeuses[lUse];
+              SmPoint2d  sCorner;
+              SER(pEdgeuse->GetVertexuse()->ComputeUVPoint(sCorner,FALSE));
+              if(sCorner.DistanceBetween(sExpectedCorners[lUse][lSide]) > SM_EFF_ZERO_PARAM) { return SM_ERR; }
+            }
+        }
+    }
+  return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- Closed spheres have poles orthogonal to their periodic direction.
+***********************************************************************/
+static SmStatus my_test_closed_sphere_properties()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_closed_sphere_properties"));
+  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+    {
+      SmContext  sContext;
+      SmBrep    *pBrep = new(sContext) SmBrep();
+      SmObjDelete sCleanup(pBrep);
+      pBrep->SetTolerance(1e-7,FALSE);
+
+      SmSphere *pSphere = NULL;
+      SmShell  *pShell  = NULL;
+      SmFace   *pFace   = NULL;
+      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
+      if(lSwap) { SER(pSphere->SwapUV()); }
+      SER(pBrep->CreateFaceInRegionFromSurface
+        (pBrep->GetInfiniteRegion(),    // in : region containing the face
+         pSphere,                      // in : surface consumed by the face
+         pSphere->GetNaturalUVDomain(), // in : full sphere domain
+         pShell,                       // out: created shell
+         pFace));                      // out: created face
+
+      SmHealData sHeal;
+      SER(sHeal.HealBrep(pBrep,SM_HO_CACHE_FACEPROPS_2));
+      if(sHeal.m_sTgtFaceProps.GetSize() != 1 || !sHeal.m_sTgtFaceProps[0]->m_bClosedSurf)
+        { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- Optional outputs must not change the returned surface pole mask.
+***********************************************************************/
+static SmStatus my_test_poles_without_optional_outputs()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_poles_without_optional_outputs"));
+  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+    {
+      SmContext sContext;
+      SmSphere *pSphere = NULL;
+      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
+      SmObjDelete sCleanup(pSphere);
+      if(lSwap) { SER(pSphere->SwapUV()); }
+
+      ULONG lApprox   = SM_SS_NONE;
+      ULONG lExpected = lSwap ? SM_SS_UMIN | SM_SS_UMAX : SM_SS_VMIN | SM_SS_VMAX;
+      if(   pSphere->GetSingularities(NULL,NULL,&lApprox) != lExpected
+         || pSphere->GetSingularities() != lExpected)
+        { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- Rebuild a single-vertex sphere with its natural seam and poles.
+***********************************************************************/
+static SmStatus my_test_heal_single_vertex_sphere()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_heal_single_vertex_sphere"));
+  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+    {
+      SmContext         sContext;
+      SmBrepConstructor sBuilder;
+      SmBrep           *pBrep = sBuilder.StartBrep(sContext);
+      NER(pBrep);
+      SmObjDelete sCleanup(pBrep);
+      pBrep->SetTolerance(1e-7,FALSE);
+      NER(sBuilder.StartRegion(TRUE,NULL));
+
+      SmShell  *pOuter  = NULL;
+      SmShell  *pInner  = NULL;
+      SmSphere *pSphere = NULL;
+      SER(sBuilder.StartShell(pOuter,pInner));
+      NER(sBuilder.StartFace(SM_OT_SAME));
+      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
+      if(lSwap) { SER(pSphere->SwapUV()); }
+      SER(sBuilder.SetFaceSurface(pSphere,pSphere->GetNaturalUVDomain()));
+      NER(sBuilder.StartAndEndSingleVertexLoop(SmPoint3d(0,0,2)));
+      SER(sBuilder.EndFace());
+      SER(sBuilder.EndShell(TRUE));
+      SER(sBuilder.EndRegion());
+      SER(sBuilder.EndBrep());
+      if(pBrep->GetNumFaces() != 1 || pBrep->GetNumEdges() != 0 || pBrep->GetNumVertices() != 1)
+        { return SM_ERR; }
+
+      SER(pBrep->HealBrep(SM_HO_ALL));
+      if(   pBrep->GetNumFaces() != 1 || pBrep->GetNumEdges() != 1 || pBrep->GetNumVertices() != 2
+         || !pBrep->IsManifoldSolid())
+        { return SM_ERR; }
+      SmAssertArray sReports;
+      SER(pBrep->ValidatePointers(&sReports));
+      if(sReports.GetSize() || !pBrep->AssertValid()) { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
 SmStatus my_test_topology()
 {
   SmContext sContext;
@@ -4317,6 +4623,17 @@ SmStatus my_test_topology()
   MYPRINTF(_T("\n\n"));
   MYPRINTF(_T("********** Entered: my_test_topology"));
 
+  SER(my_test_poles_without_optional_outputs());
+  SER(my_test_closed_sphere_properties());
+  SER(my_test_heal_single_vertex_sphere());
+  // Scale each seam independently to exercise both adjacent derivative intervals.
+  SER(my_test_doubly_periodic_vertexuse_corners(SmExtent1d(0.,1.),SmExtent1d(0.,1.)));
+  SER(my_test_doubly_periodic_vertexuse_corners(SmExtent1d(0.,1e-4),SmExtent1d(0.,1.)));
+  SER(my_test_doubly_periodic_vertexuse_corners(SmExtent1d(0.,1.),SmExtent1d(0.,1e-4)));
+  SER(my_test_single_periodic_vertexuse(FALSE,SmExtent1d(0.,1.)));
+  SER(my_test_single_periodic_vertexuse(TRUE,SmExtent1d(0.,1.)));
+  SER(my_test_single_periodic_vertexuse(FALSE,SmExtent1d(0.,1e-4)));
+  SER(my_test_single_periodic_vertexuse(TRUE,SmExtent1d(0.,1e-4)));
   SER(my_test_face_line_intersect_growth());
   SER(my_test_loop_uv_gap_neighborhood());
   SER(my_test_stale_edgeuse_owner()) ;

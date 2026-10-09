@@ -249,7 +249,30 @@ SmBoolean bDebugMe = FALSE ;
               // check for seam with UVTrimCurves on conflicting sides problem - UVDist size of the UVDomain and Surface is closed
               if(   (bClosedU && SM_ARE_SAME_TO_TOL(dDistU, dDomainLengthU, SM_EFF_ZERO_PARAM * 1000))
                  || (bClosedV && SM_ARE_SAME_TO_TOL(dDistV, dDomainLengthV, SM_EFF_ZERO_PARAM * 1000)))
-                {                                                                   
+                {
+                  // Express derivatives per unit normalized curve parameter so the
+                  // seam probes are invariant under affine curve reparameterization.
+                  // Without a UV trim, NormalizedEvaluate projects the 3D derivative
+                  // evaluated over the modeled edge interval.
+                  const SmCurve *pThisTrim = pEdgeuse->GetUVTrimCurve();
+                  const SmCurve *pPrevTrim = pPrevEdgeuse->GetUVTrimCurve();
+                  sThisUVTan *= pThisTrim ? pThisTrim->GetNaturalInterval().GetLength()
+                                         : pEdgeuse->GetEdge()->GetInterval().GetLength();
+                  sPrevUVTan *= pPrevTrim ? pPrevTrim->GetNaturalInterval().GetLength()
+                                         : pPrevEdgeuse->GetEdge()->GetInterval().GetLength();
+
+                  // At a doubly periodic corner, probe into each adjacent curve:
+                  // forward from this curve's start and backward from the previous
+                  // curve's end. Apply this before testing either supplied endpoint
+                  // as well as the four-corner fallback below.
+                  SmBoolean bDoublyPeriodicCorner =
+                      bClosedU && bClosedV
+                      && (   SM_ARE_SAME_TO_TOL(sThisUVPnt.x, sSurfUVDomain.GetUMin(), SM_EFF_ZERO_PARAM * 1000)
+                          || SM_ARE_SAME_TO_TOL(sThisUVPnt.x, sSurfUVDomain.GetUMax(), SM_EFF_ZERO_PARAM * 1000))
+                      && (   SM_ARE_SAME_TO_TOL(sThisUVPnt.y, sSurfUVDomain.GetVMin(), SM_EFF_ZERO_PARAM * 1000)
+                          || SM_ARE_SAME_TO_TOL(sThisUVPnt.y, sSurfUVDomain.GetVMax(), SM_EFF_ZERO_PARAM * 1000));
+                  if(bDoublyPeriodicCorner) { sPrevUVTan = -sPrevUVTan; }
+
                   // for cases of just one closed direction (cylinders, spheres) - orthogonalize the endTans to cross the seam
                   if     ( bClosedU && !bClosedV) { sThisUVTan.y = 0.0 ; sPrevUVTan.y = 0.0 ; }
                   else if(!bClosedU &&  bClosedV) { sThisUVTan.x = 0.0 ; sPrevUVTan.x = 0.0 ; }
@@ -343,6 +366,30 @@ SmBoolean bDebugMe = FALSE ;
                                         _T("SmVertexuse::ComputeUVPoint - OnTheSeam with conflicting UVTrimCurves assumption is wrong - check case")) ;
                         } // end UVTan Steps from PrevUVPnt are in UVDomain check
 
+                      // At the intersection of two seams, neither supplied endpoint
+                      // need be the correct corner. All four natural-domain corners
+                      // represent the same 3D point; select the one entered by both
+                      // inward probes used in the endpoint tests above.
+                      else if(bDoublyPeriodicCorner)
+                        {
+                          SmBoolean bFoundCorner = FALSE;
+                          for(ULONG lCorner = 0; lCorner < 4; ++lCorner)
+                            {
+                              SmPoint2d sCorner((lCorner & 1) ? sSurfUVDomain.GetUMax() : sSurfUVDomain.GetUMin(),
+                                               (lCorner & 2) ? sSurfUVDomain.GetVMax() : sSurfUVDomain.GetVMin());
+                              SmPoint2d sThisStep(sCorner.x + .001 * sThisUVTan.x, sCorner.y + .001 * sThisUVTan.y);
+                              SmPoint2d sPrevStep(sCorner.x + .001 * sPrevUVTan.x, sCorner.y + .001 * sPrevUVTan.y);
+                              if(   sSurfUVDomain.ContainsPoint2d(sThisStep, SM_EFF_ZERO_PARAM)
+                                 && sSurfUVDomain.ContainsPoint2d(sPrevStep, SM_EFF_ZERO_PARAM))
+                                {
+                                  sUVGuess = sCorner;
+                                  bFoundCorner = TRUE;
+                                  break;
+                                }
+                            }
+                          SM_ASSERT_MSG(bFoundCorner, _T("SmVertexuse::ComputeUVPoint - no valid doubly periodic corner"));
+                          SM_REF1(bFoundCorner);
+                        }
                       // else our assumptions and tests are not properly detecting a SeamCurve with UVTrimCurves on different sides
                       else
                         { SM_ASSERT_MSG(FALSE,

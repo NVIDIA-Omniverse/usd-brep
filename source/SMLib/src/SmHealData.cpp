@@ -3541,8 +3541,8 @@ SmStatus SmHealData::Fix_DegenFaces
 
               // If the surface is closed, rebuild it correctly
               if ( ( bClosedU && bClosedV )   // torus
-                   || ( bClosedU && ( lSingularities & SM_SS_UMIN ) && ( lSingularities & SM_SS_UMAX ) )   // sphere
-                   || ( bClosedV && ( lSingularities & SM_SS_VMIN ) && ( lSingularities & SM_SS_VMAX ) ) ) // sphere
+                   || ( bClosedV && ( lSingularities & SM_SS_UMIN ) && ( lSingularities & SM_SS_UMAX ) )   // sphere
+                   || ( bClosedU && ( lSingularities & SM_SS_VMIN ) && ( lSingularities & SM_SS_VMAX ) ) ) // sphere
                 {
                   // Locals
                   ULONG       lIndx = 0 ;

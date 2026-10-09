@@ -916,8 +916,8 @@ SmStatus SmFaceProps::SetProps_Stage2
 
    // Closed pFace->Surface = Tori or Spheres
    m_bClosedSurf =   (m_bClosedU && m_bClosedV)  // torus
-                  || (m_bClosedU && (m_lPoles & SM_SS_UMIN) && (m_lPoles & SM_SS_UMAX))   // Sphere
-                  || (m_bClosedV && (m_lPoles & SM_SS_VMIN) && (m_lPoles & SM_SS_VMAX)) ; // Sphere
+                  || (m_bClosedV && (m_lPoles & SM_SS_UMIN) && (m_lPoles & SM_SS_UMAX))   // Sphere
+                  || (m_bClosedU && (m_lPoles & SM_SS_VMIN) && (m_lPoles & SM_SS_VMAX)) ; // Sphere
 
   // find any poles not marked by a vertex (this can be okay if the pole is not 'in' or 'on the boundary' of the Face
   // m_lNoVertexPoles

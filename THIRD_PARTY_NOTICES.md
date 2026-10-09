@@ -230,7 +230,7 @@ This product includes software developed at:
 
 ## Python Software Foundation - CPython runtime library - Python Software Foundation License Version 2
 
-Component: `python` (version 3.12.13), the runtime library only
+Component: `python` (version 3.12.15), the runtime library only
 
 Attribution Statements: The bundled OpenUSD libraries link against the CPython runtime
 library, so the release package ships it in `extraLibs/` (`python3.dll` and
@@ -239,9 +239,10 @@ does not ship the Python interpreter or the standard library; consumers supply t
 Python 3.12. The wheel does not ship any part of CPython. CPython incorporates third-party code; its "Licenses and Acknowledgements for
 Incorporated Software" (https://docs.python.org/3.12/license.html) is the authoritative
 source for those notices. On Windows, `python312.dll` also contains HACL*, which that page
-does not list for 3.12; its notice follows this entry. On Linux, `libpython3.12.so` also has
-zlib 1.3.2, bzip2 1.0.8 and liblzma 5.8.1 (XZ Utils) built in; their license texts are
-`zlib-LICENSE.txt`, `bzip2-LICENSE.txt` and `xz-LICENSE.txt` in `PACKAGE-LICENSES/Python/`.
+does not list for 3.12; its notice follows this entry. `python312.dll` also has zlib 1.3.2
+built in. On Linux, `libpython3.12.so` also has zlib 1.3.2, bzip2 1.0.8 and liblzma 5.8.3
+(XZ Utils) built in. Their license texts are `zlib-LICENSE.txt`, `bzip2-LICENSE.txt` and
+`xz-LICENSE.txt` in `PACKAGE-LICENSES/Python/`.
 Source code is available at https://github.com/python/cpython.
 The full license text is in `PACKAGE-LICENSES/OpenUSD/cpython-LICENSE.txt`.
 
@@ -303,14 +304,14 @@ Agreement.
 
 ## INRIA, CMU, Microsoft Corporation and HACL* Contributors - HACL* - MIT License
 
-Component: HACL* (CPython 3.12.13's `Modules/_hacl`, built into `python312.dll` on Windows)
+Component: HACL* (CPython 3.12.15's `Modules/_hacl`, built into `python312.dll` on Windows)
 
 Attribution Statements: CPython's Windows build compiles HACL*'s MD5, SHA-1, SHA-2 and SHA-3
 code into `python312.dll`, which the Windows release package ships in `extraLibs/`. The
 Linux `libpython3.12.so` does not contain it. Source code is available at
 https://github.com/hacl-star/hacl-star.
 
-License Text(https://github.com/python/cpython/blob/v3.12.13/Modules/_hacl/Hacl_Hash_SHA3.c)
+License Text(https://github.com/python/cpython/blob/v3.12.15/Modules/_hacl/Hacl_Hash_SHA3.c)
 
 ```
 MIT License

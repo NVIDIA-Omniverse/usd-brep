@@ -12394,6 +12394,10 @@ const                                           //      NULL to ignore, default:
 {
   // init return and output values
   ULONG lSingularities = SM_SS_NONE, lTest = 0;
+  // Exact-pole classification also uses the approximate-pole test below. Run it
+  // even when the caller does not request its output (in release as well as debug).
+  ULONG lLocalApproxSingularities = SM_SS_NONE;
+  if (plApproxSingularities == NULL) { plApproxSingularities = &lLocalApproxSingularities; }
   if ( pPolePoints  != NULL )         { pPolePoints ->ReSet() ; }
   if ( pPoleNormals != NULL )         { pPoleNormals->ReSet() ; }
   if ( plApproxSingularities != NULL) { *plApproxSingularities = SM_SS_NONE ; }
@@ -12413,11 +12417,6 @@ const                                           //      NULL to ignore, default:
   SmApproxTol3d sApproxTol3d = SmTol::GetApproxTol3d(this) ;
 
 #ifdef SM_DEBUG_CODE
-  // in Debug mode - always check ApproxSingularities
-  ULONG lLocalApproxSingularities ;
-  plApproxSingularities = plApproxSingularities ? plApproxSingularities : &lLocalApproxSingularities ;
- *plApproxSingularities = SM_SS_NONE ;
-
 SmBoolean bDebugMe = FALSE ;
   if(bDebugMe)
     {
