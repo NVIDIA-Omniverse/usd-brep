@@ -3493,6 +3493,8 @@ static constexpr SmBoolean bLogMe = FALSE ;
   SmSurfaceCache   *pSurfaceCache       = this;
   SmBezierAux2d    *pAux                = (SmBezierAux2d*)pNode->m_pData;
   SmPseudoBox       sPSBox, *pPSBox     = &sPSBox;
+  // Bezier patch boxes come from temporary BSpline surfaces with no face or brep.
+  double            dPseudoBoxExpansion = SM_ZONE_TOL_3D;
   gw_SURFACE       *pSur                = NULL;
   double            dUChordHeight, dVChordHeight, dUVChordHeight;
   double            dUAngDeg,      dVAngDeg;
@@ -3524,6 +3526,17 @@ static constexpr SmBoolean bLogMe = FALSE ;
       SM_ASSERT(   pAux->mBA_pSurface   
                 && pAux->mBA_pSurface->IsKindOf(SmBSplineSurface_TYPE)) ;
       pSur                 = ((SmBSplineSurface *)pAux->mBA_pSurface)->GetGwNurbPointer();
+
+      // Match the padding applied by SmBSplineSurface::CalculateBoundingBox.
+      const SmSurface *pBoxSurface = pAux->mBA_pSurface;
+      if (pBoxSurface->GetFace())
+        {
+          dPseudoBoxExpansion = (double)pBoxSurface->GetFace()->GetTolerance();
+        }
+      else if (pBoxSurface->GetBrep())
+        {
+          dPseudoBoxExpansion = (double)pBoxSurface->GetBrep()->GetTolerance();
+        }
 
       if (!bBothTolerancesSatisfied) 
         {
@@ -3579,7 +3592,9 @@ static constexpr SmBoolean bLogMe = FALSE ;
     {
       SmExtent1d sIvl1, sIvl2, sIvl3;
       pPSBox->GetIntervals(sIvl1,sIvl2,sIvl3);
-      double dHeight = sIvl3.GetLength();
+      // Remove padding from both sides before testing geometric chord error.
+      // The cached boxes stay expanded for intersection and point queries.
+      double dHeight = smos_Max(0.0, sIvl3.GetLength() - 2.0 * dPseudoBoxExpansion);
       if (dHeight*dHeight <= dChordHeightSquared) 
         { 
           pAux->m_bChordHeightSatisfied = TRUE ;
