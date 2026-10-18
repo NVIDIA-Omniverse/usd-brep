@@ -22368,7 +22368,9 @@ SmBoolean SmSurface::IsPlanar
  const
 { // test for planarity on Surface PseudoBox
   SmPseudoBox sPseudoBox ;
-  CalculateBoundingBox(GetNaturalUVDomain(), NULL, &sPseudoBox, NULL) ;
+  // Collision padding is unrelated to geometric deviation from a plane. Including it
+  // rejects exact planar NURBS whenever the requested tolerance is below the zone tolerance.
+  CalculateBoundingBox(GetNaturalUVDomain(), NULL, &sPseudoBox, NULL, NULL, NULL, FALSE) ;
   return(sPseudoBox.IsPlanar(dTol3d, pOptPlanePoint,
                              pOptPlaneNormal, pOptActualDeviation)) ;
 
