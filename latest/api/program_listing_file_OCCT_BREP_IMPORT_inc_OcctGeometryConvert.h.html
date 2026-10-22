@@ -47,7 +47,7 @@
 
 
     <script rel="preload" src="../_static/modal-table.js"></script>
-    <script src="../_static/documentation_options.js?v=a12e3537"></script>
+    <script src="../_static/documentation_options.js?v=c5e1e573"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -57,7 +57,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '1.0.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '1.0.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -75,7 +75,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
-    <meta name="docbuild:last-update" content="Oct 09, 2026"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2026"/>
   
     
     <script src="../_static/searchtools.js"></script>
@@ -382,6 +382,7 @@
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../docs/python.html">USD BRep Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/gallery.html">Gallery</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="api.html">USD BRep C++ API</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="classes.html">Classes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="classBrepStagingState.html">BrepStagingState</a></li>
@@ -875,6 +876,18 @@
 <li class="toctree-l4"><a class="reference internal" href="define_SmApiUsdConfig_8h_1af50a632b38979e957eb085932453b657.html">SM_API_USD_EXPORT</a></li>
 </ul>
 </details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdGeometryValidate.h.html">SmApiUsdGeometryValidate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdGeometryValidate.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdGeometryValidate_8h_1af53116a06a3e662eae40f85dfb24dcef.html">SmApiUsdGeometryValidate</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdHeal.h.html">SmApiUsdHeal.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdHeal.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdHeal_8h_1a29fa2cc262b87b72fc1f1d71053b3fe7.html">SmApiUsdFindBrepArraySites</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdHeal_8h_1ace303456e61d91da816010722b0de299.html">SmApiUsdHealBrepArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdHeal_8h_1a0c9188b35efd322615018d8c6ccf8202.html">SmApiUsdWriteHealedBrepArray</a></li>
+</ul>
+</details></li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdTessellate.h.html">SmApiUsdTessellate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdTessellate.h.html">Source file</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdTessellate_8h_1af892bbf100ef5c40ac1e27df0cbe91cb.html">SmApiUsdTessellateBrepArray</a></li>
@@ -1053,11 +1066,13 @@
 <li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1a5fb205c57805dee35e70a9957c6986b5.html">EShapeType</a></li>
 <li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1ac477693c7a79b382aa965b605edcfede.html">ESurfaceType</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a8f5791715ecc3a7b8a1498ace3666008.html">EvalCurve3dPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ae3175c4f4f5b9e0c3a36ceabeec441ad.html">EvalCurve3dPoint</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a6936814fa40624bfe8725ecfc3121ba3.html">ExportBrepArrayToFile</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ad83d138dcfd5139b9cf95cd784dd8904.html">ExportBrepArrayToText</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a4c9bb2e4e91afaf5529606c63fb99333.html">IsBinaryOcct</a></li>
 <li class="toctree-l4"><a class="reference internal" href="classocct_1_1OcctFileSource.html">OcctFileSource</a></li>
 <li class="toctree-l4"><a class="reference internal" href="classocct_1_1OcctStagingDriver.html">OcctStagingDriver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a02de95904ad4b05ba74fe047739979a6.html">PrepareCurve3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ac2e1a59c0ff5489eea30feb872774a29.html">ReadOcct</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a2b658d22a199cb9fa3310fd2feaa8787.html">ReadOcctBinary</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a553d05fbf7c7ba031631430aa56807e3.html">ResolveLocation</a></li>
@@ -1076,6 +1091,7 @@
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPointRepr.html">SPointRepr</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPolygon3d.html">SPolygon3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPolygonOnTriangulation.html">SPolygonOnTriangulation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPreparedCurve3d.html">SPreparedCurve3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SShapeRecord.html">SShapeRecord</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SSubShapeRef.html">SSubShapeRef</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SSurface.html">SSurface</a></li>
@@ -1090,7 +1106,11 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="structs.html">Structs</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepArrayHealResult.html">SmApiUsdBrepArrayHealResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepArraySite.html">SmApiUsdBrepArraySite</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepImportResult.html">SmApiUsdBrepImportResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdGeometryFailure.html">SmApiUsdGeometryFailure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdGeometryResult.html">SmApiUsdGeometryResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdHealedBrepArray.html">SmApiUsdHealedBrepArray</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdMeshTessellationResult.html">SmApiUsdMeshTessellationResult</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdTessellatedBrep.html">SmApiUsdTessellatedBrep</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmTessellationParams.html">SmTessellationParams</a></li>
@@ -1207,6 +1227,9 @@
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;pxr/base/gf/matrix4d.h&gt;</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;pxr/base/gf/range1d.h&gt;</span>
 <span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;pxr/base/gf/range2d.h&gt;</span>
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;pxr/base/gf/vec3d.h&gt;</span>
+
+<span class="cp">#include</span><span class="w"> </span><span class="cpf">&lt;vector&gt;</span>
 
 <span class="k">namespace</span><span class="w"> </span><span class="nn">occt</span>
 <span class="p">{</span>
@@ -1260,6 +1283,23 @@
 <span class="c1">// exact; Bezier/BSpline are evaluated via de Boor (rational + periodic aware). Trimmed/Offset are</span>
 <span class="c1">// resolved to their basis. Used to sample edge geometry for domain bounding.</span>
 <span class="n">pxr</span><span class="o">::</span><span class="n">GfVec3d</span><span class="w"> </span><span class="nf">EvalCurve3dPoint</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">SCurve3d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">rCurve</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">pxr</span><span class="o">::</span><span class="n">GfMatrix4d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">rTransform</span><span class="p">,</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">t</span><span class="p">);</span>
+
+<span class="c1">// A 3D curve prepared for repeated evaluation. EvalCurve3dPoint rebuilds a Bezier/BSpline&#39;s pole,</span>
+<span class="c1">// weight and flat knot arrays on every call, which costs time linear in the curve&#39;s size;</span>
+<span class="c1">// PrepareCurve3d builds them once. Other curves are evaluated by EvalCurve3dPoint as before.</span>
+<span class="k">struct</span><span class="w"> </span><span class="nc">SPreparedCurve3d</span>
+<span class="p">{</span>
+<span class="w">    </span><span class="k">const</span><span class="w"> </span><span class="n">SCurve3d</span><span class="o">*</span><span class="w"> </span><span class="n">pCurve</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">nullptr</span><span class="p">;</span>
+<span class="w">    </span><span class="n">pxr</span><span class="o">::</span><span class="n">GfMatrix4d</span><span class="w"> </span><span class="n">sTransform</span><span class="p">;</span>
+<span class="w">    </span><span class="kt">bool</span><span class="w"> </span><span class="n">bBSpline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">false</span><span class="p">;</span><span class="w"> </span><span class="c1">// the de Boor arrays below are set (local space, periodic poles unrolled)</span>
+<span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">iDegree</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">pxr</span><span class="o">::</span><span class="n">GfVec3d</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vPoles</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vWeights</span><span class="p">;</span>
+<span class="w">    </span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="w"> </span><span class="n">vKnots</span><span class="p">;</span><span class="w"> </span><span class="c1">// flat</span>
+<span class="p">};</span>
+
+<span class="n">SPreparedCurve3d</span><span class="w"> </span><span class="nf">PrepareCurve3d</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">SCurve3d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">rCurve</span><span class="p">,</span><span class="w"> </span><span class="k">const</span><span class="w"> </span><span class="n">pxr</span><span class="o">::</span><span class="n">GfMatrix4d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">rTransform</span><span class="p">);</span>
+<span class="n">pxr</span><span class="o">::</span><span class="n">GfVec3d</span><span class="w"> </span><span class="nf">EvalCurve3dPoint</span><span class="p">(</span><span class="k">const</span><span class="w"> </span><span class="n">SPreparedCurve3d</span><span class="o">&amp;</span><span class="w"> </span><span class="n">rCurve</span><span class="p">,</span><span class="w"> </span><span class="kt">double</span><span class="w"> </span><span class="n">t</span><span class="p">);</span>
 
 <span class="p">}</span><span class="w"> </span><span class="c1">// namespace occt</span>
 
@@ -1349,7 +1389,7 @@
 </div>
       
         <div class="footer-item"><p class="last-updated">
-  Last updated on Oct 09, 2026.
+  Last updated on Oct 21, 2026.
   <br/>
 </p></div>
       

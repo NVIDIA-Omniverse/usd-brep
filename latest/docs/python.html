@@ -37,6 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
     <link rel="stylesheet" type="text/css" href="../_static/api.css?v=6f210184" />
     <link rel="stylesheet" type="text/css" href="../_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="../_static/brep-mesh/viewer.css?v=390c3b15" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=7f76b32a3354e82990f2"></script>
@@ -47,17 +48,19 @@
 
 
     <script rel="preload" src="../_static/modal-table.js"></script>
-    <script src="../_static/documentation_options.js?v=a12e3537"></script>
+    <script src="../_static/documentation_options.js?v=c5e1e573"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=65e89d2a"></script>
     <script src="../_static/design-tabs.js?v=f930bc37"></script>
+    <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"}}</script>
+    <script type="module" src="../_static/brep-mesh/viewer.js?v=c836b00f"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'docs/python';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '1.0.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '1.0.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,14 +71,14 @@
 
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="USD BRep C++ API" href="../api/api.html" />
+    <link rel="next" title="Gallery" href="gallery.html" />
     <link rel="prev" title="USD BRep" href="../index.html" />
 
 
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
-    <meta name="docbuild:last-update" content="Oct 09, 2026"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2026"/>
   
     
     <script src="../_static/searchtools.js"></script>
@@ -386,6 +389,7 @@
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">USD BRep Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gallery.html">Gallery</a></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../api/api.html">USD BRep C++ API</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../api/classes.html">Classes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../api/classBrepStagingState.html">BrepStagingState</a></li>
@@ -879,6 +883,18 @@
 <li class="toctree-l4"><a class="reference internal" href="../api/define_SmApiUsdConfig_8h_1af50a632b38979e957eb085932453b657.html">SM_API_USD_EXPORT</a></li>
 </ul>
 </details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../api/file_SM_API_USD_inc_SmApiUsdGeometryValidate.h.html">SmApiUsdGeometryValidate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../api/program_listing_file_SM_API_USD_inc_SmApiUsdGeometryValidate.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/function_SmApiUsdGeometryValidate_8h_1af53116a06a3e662eae40f85dfb24dcef.html">SmApiUsdGeometryValidate</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../api/file_SM_API_USD_inc_SmApiUsdHeal.h.html">SmApiUsdHeal.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="../api/program_listing_file_SM_API_USD_inc_SmApiUsdHeal.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/function_SmApiUsdHeal_8h_1a29fa2cc262b87b72fc1f1d71053b3fe7.html">SmApiUsdFindBrepArraySites</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/function_SmApiUsdHeal_8h_1ace303456e61d91da816010722b0de299.html">SmApiUsdHealBrepArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/function_SmApiUsdHeal_8h_1a0c9188b35efd322615018d8c6ccf8202.html">SmApiUsdWriteHealedBrepArray</a></li>
+</ul>
+</details></li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="../api/file_SM_API_USD_inc_SmApiUsdTessellate.h.html">SmApiUsdTessellate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l4"><a class="reference internal" href="../api/program_listing_file_SM_API_USD_inc_SmApiUsdTessellate.h.html">Source file</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_SmApiUsdTessellate_8h_1af892bbf100ef5c40ac1e27df0cbe91cb.html">SmApiUsdTessellateBrepArray</a></li>
@@ -1057,11 +1073,13 @@
 <li class="toctree-l4"><a class="reference internal" href="../api/enum_namespaceocct_1a5fb205c57805dee35e70a9957c6986b5.html">EShapeType</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/enum_namespaceocct_1ac477693c7a79b382aa965b605edcfede.html">ESurfaceType</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1a8f5791715ecc3a7b8a1498ace3666008.html">EvalCurve3dPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1ae3175c4f4f5b9e0c3a36ceabeec441ad.html">EvalCurve3dPoint</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1a6936814fa40624bfe8725ecfc3121ba3.html">ExportBrepArrayToFile</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1ad83d138dcfd5139b9cf95cd784dd8904.html">ExportBrepArrayToText</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1a4c9bb2e4e91afaf5529606c63fb99333.html">IsBinaryOcct</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/classocct_1_1OcctFileSource.html">OcctFileSource</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/classocct_1_1OcctStagingDriver.html">OcctStagingDriver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1a02de95904ad4b05ba74fe047739979a6.html">PrepareCurve3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1ac2e1a59c0ff5489eea30feb872774a29.html">ReadOcct</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1a2b658d22a199cb9fa3310fd2feaa8787.html">ReadOcctBinary</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/function_namespaceocct_1a553d05fbf7c7ba031631430aa56807e3.html">ResolveLocation</a></li>
@@ -1080,6 +1098,7 @@
 <li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SPointRepr.html">SPointRepr</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SPolygon3d.html">SPolygon3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SPolygonOnTriangulation.html">SPolygonOnTriangulation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SPreparedCurve3d.html">SPreparedCurve3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SShapeRecord.html">SShapeRecord</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SSubShapeRef.html">SSubShapeRef</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../api/structocct_1_1SSurface.html">SSurface</a></li>
@@ -1094,7 +1113,11 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../api/structs.html">Structs</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdBrepArrayHealResult.html">SmApiUsdBrepArrayHealResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdBrepArraySite.html">SmApiUsdBrepArraySite</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdBrepImportResult.html">SmApiUsdBrepImportResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdGeometryFailure.html">SmApiUsdGeometryFailure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdGeometryResult.html">SmApiUsdGeometryResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdHealedBrepArray.html">SmApiUsdHealedBrepArray</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdMeshTessellationResult.html">SmApiUsdMeshTessellationResult</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/structSmApiUsdTessellatedBrep.html">SmApiUsdTessellatedBrep</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../api/structSmTessellationParams.html">SmTessellationParams</a></li>
@@ -1221,6 +1244,64 @@ omniSolid schema, both of which a bare <code class="docutils literal notranslate
 omniSolid schema plugin, and OpenUSD ignores schema plugins registered after it
 has loaded its schema types. Otherwise, set <code class="docutils literal notranslate"><span class="pre">PXR_PLUGINPATH_NAME</span></code> to the
 omniSolid <code class="docutils literal notranslate"><span class="pre">resources</span></code> directory.</p>
+</section>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading">#</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">Examples/PyAPI/round_corner_pipe.py</span></code> builds a bounded rectangular pipe with spherical corners from
+a planar sweep, primitives, transforms and exact booleans:</p>
+<div class="brep-mesh" data-src="../_static/brep-mesh/models/round_corner_pipe_b9663644.glb"><canvas></canvas><div class="bar"><button data-mode="shaded">Shaded</button><button data-mode="both">Shaded + edges</button><button data-mode="edges">Edges</button></div><div class="info"></div></div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">build_round_corner_pipe</span><span class="p">(</span><span class="n">path_curves</span><span class="p">,</span> <span class="n">radius</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build the bounded OCP-style rectangular pipe composition.</span>
+
+<span class="sd">    ``path_curves`` are borrowed and remain unchanged. Boolean operations</span>
+<span class="sd">    consume only temporary bodies created inside this function.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">world_corners</span><span class="p">,</span> <span class="n">world_directions</span> <span class="o">=</span> <span class="n">_validate_rectangular_path</span><span class="p">(</span>
+        <span class="n">path_curves</span><span class="p">,</span> <span class="n">radius</span><span class="p">)</span>
+
+    <span class="c1"># Construct in a canonical XY frame, then rigidly place the result. This</span>
+    <span class="c1"># keeps the reference numerics independent of the rectangle&#39;s world-space</span>
+    <span class="c1"># orientation while leaving the caller&#39;s Curve handles untouched.</span>
+    <span class="n">origin</span> <span class="o">=</span> <span class="n">world_corners</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">x_axis</span> <span class="o">=</span> <span class="n">world_directions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">y_axis</span> <span class="o">=</span> <span class="n">world_directions</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">z_axis</span> <span class="o">=</span> <span class="n">_unit</span><span class="p">(</span><span class="n">_cross</span><span class="p">(</span><span class="n">x_axis</span><span class="p">,</span> <span class="n">y_axis</span><span class="p">))</span>
+    <span class="n">local_corners</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">corner</span> <span class="ow">in</span> <span class="n">world_corners</span><span class="p">:</span>
+        <span class="n">relative</span> <span class="o">=</span> <span class="n">_subtract</span><span class="p">(</span><span class="n">corner</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+        <span class="n">local_corners</span><span class="o">.</span><span class="n">append</span><span class="p">((</span>
+            <span class="n">_dot</span><span class="p">(</span><span class="n">relative</span><span class="p">,</span> <span class="n">x_axis</span><span class="p">),</span>
+            <span class="n">_dot</span><span class="p">(</span><span class="n">relative</span><span class="p">,</span> <span class="n">y_axis</span><span class="p">),</span>
+            <span class="n">_dot</span><span class="p">(</span><span class="n">relative</span><span class="p">,</span> <span class="n">z_axis</span><span class="p">),</span>
+        <span class="p">))</span>
+    <span class="n">local_path_curves</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">sm</span><span class="o">.</span><span class="n">create_line_segment</span><span class="p">(</span>
+            <span class="n">local_corners</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">local_corners</span><span class="p">[(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="mi">4</span><span class="p">])</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+    <span class="p">]</span>
+    <span class="n">corners</span><span class="p">,</span> <span class="n">directions</span> <span class="o">=</span> <span class="n">_validate_rectangular_path</span><span class="p">(</span>
+        <span class="n">local_path_curves</span><span class="p">,</span> <span class="n">radius</span><span class="p">)</span>
+
+    <span class="n">profile</span> <span class="o">=</span> <span class="n">sm</span><span class="o">.</span><span class="n">create_circle</span><span class="p">((</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="n">radius</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">sm</span><span class="o">.</span><span class="n">sweep_along_planar_path</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">profile</span><span class="p">],</span>
+        <span class="n">local_path_curves</span><span class="p">,</span>
+        <span class="n">move_profile</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">cap_ends</span><span class="o">=</span><span class="n">sm</span><span class="o">.</span><span class="n">CapEnds</span><span class="o">.</span><span class="n">NONE</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">corner</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">corners</span><span class="p">):</span>
+        <span class="n">cutter</span> <span class="o">=</span> <span class="n">_create_round_corner_cutter</span><span class="p">(</span>
+            <span class="n">corner</span><span class="p">,</span> <span class="n">directions</span><span class="p">[</span><span class="n">index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span> <span class="n">directions</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">radius</span><span class="p">)</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">sm</span><span class="o">.</span><span class="n">boolean_difference</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">cutter</span><span class="p">)</span>
+
+    <span class="n">sm</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">sm</span><span class="o">.</span><span class="n">Axis2Placement</span><span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">x_axis</span><span class="p">,</span> <span class="n">y_axis</span><span class="p">))</span>
+
+    <span class="n">volume</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">volume</span><span class="p">(</span><span class="n">relative_accuracy</span><span class="o">=</span><span class="mf">1.0e-8</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">result</span><span class="o">.</span><span class="n">is_manifold_solid</span><span class="p">()</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span> <span class="ow">or</span> <span class="n">volume</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;round-corner composition did not produce a material solid&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+</pre></div>
+</div>
 </section>
 <section id="module-usd_brep">
 <span id="reference"></span><h2>Reference<a class="headerlink" href="#module-usd_brep" title="Link to this heading">#</a></h2>
@@ -2034,7 +2115,8 @@ Use <code class="docutils literal notranslate"><span class="pre">brep_distance</
 chamfer face, between the lines where it meets the two
 adjacent faces. It is not the setback along each face: at a
 90-degree edge each face is cut back by radius / sqrt(2).
-Must be positive and smaller than the minimum adjacent face
+Must be at least 8 times the Brep tolerance (8e-5 by default)
+and smaller than the minimum adjacent face
 dimension.</p></li>
 </ul>
 </dd>
@@ -2072,7 +2154,8 @@ it is the setback.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>brep</strong> – Brep to fillet in place.</p></li>
-<li><p><strong>radius</strong> – Fillet radius. Must be positive and smaller than the
+<li><p><strong>radius</strong> – Fillet radius. Must be at least 8 times the Brep
+tolerance (8e-5 by default) and smaller than the
 minimum adjacent face dimension. Rule of thumb: at most one
 third of the smallest adjacent face dimension to avoid
 adjacent fillets colliding.</p></li>
@@ -2112,10 +2195,10 @@ adjacent fillets colliding.</p></li>
 <li><p><strong>brep</strong> – Manifold-solid Brep. Behaviour is undefined for sheet
 bodies (open shells); validate with <code class="docutils literal notranslate"><span class="pre">is_manifold_solid</span></code>
 first if uncertain.</p></li>
-<li><p><strong>relative_accuracy</strong> – Numerical-integration accuracy. Must be
-between <code class="docutils literal notranslate"><span class="pre">1.0e-1</span></code> (coarse, fast) and <code class="docutils literal notranslate"><span class="pre">1.0e-8</span></code> (fine,
-slow). Defaults to <code class="docutils literal notranslate"><span class="pre">1.0e-3</span></code>; non-finite values raise
-<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p></li>
+<li><p><strong>relative_accuracy</strong> – Numerical-integration accuracy passed to the
+kernel. Defaults to <code class="docutils literal notranslate"><span class="pre">1.0e-3</span></code>. Values below <code class="docutils literal notranslate"><span class="pre">1.0e-8</span></code> are
+not recommended because roundoff can prevent convergence;
+non-finite values raise <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -3179,7 +3262,8 @@ by the input loops.</p>
 pass a plane normal. Multiple coplanar loops produce one face per
 loop (or with-holes faces if loops nest), all packed into a single
 Brep. Returns a sheet body (open shell), not a manifold solid -
-use <code class="docutils literal notranslate"><span class="pre">linear_sweep</span></code> to extrude into a solid.</p>
+use <code class="docutils literal notranslate"><span class="pre">linear_sweep</span></code> to extrude into a solid. Endpoint matching
+uses the new Brep’s default tolerance, which cannot be set.</p>
 <dl class="field-list simple">
 <dt class="field-odd">See Also<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -3432,7 +3516,9 @@ edges.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>faces</strong> – Sequence of faces whose boundary loops should be lofted between.</p></li>
 <li><p><strong>degree</strong> – Degree in the loft direction. <code class="docutils literal notranslate"><span class="pre">1</span></code> = linear (default),
-<code class="docutils literal notranslate"><span class="pre">2</span></code> = quadratic, <code class="docutils literal notranslate"><span class="pre">3</span></code> = cubic. Must be 1, 2, or 3.</p></li>
+<code class="docutils literal notranslate"><span class="pre">2</span></code> = quadratic, <code class="docutils literal notranslate"><span class="pre">3</span></code> = cubic. Must be from 1 to 17; any
+other degree raises <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>. A degree of <code class="docutils literal notranslate"><span class="pre">len(faces)</span></code>
+or more is lowered to <code class="docutils literal notranslate"><span class="pre">len(faces)</span> <span class="pre">-</span> <span class="pre">1</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -3807,7 +3893,11 @@ surface of revolution.</p></li>
 <p class="rubric">Notes</p>
 <p>The generatrix should not cross the rotation axis - that produces
 self-intersection. The result is a standalone surface, not a
-solid; for a solid of revolution use <code class="docutils literal notranslate"><span class="pre">rotational_sweep</span></code>.</p>
+solid; for a solid of revolution use <code class="docutils literal notranslate"><span class="pre">rotational_sweep</span></code>.
+Only the first surface of the revolved result is returned. The
+revolve splits the curve at interior tangent discontinuities
+(kinks) and revolves each piece separately, so for a kinked curve
+use <code class="docutils literal notranslate"><span class="pre">rotational_sweep</span></code> to get every piece.</p>
 <dl class="field-list simple">
 <dt class="field-odd">See Also<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -3843,8 +3933,14 @@ solid; for a solid of revolution use <code class="docutils literal notranslate">
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Surface</p>
 </dd>
-<dt class="field-even">See Also<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
+</dl>
+<p class="rubric">Notes</p>
+<p>The profile is reoriented along the path (not only translated),
+and the result is a B-spline approximation within a fixed
+tolerance of 1e-5 model units. Neither can be changed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">See Also<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
 <li><p><strong>create_extrude_surface</strong> – Sweep along a straight vector.</p></li>
 <li><p><strong>create_surface_revolution</strong> – Sweep around an axis.</p></li>
 <li><p><strong>pipe_sweep</strong> – Solid pipe along a path.</p></li>
@@ -4582,9 +4678,10 @@ may be flipped relative to the face’s outward normal.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>face</strong> – Face to query. Not modified.</p></li>
-<li><p><strong>relative_accuracy</strong> – Numerical-integration accuracy in
-<code class="docutils literal notranslate"><span class="pre">[1e-4,</span> <span class="pre">1e-1]</span></code>. Defaults to <code class="docutils literal notranslate"><span class="pre">1e-3</span></code>. Out-of-range
-values are clamped.</p></li>
+<li><p><strong>relative_accuracy</strong> – Numerical-integration accuracy passed to the
+kernel. Defaults to <code class="docutils literal notranslate"><span class="pre">1e-3</span></code>. Values below <code class="docutils literal notranslate"><span class="pre">1e-8</span></code> are not
+recommended because roundoff can prevent convergence;
+non-finite values raise <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -4663,7 +4760,8 @@ returns the loose face-level box.</p></li>
 <li><p><strong>brep</strong> – Brep to fillet in place.</p></li>
 <li><p><strong>edges</strong> – Edges of <code class="docutils literal notranslate"><span class="pre">brep</span></code> to fillet (typically a subset of
 <code class="docutils literal notranslate"><span class="pre">brep.edges()</span></code>).</p></li>
-<li><p><strong>radius</strong> – Fillet radius. Must be positive. Keyword-only.</p></li>
+<li><p><strong>radius</strong> – Fillet radius. Must be at least 8 times the Brep
+tolerance (8e-5 by default). Keyword-only.</p></li>
 <li><p><strong>xsect_type</strong> – Cross-section integer: <code class="docutils literal notranslate"><span class="pre">0</span></code> = linear (not the
 constant-distance <code class="docutils literal notranslate"><span class="pre">chamfer_fillet</span></code> solver), <code class="docutils literal notranslate"><span class="pre">1</span></code> = circular
 (default), <code class="docutils literal notranslate"><span class="pre">2</span></code> = blend (variable continuity blend curve).
@@ -4722,7 +4820,8 @@ the Brep.</p></li>
 <li><p><strong>brep</strong> – Brep to fillet in place.</p></li>
 <li><p><strong>edges</strong> – Edges to fillet.</p></li>
 <li><p><strong>radii</strong> – Per-edge fillet radius. Length must equal <code class="docutils literal notranslate"><span class="pre">len(edges)</span></code>.
-Each value must be positive.</p></li>
+Each value must be at least 8 times the Brep tolerance
+(8e-5 by default).</p></li>
 <li><p><strong>xsect_types</strong> – Per-edge cross-section as a list of
 <code class="docutils literal notranslate"><span class="pre">FilletXSect</span></code> values. Length must equal <code class="docutils literal notranslate"><span class="pre">len(edges)</span></code>.</p></li>
 <li><p><strong>continuity</strong> – For blend cross-sections: <code class="docutils literal notranslate"><span class="pre">1</span></code> = G1, <code class="docutils literal notranslate"><span class="pre">2</span></code> = G2,
@@ -5222,9 +5321,16 @@ two input curves.</p>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>tuple[list[tuple[float, float, float]], list[float], list[float]]</p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – if the curves do not intersect (<code class="docutils literal notranslate"><span class="pre">SM_ERR</span></code>), or if
+    the intersection fails.</p>
+</dd>
 </dl>
 <p class="rubric">Notes</p>
-<p>Useful for finding profile crossings, computing trim
+<p>Uses a fixed absolute tolerance of 0.001 model units. Passing the
+same curve twice finds its self-intersections. An overlapping
+stretch is reported by its start point only.
+Useful for finding profile crossings, computing trim
 parameters, and building intersection graphs.</p>
 <dl class="field-list simple">
 <dt class="field-odd">See Also<span class="colon">:</span></dt>
@@ -5404,8 +5510,10 @@ input.</p>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>curves</strong> – Profile curves. For a manifold solid the curves must form
 a closed planar loop; open curves produce a sheet body.</p></li>
-<li><p><strong>direction</strong> – Sweep direction as <code class="docutils literal notranslate"><span class="pre">(dx,</span> <span class="pre">dy,</span> <span class="pre">dz)</span></code>. Magnitude is
-ignored - the actual sweep length is <code class="docutils literal notranslate"><span class="pre">distance</span></code>.</p></li>
+<li><p><strong>direction</strong> – Sweep direction as <code class="docutils literal notranslate"><span class="pre">(dx,</span> <span class="pre">dy,</span> <span class="pre">dz)</span></code>; must be non-zero.
+Magnitude is ignored - the actual sweep length is <code class="docutils literal notranslate"><span class="pre">distance</span></code>.
+It need not be perpendicular to the profile plane: an oblique
+direction gives a sheared prism.</p></li>
 <li><p><strong>distance</strong> – Sweep length, in modeling units. Must be non-zero.</p></li>
 <li><p><strong>cap_ends</strong> – If <code class="docutils literal notranslate"><span class="pre">True</span></code> (default), close both ends with planar cap
 faces (manifold solid). <code class="docutils literal notranslate"><span class="pre">False</span></code> produces an open shell.
@@ -5418,8 +5526,12 @@ Keyword-only.</p></li>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Brep</p>
 </dd>
-<dt class="field-even">See Also<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
+</dl>
+<p class="rubric">Notes</p>
+<p>The result Brep uses the default tolerance, which cannot be set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">See Also<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
 <li><p><strong>rotational_sweep</strong> – Revolve a profile about an axis.</p></li>
 <li><p><strong>draft_sweep</strong> – Extrude with a draft angle (taper).</p></li>
 <li><p><strong>linear_sweep_with_repetitions</strong> – Multiple end-to-end linear sweeps.</p></li>
@@ -5450,8 +5562,8 @@ Keyword-only.</p></li>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>curves</strong> – Profile curves (closed loop for a manifold result).</p></li>
-<li><p><strong>direction</strong> – Sweep direction as <code class="docutils literal notranslate"><span class="pre">(dx,</span> <span class="pre">dy,</span> <span class="pre">dz)</span></code>. Magnitude is
-ignored.</p></li>
+<li><p><strong>direction</strong> – Sweep direction as <code class="docutils literal notranslate"><span class="pre">(dx,</span> <span class="pre">dy,</span> <span class="pre">dz)</span></code>; must be non-zero.
+Magnitude is ignored.</p></li>
 <li><p><strong>distance</strong> – Length of each individual sweep step. Must be non-zero.</p></li>
 <li><p><strong>repetitions</strong> – Number of end-to-end sweeps. Must be at least 1.
 Keyword-only.</p></li>
@@ -6536,11 +6648,15 @@ owning topology or context. Non-B-spline curves are unchanged.</p>
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><p><strong>brep</strong> – Brep to defeature in place.</p>
 </dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>RuntimeError</strong> – A fillet could not be removed. Removed fillets stay
+    removed.</p>
+</dd>
 </dl>
 <p class="rubric">Notes</p>
-<p>Acts on the entire Brep; the kernel detects fillet faces by
-geometric heuristics and removes them, repairing the surrounding
-faces back to their pre-fillet topology where possible.</p>
+<p>Acts on the entire Brep; fillets are faces with tangent rail edges.
+Fillets meeting at rounded corners are removed with their corner
+faces by extending the faces around them.</p>
 <dl class="field-list simple">
 <dt class="field-odd">See Also<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -6793,7 +6909,8 @@ handle remains live. Release and reacquire those handles, or scale a
 <li><p><strong>vertices</strong> – Corner vertices that get a bevel instead of a rounded
 corner. Each must be a corner where filleted edges meet.
 Keyword-only.</p></li>
-<li><p><strong>radius</strong> – Constant fillet radius. Keyword-only.</p></li>
+<li><p><strong>radius</strong> – Constant fillet radius. Must be at least 8 times the
+Brep tolerance (8e-5 by default). Keyword-only.</p></li>
 </ul>
 </dd>
 </dl>
@@ -7748,9 +7865,10 @@ arrived from import with inconsistent orientation.</p>
 <li><p><strong>brep</strong> – Brep to fillet in place.</p></li>
 <li><p><strong>edges</strong> – Edges to fillet.</p></li>
 <li><p><strong>start_radius</strong> – Fillet radius at the start of each edge. Must be
-positive. Keyword-only.</p></li>
-<li><p><strong>end_radius</strong> – Fillet radius at the end of each edge. Must be
-positive. Keyword-only.</p></li>
+at least 8 times the Brep tolerance (8e-5 by default).
+Keyword-only.</p></li>
+<li><p><strong>end_radius</strong> – Fillet radius at the end of each edge. Same minimum.
+Keyword-only.</p></li>
 <li><p><strong>xsect_type</strong> – Cross-section integer: <code class="docutils literal notranslate"><span class="pre">0</span></code> = linear, <code class="docutils literal notranslate"><span class="pre">1</span></code> =
 circular (default), <code class="docutils literal notranslate"><span class="pre">2</span></code> = blend. These are not the
 <code class="docutils literal notranslate"><span class="pre">FilletXSect</span></code> values: <code class="docutils literal notranslate"><span class="pre">FilletXSect.LINEAR</span></code> is <code class="docutils literal notranslate"><span class="pre">1</span></code> and
@@ -7820,11 +7938,11 @@ along each selected edge.</p>
       </div>
     </a>
     <a class="right-next"
-       href="../api/api.html"
+       href="gallery.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">USD BRep C++ API</p>
+        <p class="prev-next-title">Gallery</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -7851,6 +7969,7 @@ along each selected edge.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#installing">Installing</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#using-the-python-api">Using the Python API</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#example">Example</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#module-usd_brep">Reference</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#usd_brep.BSplineCurveForm"><code class="docutils literal notranslate"><span class="pre">BSplineCurveForm</span></code></a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#usd_brep.BSplineCurveForm.name"><code class="docutils literal notranslate"><span class="pre">name</span></code></a></li>
@@ -8098,7 +8217,7 @@ along each selected edge.</p>
 </div>
       
         <div class="footer-item"><p class="last-updated">
-  Last updated on Oct 09, 2026.
+  Last updated on Oct 21, 2026.
   <br/>
 </p></div>
       

@@ -47,7 +47,7 @@
 
 
     <script rel="preload" src="../_static/modal-table.js"></script>
-    <script src="../_static/documentation_options.js?v=a12e3537"></script>
+    <script src="../_static/documentation_options.js?v=c5e1e573"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -57,7 +57,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.17.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = '../versions1.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '1.0.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = '1.0.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -75,7 +75,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   <meta name="docsearch:version" content="" />
-    <meta name="docbuild:last-update" content="Oct 09, 2026"/>
+    <meta name="docbuild:last-update" content="Oct 21, 2026"/>
   
     
     <script src="../_static/searchtools.js"></script>
@@ -382,6 +382,7 @@
   <div class="bd-toc-item navbar-nav"><p aria-level="2" class="caption" role="heading"><span class="caption-text">Contents</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../docs/python.html">USD BRep Python API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docs/gallery.html">Gallery</a></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="api.html">USD BRep C++ API</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 has-children"><a class="reference internal" href="classes.html">Classes</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="classBrepStagingState.html">BrepStagingState</a></li>
@@ -875,6 +876,18 @@
 <li class="toctree-l4"><a class="reference internal" href="define_SmApiUsdConfig_8h_1af50a632b38979e957eb085932453b657.html">SM_API_USD_EXPORT</a></li>
 </ul>
 </details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdGeometryValidate.h.html">SmApiUsdGeometryValidate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdGeometryValidate.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdGeometryValidate_8h_1af53116a06a3e662eae40f85dfb24dcef.html">SmApiUsdGeometryValidate</a></li>
+</ul>
+</details></li>
+<li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdHeal.h.html">SmApiUsdHeal.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdHeal.h.html">Source file</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdHeal_8h_1a29fa2cc262b87b72fc1f1d71053b3fe7.html">SmApiUsdFindBrepArraySites</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdHeal_8h_1ace303456e61d91da816010722b0de299.html">SmApiUsdHealBrepArray</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdHeal_8h_1a0c9188b35efd322615018d8c6ccf8202.html">SmApiUsdWriteHealedBrepArray</a></li>
+</ul>
+</details></li>
 <li class="toctree-l3 has-children"><a class="reference internal" href="file_SM_API_USD_inc_SmApiUsdTessellate.h.html">SmApiUsdTessellate.h</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l4"><a class="reference internal" href="program_listing_file_SM_API_USD_inc_SmApiUsdTessellate.h.html">Source file</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_SmApiUsdTessellate_8h_1af892bbf100ef5c40ac1e27df0cbe91cb.html">SmApiUsdTessellateBrepArray</a></li>
@@ -1053,11 +1066,13 @@
 <li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1a5fb205c57805dee35e70a9957c6986b5.html">EShapeType</a></li>
 <li class="toctree-l4"><a class="reference internal" href="enum_namespaceocct_1ac477693c7a79b382aa965b605edcfede.html">ESurfaceType</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a8f5791715ecc3a7b8a1498ace3666008.html">EvalCurve3dPoint</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ae3175c4f4f5b9e0c3a36ceabeec441ad.html">EvalCurve3dPoint</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a6936814fa40624bfe8725ecfc3121ba3.html">ExportBrepArrayToFile</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ad83d138dcfd5139b9cf95cd784dd8904.html">ExportBrepArrayToText</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a4c9bb2e4e91afaf5529606c63fb99333.html">IsBinaryOcct</a></li>
 <li class="toctree-l4"><a class="reference internal" href="classocct_1_1OcctFileSource.html">OcctFileSource</a></li>
 <li class="toctree-l4"><a class="reference internal" href="classocct_1_1OcctStagingDriver.html">OcctStagingDriver</a></li>
+<li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a02de95904ad4b05ba74fe047739979a6.html">PrepareCurve3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1ac2e1a59c0ff5489eea30feb872774a29.html">ReadOcct</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a2b658d22a199cb9fa3310fd2feaa8787.html">ReadOcctBinary</a></li>
 <li class="toctree-l4"><a class="reference internal" href="function_namespaceocct_1a553d05fbf7c7ba031631430aa56807e3.html">ResolveLocation</a></li>
@@ -1076,6 +1091,7 @@
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPointRepr.html">SPointRepr</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPolygon3d.html">SPolygon3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPolygonOnTriangulation.html">SPolygonOnTriangulation</a></li>
+<li class="toctree-l4"><a class="reference internal" href="structocct_1_1SPreparedCurve3d.html">SPreparedCurve3d</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SShapeRecord.html">SShapeRecord</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SSubShapeRef.html">SSubShapeRef</a></li>
 <li class="toctree-l4"><a class="reference internal" href="structocct_1_1SSurface.html">SSurface</a></li>
@@ -1090,7 +1106,11 @@
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="structs.html">Structs</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepArrayHealResult.html">SmApiUsdBrepArrayHealResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepArraySite.html">SmApiUsdBrepArraySite</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdBrepImportResult.html">SmApiUsdBrepImportResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdGeometryFailure.html">SmApiUsdGeometryFailure</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdGeometryResult.html">SmApiUsdGeometryResult</a></li>
+<li class="toctree-l3"><a class="reference internal" href="structSmApiUsdHealedBrepArray.html">SmApiUsdHealedBrepArray</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdMeshTessellationResult.html">SmApiUsdMeshTessellationResult</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmApiUsdTessellatedBrep.html">SmApiUsdTessellatedBrep</a></li>
 <li class="toctree-l3"><a class="reference internal" href="structSmTessellationParams.html">SmTessellationParams</a></li>
@@ -1270,7 +1290,7 @@
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiQueries_8h_1ac59129fb9d57661ba6be5d6cdb950ebd.html#smapiqueries_8h_1ac59129fb9d57661ba6be5d6cdb950ebd"><span class="std std-ref">SmApiBrepClosestPointAll</span></a>(const SmBrep *pBrep, const SmPoint3d &amp;crPoint, SmTArray&lt; SmPoint3d &gt; &amp;rPoints, SmTArray&lt; double &gt; &amp;rDistances)</dt><dd><p></p>
 </dd>
-<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiQueries_8h_1aad23c3e529792cd4f3d92516370f2a98.html#smapiqueries_8h_1aad23c3e529792cd4f3d92516370f2a98"><span class="std std-ref">SmApiBrepComputeArea</span></a>(SmBrep *pBrep, double dRelativeAccuracy, double &amp;rdArea)</dt><dd><p>Total surface area: the sum of SmApiFaceComputeArea over every face, with the same accuracy envelope. Works on sheet bodies and open shells, which SmApiBrepComputeMassProperties rejects.</p>
+<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiQueries_8h_1aad23c3e529792cd4f3d92516370f2a98.html#smapiqueries_8h_1aad23c3e529792cd4f3d92516370f2a98"><span class="std std-ref">SmApiBrepComputeArea</span></a>(SmBrep *pBrep, double dRelativeAccuracy, double &amp;rdArea)</dt><dd><p>Total surface area: the sum of SmApiFaceComputeArea over every face, with the same accuracy guidance. Works on sheet bodies and open shells, which SmApiBrepComputeMassProperties rejects.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiQueries_8h_1a362bd689af8a921a617c2b49acc34cf5.html#smapiqueries_8h_1a362bd689af8a921a617c2b49acc34cf5"><span class="std std-ref">SmApiBrepComputeMassProperties</span></a>(const SmBrep *pBrep, double dRelativeAccuracy, double dDensity, const SmPoint3d &amp;crOrigin, double &amp;rdArea, double &amp;rdVolume, double &amp;rdMass, SmPoint3d &amp;rCentroid, SmVector3d &amp;rMomentsOfInertia, SmVector3d &amp;rProductsOfInertia)</dt><dd><p></p>
 </dd>
@@ -1342,7 +1362,7 @@
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiCurves_8h_1ac240a947b9d1f97fe3e0ba6808ebbc9b.html#smapicurves_8h_1ac240a947b9d1f97fe3e0ba6808ebbc9b"><span class="std std-ref">SmApiCreateLineSegment</span></a>(const SmPoint3d &amp;crStartPt, const SmPoint3d &amp;crEndPt, SmLine *&amp;rpResult)</dt><dd><p></p>
 </dd>
-<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiBrep_8h_1aa306e6d4d296008175037b90a23f4f0a.html#smapibrep_8h_1aa306e6d4d296008175037b90a23f4f0a"><span class="std std-ref">SmApiCreateLinearSweep</span></a>(const SmTArray&lt; SmCurve * &gt; &amp;rCurvesToSweep, const SmVector3d &amp;rSweepDir, double dSweepDist, SmBoolean bCapEnds, SmBrep *&amp;rpResult)</dt><dd><p>rCurvesToSweep are copied, not consumed: the caller keeps ownership and the curves are unchanged. The caller owns the new rpResult.</p>
+<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiBrep_8h_1aa306e6d4d296008175037b90a23f4f0a.html#smapibrep_8h_1aa306e6d4d296008175037b90a23f4f0a"><span class="std std-ref">SmApiCreateLinearSweep</span></a>(const SmTArray&lt; SmCurve * &gt; &amp;rCurvesToSweep, const SmVector3d &amp;rSweepDir, double dSweepDist, SmBoolean bCapEnds, SmBrep *&amp;rpResult)</dt><dd><p>rCurvesToSweep are copied, not consumed: the caller keeps ownership and the curves are unchanged. The caller owns the new rpResult. The result is built in a new SmBrep with the default tolerance; there is no parameter to set it.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiBrep_8h_1a19122c8a36ff1b497d48580fd6d30996.html#smapibrep_8h_1a19122c8a36ff1b497d48580fd6d30996"><span class="std std-ref">SmApiCreateLinearSweepWithRepetitions</span></a>(const SmTArray&lt; SmCurve * &gt; &amp;rCurvesToSweep, const SmVector3d &amp;rSweepDir, double dSweepDist, ULONG nRepetitions, SmBoolean bCapEnds, SmBrep *&amp;rpResult)</dt><dd><p></p>
 </dd>
@@ -1362,7 +1382,7 @@
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiPrimitives_8h_1a18e2391ea6cbb68efbc70c065b50d7f1.html#smapiprimitives_8h_1a18e2391ea6cbb68efbc70c065b50d7f1"><span class="std std-ref">SmApiCreatePlanarCircle</span></a>(const SmVector3d &amp;crOrigin, double dRadius, SmBrep *&amp;rpResult)</dt><dd><p></p>
 </dd>
-<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiTrimmedSurfaces_8h_1af3803a3a0435ca20f7c5ef7a49ec1b98.html#smapitrimmedsurfaces_8h_1af3803a3a0435ca20f7c5ef7a49ec1b98"><span class="std std-ref">SmApiCreatePlanarFaces</span></a>(const SmTArray&lt; SmCurve * &gt; &amp;crPlanarCurves, SmBrep *&amp;rpResult)</dt><dd><p>Ownership of crPlanarCurves: consumed on success (the new faces use them; do not delete or reuse them). On failure they are left with the caller, who must delete them, and rpResult is set to NULL.</p>
+<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiTrimmedSurfaces_8h_1af3803a3a0435ca20f7c5ef7a49ec1b98.html#smapitrimmedsurfaces_8h_1af3803a3a0435ca20f7c5ef7a49ec1b98"><span class="std std-ref">SmApiCreatePlanarFaces</span></a>(const SmTArray&lt; SmCurve * &gt; &amp;crPlanarCurves, SmBrep *&amp;rpResult)</dt><dd><p>Ownership of crPlanarCurves: consumed on success (the new faces use them; do not delete or reuse them). On failure they are left with the caller, who must delete them, and rpResult is set to NULL. Endpoint matching and degenerate-curve checks use the new Brep's default tolerance; there is no parameter to set it.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiPrimitives_8h_1a1c5c78f36631970e412fe2179b5142cb.html#smapiprimitives_8h_1a1c5c78f36631970e412fe2179b5142cb"><span class="std std-ref">SmApiCreatePlane</span></a>(const SmVector3d &amp;crOrigin, double dX, double dY, SmBrep *&amp;rpResult)</dt><dd><p></p>
 </dd>
@@ -1400,9 +1420,9 @@
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiSurfaces_8h_1a5c2b1834154ecee74511896296a429fe.html#smapisurfaces_8h_1a5c2b1834154ecee74511896296a429fe"><span class="std std-ref">SmApiCreateSurfaceFromRandomPoints</span></a>(const SmTArray&lt; SmPoint3d &gt; &amp;rPoints, SmSurface *&amp;rpResult)</dt><dd><p></p>
 </dd>
-<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiSurfaces_8h_1ab482969194ed98f5ee5bb57586461fc1.html#smapisurfaces_8h_1ab482969194ed98f5ee5bb57586461fc1"><span class="std std-ref">SmApiCreateSurfaceRevolution</span></a>(SmBSplineCurve *rCurve, const SmPoint3d &amp;rOrigin, const SmVector3d &amp;rAxisDir, double dAngleDeg, SmSurface *&amp;rpResult)</dt><dd><p></p>
+<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiSurfaces_8h_1ab482969194ed98f5ee5bb57586461fc1.html#smapisurfaces_8h_1ab482969194ed98f5ee5bb57586461fc1"><span class="std std-ref">SmApiCreateSurfaceRevolution</span></a>(SmBSplineCurve *rCurve, const SmPoint3d &amp;rOrigin, const SmVector3d &amp;rAxisDir, double dAngleDeg, SmSurface *&amp;rpResult)</dt><dd><p>Revolves rCurve into a temporary Brep and returns only the first surface of that Brep; any other surfaces are deleted with it. The revolve splits the profile at interior tangent (C1) discontinuities and revolves each piece separately, so a profile with a kink can give more than one surface. For such profiles use SmApiCreateRotationalSweep, which returns the whole Brep.</p>
 </dd>
-<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiSurfaces_8h_1a36f795fd0a4a05b4cf08fba1d6c8a981.html#smapisurfaces_8h_1a36f795fd0a4a05b4cf08fba1d6c8a981"><span class="std std-ref">SmApiCreateSweep</span></a>(SmBSplineCurve *pCurve, SmBSplineCurve *pPath, SmSurface *&amp;rpResult)</dt><dd><p></p>
+<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiSurfaces_8h_1a36f795fd0a4a05b4cf08fba1d6c8a981.html#smapisurfaces_8h_1a36f795fd0a4a05b4cf08fba1d6c8a981"><span class="std std-ref">SmApiCreateSweep</span></a>(SmBSplineCurve *pCurve, SmBSplineCurve *pPath, SmSurface *&amp;rpResult)</dt><dd><p>Always uses the kernel's non-translational sweep: the profile is reoriented along the path rather than only translated, and the result is a B-spline approximation within a fixed 3D tolerance of 1e-5 model units. Neither the sweep mode nor the tolerance can be set by the caller.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiBrep_8h_1aaec1d959c59d1fcc730ffc5f0a2fd5c6.html#smapibrep_8h_1aaec1d959c59d1fcc730ffc5f0a2fd5c6"><span class="std std-ref">SmApiCreateSweepAlongPlanarPath</span></a>(SmTArray&lt; SmCurve * &gt; &amp;rProfileCurves, SmTArray&lt; SmCurve * &gt; &amp;rPathCurves, SmBoolean bMoveProfile, int iCapEnds, SmBrep *&amp;rpResult)</dt><dd><p>Pure producer that sweeps profile boundary curves along a planar path.</p>
 </dd>
@@ -1506,7 +1526,7 @@
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiIntersectors_8h_1a15d42bfdef53721bf20ff57b828c6f1e.html#smapiintersectors_8h_1a15d42bfdef53721bf20ff57b828c6f1e"><span class="std std-ref">SmApiIntersectCurveSurface</span></a>(SmCurve *pCurve, SmSurface *pSurface, SmTArray&lt; SmCurve * &gt; &amp;rCurves, SmTArray&lt; SmPoint3d &gt; &amp;rPoints)</dt><dd><p></p>
 </dd>
-<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiIntersectors_8h_1aeb2dd0349a0189e65741a0362ac8251b.html#smapiintersectors_8h_1aeb2dd0349a0189e65741a0362ac8251b"><span class="std std-ref">SmApiIntersectCurves</span></a>(SmCurve *pCurve1, SmCurve *pCurve2, SmTArray&lt; SmPoint3d &gt; *p3DPoints, SmTArray&lt; double &gt; *parametersOnCurve1, SmTArray&lt; double &gt; *parametersOnCurve2)</dt><dd><p></p>
+<dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiIntersectors_8h_1aeb2dd0349a0189e65741a0362ac8251b.html#smapiintersectors_8h_1aeb2dd0349a0189e65741a0362ac8251b"><span class="std std-ref">SmApiIntersectCurves</span></a>(SmCurve *pCurve1, SmCurve *pCurve2, SmTArray&lt; SmPoint3d &gt; *p3DPoints, SmTArray&lt; double &gt; *parametersOnCurve1, SmTArray&lt; double &gt; *parametersOnCurve2)</dt><dd><p>Uses a fixed absolute tolerance of 0.001 model units; it cannot be set by the caller. If pCurve1 == pCurve2, finds self-intersections. Results are appended to the output arrays. No intersections returns SM_ERR (the kernel itself succeeds with no solutions; this wrapper treats that as failure). An overlap is reported by its start point and parameters only.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiIntersectors_8h_1a20726b54b08efe2be1aa895a5b2740f0.html#smapiintersectors_8h_1a20726b54b08efe2be1aa895a5b2740f0"><span class="std std-ref">SmApiIntersectFaces</span></a>(SmFace *pFace1, SmFace *pFace2, SmTArray&lt; SmCurve * &gt; &amp;r3DCurves, SmTArray&lt; SmPoint3d &gt; *pOpt3DPoints)</dt><dd><p></p>
 </dd>
@@ -1622,6 +1642,12 @@
 </dd>
 <dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsd_8h_1a9eca567df790c87d0b0f5abc47a99475.html#smapiusd_8h_1a9eca567df790c87d0b0f5abc47a99475"><span class="std std-ref">SmApiUsdExportMeshes</span></a>(const char *pFileName, std::vector&lt; SmPolyBrep * &gt; &amp;rSmPolyBreps)</dt><dd><p>Export SmPolyBreps to a new USD file as UsdGeomMesh children under /World.</p>
 </dd>
+<dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsdHeal_8h_1a29fa2cc262b87b72fc1f1d71053b3fe7.html#smapiusdheal_8h_1a29fa2cc262b87b72fc1f1d71053b3fe7"><span class="std std-ref">SmApiUsdFindBrepArraySites</span></a>(const pxr::UsdStagePtr &amp;crStage, std::vector&lt; SmApiUsdBrepArraySite &gt; &amp;rSites)</dt><dd><p>Find the specs that define the stage's BrepArray prims, and why any cannot be healed in place.</p>
+</dd>
+<dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsdGeometryValidate_8h_1af53116a06a3e662eae40f85dfb24dcef.html#smapiusdgeometryvalidate_8h_1af53116a06a3e662eae40f85dfb24dcef"><span class="std std-ref">SmApiUsdGeometryValidate</span></a>(const pxr::UsdPrim &amp;crBrepArray, int iLevel, SmApiUsdGeometryResult &amp;rResult)</dt><dd><p>Import a BrepArray prim's Breps and run SmBrep::AssertValid on each, without changing the stage. iLevel is the AssertValid depth: 0 is fastest, 2 runs every check. The Breps are not healed: healing can repair the defects being looked for, and the healer can crash on invalid Breps. Several threads can validate different prims at once while the stage is not modified.</p>
+</dd>
+<dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsdHeal_8h_1ace303456e61d91da816010722b0de299.html#smapiusdheal_8h_1ace303456e61d91da816010722b0de299"><span class="std std-ref">SmApiUsdHealBrepArray</span></a>(const pxr::UsdPrim &amp;crBrepArray, SmApiUsdHealedBrepArray &amp;rHealed)</dt><dd><p>Heal a BrepArray prim's Breps without changing the stage. Best effort: failed heal steps and unfixed problems are not reported. Thread-safe while the stage is not modified.</p>
+</dd>
 <dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsd_8h_1adbb7b4f0c9295053ff8da910a6b6f68e.html#smapiusd_8h_1adbb7b4f0c9295053ff8da910a6b6f68e"><span class="std std-ref">SmApiUsdHealFile</span></a>(const char *pInputFile, const char *pOutputFile, int iThreadCount, std::vector&lt; SmApiUsdBrepArrayHealResult &gt; &amp;rResults)</dt><dd><p>Heal BrepArray definitions in the layers used by the current USD composition and write the scene to pOutputFile, keeping its layers, references, native instancing, transforms and materials. Each BrepArray is healed in the layer that defines it; other layers (including package members) are written as standalone layers to <code class="docutils literal notranslate"><span class="pre">&lt;output</span> <span class="pre">stem&gt;_layers/</span></code> beside the output, with references redirected. External layers used only by unselected variants are not enumerated or healed; their references keep pointing at the original assets.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsd_8h_1a00c736c385dc0e877fff9a7696cb5cc8.html#smapiusd_8h_1a00c736c385dc0e877fff9a7696cb5cc8"><span class="std std-ref">SmApiUsdImportBrep</span></a>(const char *pFileName, const char *pPrimPath, SmBrep *&amp;rpSmBrep, SmBoolean bHealerIsEnabled=TRUE)</dt><dd><p>Load a single BRep prim from a USD file by SdfPath and convert to SmBrep. If the prim contains multiple packed Breps, every member must convert successfully; the first is returned and the remaining members are deleted.</p>
@@ -1637,6 +1663,8 @@
 <dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsdTessellate_8h_1af892bbf100ef5c40ac1e27df0cbe91cb.html#smapiusdtessellate_8h_1af892bbf100ef5c40ac1e27df0cbe91cb"><span class="std std-ref">SmApiUsdTessellateBrepArray</span></a>(const pxr::UsdPrim &amp;crBrepArray, const SmTessellationParams &amp;crParams, SmBoolean bHealerIsEnabled, double dBoundaryAngleTolDeg, std::vector&lt; SmApiUsdTessellatedBrep &gt; &amp;rResults)</dt><dd><p>Import, tessellate and extract each Brep of a BrepArray prim, one result per member in packed order. Members fail independently; SmApiTessellate keeps partial meshes. Uses a context private to the call, so concurrent calls are safe while the stage is not being modified. Returns an error with one whole-prim result if the prim cannot be read or has no Breps; malformed packed data stops at that member.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsd_8h_1af2a3f23c258eca49e01d90d920eefcb2.html#smapiusd_8h_1af2a3f23c258eca49e01d90d920eefcb2"><span class="std std-ref">SmApiUsdTessellateFile</span></a>(const char *pInputFile, const char *pOutputFile, const SmTessellationParams &amp;crParams, SmBoolean bHealerIsEnabled, int iThreadCount, std::vector&lt; SmApiUsdMeshTessellationResult &gt; &amp;rResults)</dt><dd><p>Tessellate every BrepArray prim in a USD file and write a copy of the stage with a UsdGeomMesh per Brep under the default prim (or /Output), named tess_&lt;prim&gt;_&lt;brep&gt; (_&lt;n&gt; added if taken). Each mesh gets its Brep's world transform, visibility and purpose (default time) and material. Relative asset paths are rewritten if the output is in another directory. The input layer is not modified, even if the caller has it open.</p>
+</dd>
+<dt><span class="tag-as-table-cell">SmStatus</span> <a class="reference internal" href="function_SmApiUsdHeal_8h_1a0c9188b35efd322615018d8c6ccf8202.html#smapiusdheal_8h_1a0c9188b35efd322615018d8c6ccf8202"><span class="std std-ref">SmApiUsdWriteHealedBrepArray</span></a>(const SmApiUsdHealedBrepArray &amp;crHealed, const pxr::UsdStagePtr &amp;crStage, std::string &amp;rMessage)</dt><dd><p>Write healed geometry at the prim's spec in the root layer, which must be the edit target. Write only sites without a problem. rMessage says why it failed.</p>
 </dd>
 <dt><span class="tag-as-table-cell">SmApiStatus</span> <a class="reference internal" href="function_SmApiBrep_8h_1ab9bfe2c2c9b5795c363509fa3a57a819.html#smapibrep_8h_1ab9bfe2c2c9b5795c363509fa3a57a819"><span class="std std-ref">SmApiVariableRadiusFillet</span></a>(SmBrep *pBrep, SmTArray&lt; SmEdge * &gt; &amp;rEdges, double dStartRadius, double dEndRadius, ULONG lXSectType, ULONG lContinuity)</dt><dd><p></p>
 </dd>
@@ -1798,11 +1826,15 @@
 </dd>
 <dt><span class="tag-as-table-cell">pxr::GfVec3d</span> <a class="reference internal" href="function_namespaceocct_1a8f5791715ecc3a7b8a1498ace3666008.html#namespaceocct_1a8f5791715ecc3a7b8a1498ace3666008"><span class="std std-ref">occt::EvalCurve3dPoint</span></a>(const SCurve3d &amp;rCurve, const pxr::GfMatrix4d &amp;rTransform, double t)</dt><dd><p></p>
 </dd>
+<dt><span class="tag-as-table-cell">pxr::GfVec3d</span> <a class="reference internal" href="function_namespaceocct_1ae3175c4f4f5b9e0c3a36ceabeec441ad.html#namespaceocct_1ae3175c4f4f5b9e0c3a36ceabeec441ad"><span class="std std-ref">occt::EvalCurve3dPoint</span></a>(const SPreparedCurve3d &amp;rCurve, double t)</dt><dd><p></p>
+</dd>
 <dt><span class="tag-as-table-cell">bool</span> <a class="reference internal" href="function_namespaceocct_1a6936814fa40624bfe8725ecfc3121ba3.html#namespaceocct_1a6936814fa40624bfe8725ecfc3121ba3"><span class="std std-ref">occt::ExportBrepArrayToFile</span></a>(const UsdBrepData::UsdBrepArrayData &amp;rArrays, const std::string &amp;rPath, std::string &amp;rError)</dt><dd><p></p>
 </dd>
 <dt><span class="tag-as-table-cell">bool</span> <a class="reference internal" href="function_namespaceocct_1ad83d138dcfd5139b9cf95cd784dd8904.html#namespaceocct_1ad83d138dcfd5139b9cf95cd784dd8904"><span class="std std-ref">occt::ExportBrepArrayToText</span></a>(const UsdBrepData::UsdBrepArrayData &amp;rArrays, std::string &amp;rText, std::string &amp;rError)</dt><dd><p></p>
 </dd>
 <dt><span class="tag-as-table-cell">bool</span> <a class="reference internal" href="function_namespaceocct_1a4c9bb2e4e91afaf5529606c63fb99333.html#namespaceocct_1a4c9bb2e4e91afaf5529606c63fb99333"><span class="std std-ref">occt::IsBinaryOcct</span></a>(const std::string &amp;rData)</dt><dd><p></p>
+</dd>
+<dt><span class="tag-as-table-cell">SPreparedCurve3d</span> <a class="reference internal" href="function_namespaceocct_1a02de95904ad4b05ba74fe047739979a6.html#namespaceocct_1a02de95904ad4b05ba74fe047739979a6"><span class="std std-ref">occt::PrepareCurve3d</span></a>(const SCurve3d &amp;rCurve, const pxr::GfMatrix4d &amp;rTransform)</dt><dd><p></p>
 </dd>
 <dt><span class="tag-as-table-cell">bool</span> <a class="reference internal" href="function_namespaceocct_1ac2e1a59c0ff5489eea30feb872774a29.html#namespaceocct_1ac2e1a59c0ff5489eea30feb872774a29"><span class="std std-ref">occt::ReadOcct</span></a>(const std::string &amp;rText, SOcctModel &amp;rModel, std::string &amp;rError)</dt><dd><p></p>
 </dd>
@@ -1909,7 +1941,7 @@
 </div>
       
         <div class="footer-item"><p class="last-updated">
-  Last updated on Oct 09, 2026.
+  Last updated on Oct 21, 2026.
   <br/>
 </p></div>
       
