@@ -868,6 +868,8 @@ static SmStatus sm_ComputeConstants
    double                 d3DDistanceTol,            // in : when not 0.0, check rBez endPoints are 
                                                      //           separated by more than d3DDistanceTol,
    SmApproxTol3d        & rApproxTol,                // in : Approximation tolerance between Bez and OriginalCurve
+   SmBoolean              bExactSpan,                // in : TRUE = rBez is an exact piece of rOriginalCurve (a B-spline), so the
+                                                     //      Bez to OriginalCurve distance check is skipped
    double               & rdMaxLength,               // out: control-polygon baseline length
    double               & rdMaxChordHeightSquared,   // out: max control-polygon vertex to baseLine distance
    double               & rdMaxTurningAngleDeg,      // out: sum control-polygon vertex angles
@@ -1061,6 +1063,12 @@ SmBoolean bDebugMe = FALSE;
   // set output
   rdMaxChordHeightSquared = dMaxSegmentCHSq;
   rdMaxTurningAngleDeg    = dTotalAngle * 180 / SM_PI;
+
+  // The distance check below bounds the error of a span that approximates a non-B-spline curve.
+  // A span cut from a B-spline curve is an exact piece of it: the check would only measure
+  // rounding differences, so skip it.
+  if (bExactSpan)
+    { return SM_SUCCESS; }
 
   SmFindCurveDistanceExtremaEFO sEFO( &rBez, &rOriginalCurve, sInterval, 10.*SM_EFF_ZERO );
   SmLocalSolve1d sLS( sEFO, sInterval, FALSE );
@@ -1612,6 +1620,7 @@ SmStatus SmCurveCache::Tessellate()
          m_dOffAxisTolerance,          // in : 
          m_dMax3DDistance,             // in : 
                                dApproxTol,
+                               pBSC != NULL,                 // in : B-spline spans are exact pieces of m_crCurve
          dMaxLength,                   // out: control-polygon baseLine length, only set when m_dMax3DDistance != 0.0
          dMaxChordHeightSquared,       // out: max control-polygon vertex to baseLine distance
          dMaxTurningAngleDeg,          // out: Sum control-polygon vertex angles
@@ -1725,6 +1734,7 @@ SmStatus SmCurveCache::Tessellate()
          m_dOffAxisTolerance,          // in : 
          m_dMax3DDistance,             // in : 
                                dApproxTol,
+                               pBSC != NULL,                 // in : B-spline spans are exact pieces of m_crCurve
          dMaxLength,                   // out: control-polygon baseLine length, only set when m_dMax3DDistance != 0.0
          dMaxChordHeightSquared,       // out: max control-polygon vertex to baseLine distance
          dMaxTurningAngleDeg,          // out: Sum control-polygon vertex angles

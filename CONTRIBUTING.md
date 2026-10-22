@@ -10,6 +10,17 @@ should be reported using `SECURITY.md`, not public issues.
 This guide records the development expectations for maintainers and approved
 contributors.
 
+## Reporting Bugs
+
+Follow the [USD BRep bug-report workflow](.agents/skills/usd-brep-bug-report/SKILL.md)
+and use its [report template](.agents/skills/usd-brep-bug-report/assets/bug-report.md).
+Check [KNOWN_ISSUES.md](KNOWN_ISSUES.md) and the
+[public issue tracker](https://github.com/NVIDIA-Omniverse/usd-brep/issues) first.
+Verify the API contract and validate inputs immediately before the failing
+operation with the local USD BRep asset validator and SMLib `AssertValid`, as
+applicable. Supply a minimal reproduction runnable from this repo using its own
+APIs, tools, and documented dependencies, without outside tools or derivative works.
+
 ## Getting Started
 
 Install the prerequisites listed in `README.md`, then build and test from the
@@ -79,7 +90,7 @@ the relevant operation guide and any public documentation that describes its
 arguments, defaults, mutation semantics, or safety constraints.
 
 `KNOWN_ISSUES.md` lists known bugs that users can hit. When a change fixes one,
-remove its entry in the same change.
+remove its entry and add a `CHANGELOG.md` entry in the same change.
 
 ## Community Standards
 

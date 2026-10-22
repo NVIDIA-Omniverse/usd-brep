@@ -1925,6 +1925,17 @@ SmStatus SmTree::GetObjectList
 } // end SmTree::GetObjectList
 
 /*******************************************************************//**
+PURPOSE: Inlined crA.AreDisjoint(crB) with no tolerance; hot in GetObjectsInBox().
+***********************************************************************/
+static inline SmBoolean sm_AreDisjoint(const SmExtent3d & crA, const SmExtent3d & crB)
+{
+  const SmPoint3d sAMin = crA.GetMin(), sAMax = crA.GetMax();
+  const SmPoint3d sBMin = crB.GetMin(), sBMax = crB.GetMax();
+  return (   sAMin.x > sBMax.x || sAMin.y > sBMax.y || sAMin.z > sBMax.z
+          || sAMax.x < sBMin.x || sAMax.y < sBMin.y || sAMax.z < sBMin.z) ? TRUE : FALSE;
+}
+
+/*******************************************************************//**
 PURPOSE: Get all objects in the tree whose BBoxes intersect a given bounding box.
 
 NOTES: 
@@ -1937,9 +1948,7 @@ SmStatus SmTree::GetObjectsInBox
   // init output
   rObjectsInBBox.ReSet();
 
-  // locals: Node Object Array and a Node Stack
-  SmObjectList * sData[512];
-  SmTArray<SmObjectList*> sObjsInNode(512,sData);
+  // locals: Node Stack
   SmTreeNode *sData2[64];
   SmTArray<SmTreeNode*> sStack(64,sData2);
 
@@ -1953,7 +1962,7 @@ SmStatus SmTree::GetObjectsInBox
       sStack.RemoveLast();
 
       // when Node BBox intersects Target BBox
-      if (!pNode->m_sBBox.AreDisjoint(crBBox)) 
+      if (!sm_AreDisjoint(pNode->m_sBBox, crBBox)) 
         {
           // for every ObjectList in this node
           SM_ASSERT(pNode->m_eAuxDataType == SM_AD_OBJECT_LIST) ;
@@ -1961,7 +1970,7 @@ SmStatus SmTree::GetObjectsInBox
           while (pObjectList) 
             {
               // when the Object's BBox intersect the input BBox
-              if (!pObjectList->m_sBBox.AreDisjoint(crBBox)) 
+              if (!sm_AreDisjoint(pObjectList->m_sBBox, crBBox)) 
                 {
                   // add it to the output
                   rObjectsInBBox.Add(pObjectList->m_pObject);

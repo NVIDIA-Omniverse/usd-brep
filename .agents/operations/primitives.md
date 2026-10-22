@@ -154,7 +154,8 @@ pyr = sm.create_pyramid((0, 0, 0), 10.0, 15.0)
 - **`create_skin_primitive(curves_per_profile, curves, degree=1, cap_ends=True)`** — pure loft from ordered
   cross-section profiles; input curves remain unchanged. With `cap_ends=True`, only the first and last profiles
   are capped; intermediate profiles guide the loft without creating transverse faces.
-- **`create_skin_from_faces(faces, degree=1)`** — loft between boundary loops of existing faces
+- **`create_skin_from_faces(faces, degree=1)`** — loft between boundary loops of existing faces; `degree` must
+  be from 1 to 17 (`NL_MAXDEG`), and any other degree raises `RuntimeError` (`SM_ERR_INVALID_INPUT`)
 
 ### create_blend_primitive
 

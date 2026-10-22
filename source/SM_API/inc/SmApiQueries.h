@@ -166,9 +166,10 @@ SMAPI_EXPORT SmApiStatus SmApiBrepClosestPointAll
 //
 // Read-only properties of a Brep / Face / Edge / Vertex.  None of these
 // modify their input.  Bounding boxes wrap SmObject::CalculateBoundingBox
-// (and CalculateTightBoundingBox when bTight=TRUE).  Area and length wrap
-// the kernel's numerical-integration entry points.  Area uses a
-// [1e-4, 1e-1] relative-accuracy envelope; volume uses [1e-8, 1e-1].
+// (and CalculateTightBoundingBox when bTight=TRUE). Area and length wrap
+// the kernel's numerical-integration entry points. Relative accuracy is passed
+// through to the kernel; values tighter than 1e-8 are not recommended because
+// roundoff can prevent convergence.
 // SmApiBrepCopy uses SmBrep's copy constructor allocated against the
 // SM_API context, with analytic recognition disabled so geometry types
 // are preserved (including an explicit conversion to NURBS).
@@ -200,25 +201,25 @@ SMAPI_EXPORT SmApiStatus SmApiBrepMaterialCensus(
 
 SMAPI_EXPORT SmApiStatus SmApiBrepComputeVolume(
     const SmBrep*  pBrep,                       ///< [in ]: Pointer to brep                                               <br>
-    double   dRelativeAccuracy,           ///< [in ]: Relative accuracy clamped to [1.0e-8, 1.0e-1]; non-finite     <br>
-                                          ///<        values return SM_ERR_INVALID_INPUT                            <br>
+    double   dRelativeAccuracy,           ///< [in ]: Relative accuracy; values below 1e-8 are not recommended       <br>
+                                          ///<        non-finite values return SM_ERR_INVALID_INPUT                  <br>
     double & rdVolume                     ///< [out]: Enclosed volume                                                <br>
 );
 
 /// Total surface area: the sum of SmApiFaceComputeArea over every face, with
-/// the same accuracy envelope.  Works on sheet bodies and open shells, which
+/// the same accuracy guidance. Works on sheet bodies and open shells, which
 /// SmApiBrepComputeMassProperties rejects.
 SMAPI_EXPORT SmApiStatus SmApiBrepComputeArea(
     SmBrep*  pBrep,                       ///< [in ]: Pointer to brep (read-only)                                   <br>
-    double   dRelativeAccuracy,           ///< [in ]: Relative accuracy, same envelope as SmApiFaceComputeArea;     <br>
+    double   dRelativeAccuracy,           ///< [in ]: Relative accuracy, same guidance as SmApiFaceComputeArea;     <br>
                                           ///<        non-finite values return SM_ERR_INVALID_INPUT                 <br>
     double & rdArea                       ///< [out]: Total surface area of all faces                               <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiBrepComputeMassProperties(
     const SmBrep* pBrep,                   ///< [in ]: Brep to query (closed manifold solid; read-only)              <br>
-    double       dRelativeAccuracy,        ///< [in ]: Relative accuracy, clamped to [1e-4, 1e-1]; non-finite is      <br>
-                                           ///<        rejected with SM_ERR_INVALID_INPUT                            <br>
+    double       dRelativeAccuracy,        ///< [in ]: Relative accuracy values below 1e-8 are not recommended       <br>
+                                           ///<        non-finite values return SM_ERR_INVALID_INPUT                  <br>
     double       dDensity,                 ///< [in ]: Uniform mass density (mass = density * volume); must be a      <br>
                                            ///<        valid double >= SM_EFF_ZERO (1e-12), else                     <br>
                                            ///<        SM_ERR_INVALID_INPUT                                           <br>
@@ -261,7 +262,8 @@ SMAPI_EXPORT SmApiStatus SmApiFaceBoundingBox(
 /// This area-only query skips volume and moment integration.
 SMAPI_EXPORT SmApiStatus SmApiFaceComputeArea(
     const SmFace*  pFace,                 ///< [in ]: Pointer to face                                               <br>
-    double   dRelativeAccuracy,           ///< [in ]: Relative accuracy in [1e-4, 1e-1]                             <br>
+    double   dRelativeAccuracy,           ///< [in ]: Relative accuracy values below 1e-8 are not recommended       <br>
+                                          ///<        not recommended; non-finite values return SM_ERR_INVALID_INPUT <br>
     double & rdArea                       ///< [out]: Surface area of the face within its trim boundary             <br>
 );
 
@@ -288,7 +290,8 @@ SMAPI_EXPORT SmApiStatus SmApiFaceClosestPoint(
 /// whole-solid mass centroid, use SmApiBrepComputeMassProperties.
 SMAPI_EXPORT SmApiStatus SmApiFaceComputeCentroid(
     const SmFace*     pFace,                    ///< [in ]: Pointer to face                                               <br>
-    double      dRelativeAccuracy,        ///< [in ]: Relative accuracy in [1e-4, 1e-1]                             <br>
+    double      dRelativeAccuracy,        ///< [in ]: Relative accuracy values below 1e-8 are not recommended       <br>
+                                          ///<        non-finite values return SM_ERR_INVALID_INPUT                  <br>
     double &    rdArea,                   ///< [out]: Surface area of the face within its trim boundary             <br>
     SmPoint3d & rCentroid                 ///< [out]: Area centroid of the trimmed face                             <br>
 );

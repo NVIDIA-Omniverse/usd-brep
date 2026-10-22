@@ -4930,6 +4930,10 @@ static ULONG lDebugCount = 0 ;
   //             That's left as a future enhancement opportunity.
   for(ii=0;ii<lNumDropPoints;ii++)
     {
+      // a trace from this StartPoint that is abandoned must not leave its drop distances in the reported maximums
+      const double dMaxDropToSurfBeforeTrace = dMaxDropToSurf ;
+      const double dMaxApproxDevBeforeTrace  = dMaxApproxDev ;
+
       // set sStart[m_dT, m_UVPD[0]]
       sStart.m_dT         = sInterval.GetMin() ;
       sStart.m_UVPD[0].x = sSolutions[ii].m_vStart[0] ;
@@ -5591,6 +5595,8 @@ static ULONG lDebugCount = 0 ;
                   // clear growing curve CtrlPolygon
                   sCtrlPoly.ReSet() ;
                   sKnots.ReSet() ;
+                  dMaxDropToSurf = dMaxDropToSurfBeforeTrace ;
+                  dMaxApproxDev  = dMaxApproxDevBeforeTrace ;
 
                   // quit the iter(jj) every CacheSpan loop (with no curve to flush) and move onto next StartPoint
                   break;
@@ -5994,6 +6000,8 @@ static ULONG lDebugCount = 0 ;
                       // clear out accumulated drop points
                       sCtrlPoly.ReSet() ; 
                       sKnots.ReSet() ;    
+                      dMaxDropToSurf = dMaxDropToSurfBeforeTrace ;
+                      dMaxApproxDev  = dMaxApproxDevBeforeTrace ;
 
                       // increment jj to terminate iteration on CacheIvls
                       jj = pCC->GetSpanCount() ; // gwc this line should not be needed when breaking out of iter jj

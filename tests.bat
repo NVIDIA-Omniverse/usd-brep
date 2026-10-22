@@ -127,8 +127,8 @@ set "USD_TEST_APP=%start_dir%\_build\windows-x86_64\release\usd_test_app.exe"
 set "USD_TO_OCCT=%start_dir%\_build\windows-x86_64\release\usd_to_occt.exe"
 :: Hard gate: fail fast if a required binary is missing so the Python suite cannot
 :: silently skip (or auto-discover a stale artifact for the wrong platform).
-if not exist "%OCCT_TO_USD%" (ECHO OCCT occt_to_usd importer tests failed: required binary missing %OCCT_TO_USD% & set rtn=1 & goto occt_exporter)
-if not exist "%USD_TEST_APP%" (ECHO OCCT occt_to_usd importer tests failed: required binary missing %USD_TEST_APP% & set rtn=1 & goto occt_exporter)
+if not exist "%OCCT_TO_USD%" (ECHO OCCT occt_to_usd importer tests failed: required binary missing "%OCCT_TO_USD%" & set rtn=1 & goto occt_exporter)
+if not exist "%USD_TEST_APP%" (ECHO OCCT occt_to_usd importer tests failed: required binary missing "%USD_TEST_APP%" & set rtn=1 & goto occt_exporter)
 call "_build\target-deps\python\python.exe" -m unittest discover -s tools\occt_to_usd_test -p "test_*.py"
 ECHO Error level after OCCT occt_to_usd importer tests:  %ERRORLEVEL%
 if %ERRORLEVEL% == 0 (
@@ -144,9 +144,9 @@ set rtn=1
 :occt_exporter
 ECHO Run OCCT usd_to_occt exporter tests
 cd "%start_dir%"
-if not exist "%USD_TO_OCCT%" (ECHO OCCT usd_to_occt exporter tests failed: required binary missing %USD_TO_OCCT% & set rtn=1 & goto occt_done)
-if not exist "%OCCT_TO_USD%" (ECHO OCCT usd_to_occt exporter tests failed: required binary missing %OCCT_TO_USD% & set rtn=1 & goto occt_done)
-if not exist "%USD_TEST_APP%" (ECHO OCCT usd_to_occt exporter tests failed: required binary missing %USD_TEST_APP% & set rtn=1 & goto occt_done)
+if not exist "%USD_TO_OCCT%" (ECHO OCCT usd_to_occt exporter tests failed: required binary missing "%USD_TO_OCCT%" & set rtn=1 & goto occt_done)
+if not exist "%OCCT_TO_USD%" (ECHO OCCT usd_to_occt exporter tests failed: required binary missing "%OCCT_TO_USD%" & set rtn=1 & goto occt_done)
+if not exist "%USD_TEST_APP%" (ECHO OCCT usd_to_occt exporter tests failed: required binary missing "%USD_TEST_APP%" & set rtn=1 & goto occt_done)
 call "_build\target-deps\python\python.exe" -m unittest discover -s tools\usd_to_occt_test -p "test_*.py"
 ECHO Error level after OCCT usd_to_occt exporter tests:  %ERRORLEVEL%
 if %ERRORLEVEL% == 0 (

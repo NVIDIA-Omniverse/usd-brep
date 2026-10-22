@@ -17,13 +17,13 @@ project "brep_geometry_validator"
     files { "src/*.cpp" }
 
     includedirs {
+        root.."/source/SM_API_USD/inc",
         root.."/source/SMLib/inc",
         root.."/source/BREP_SM_USD/inc",
         root.."/source/BREP_USD_DATA/inc",
     }
 
-    -- BREP_SM_USD references SMLib + BREP_USD_DATA symbols; list in dependency order for GNU ld.
-    links { "BREP_SM_USD", "SMLib", "BREP_USD_DATA" }
+    links { "SM_API_USD", "BREP_USD_DATA" }
 
     filter { "system:windows" }
         defines { "_CRT_SECURE_NO_WARNINGS" }

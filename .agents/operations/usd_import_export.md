@@ -11,7 +11,7 @@
 
 ## Overview
 
-SM_API_USD provides file-level round-trip between OpenUSD (.usda/.usdc/.usd) and SMLib `SmBrep` / `SmPolyBrep` objects. BRep geometry is stored in USD as custom `BrepArray` prims that encode the full NURBS surface/curve topology alongside standard UsdGeom hierarchy.
+SM_API_USD provides file-level round-trip between OpenUSD (.usda/.usdc/.usd) and SMLib `SmBrep` / `SmPolyBrep` objects. BRep geometry is stored in USD as custom `BrepArray` prims that encode the topology and its NURBS and analytic geometry alongside standard UsdGeom hierarchy.
 
 This enables a pipeline where:
 1. Exact BRep geometry is created/edited in SMLib
@@ -22,6 +22,26 @@ The round-trip can normalize or approximate representation: effective entity tol
 to one per-BRep value, non-NURBS curves are converted, unclamped NURBS knots may be canonicalized,
 and analytic-face UV trims are omitted. Disabling healing does not disable these conversions.
 See [the BRep conversion reference](../skills/smlib-brep-model/references/brep-format.md#current-bridge-normalizations-and-loss-points).
+
+### Supported geometry
+
+How each geometry type is written to and read from a `BrepArray` (`source/BREP_SM_USD/src/SmuConvert.cpp`).
+Export writes every edge curve as NURBS, so an analytic edge comes back as `SmBSplineCurve`.
+
+| USD schema type | SMLib class | Export writes | Import creates |
+|---|---|---|---|
+| `BrepSurfacePlaneAPI` | `SmPlane` | Plane | `SmPlane` |
+| `BrepSurfaceSphereAPI` | `SmSphere` | Sphere | `SmSphere` |
+| `BrepSurfaceCylinderAPI` | `SmCylinder` | Cylinder | `SmCylinder` |
+| `BrepSurfaceConeAPI` | `SmCone` | Cone | `SmCone` |
+| `BrepSurfaceTorusAPI` | `SmTorus` | Torus | `SmTorus` |
+| `BrepSurfaceNurbAPI` | `SmBSplineSurface`, `SmSurfOfRevolution`, `SmSurfOfExtrusion` | NURBS, exact | `SmBSplineSurface` |
+| none | Other surfaces, such as `SmOffsetSurface` and `SmSTEPSurface` | NURBS, approximated | `SmBSplineSurface` |
+| `BrepCurve3dLineAPI` | `SmLine` | NURBS, exact | `SmLine` |
+| `BrepCurve3dCircleAPI` | `SmCircle` | NURBS, exact | `SmCircle` |
+| `BrepCurve3dEllipseAPI` | `SmEllipse` | NURBS, exact | `SmEllipse` |
+| `BrepCurve3dNurbAPI` | `SmBSplineCurve`, `SmParabola`, `SmHyperbola` | NURBS, exact | `SmBSplineCurve` |
+| none | Other curves, such as `SmCompositeCurve` and `SmOffsetCurve` | NURBS, approximated | `SmBSplineCurve` |
 
 ### Polygon meshes (`UsdGeomMesh` ↔ `SmPolyBrep`)
 
@@ -388,7 +408,13 @@ C++: `SmApiUsdHealFile(pInputFile, pOutputFile, iThreadCount, rResults)` in `SmA
 - Each BrepArray is healed in the layer that defines it. Other layers, including package members, are written as standalone layers to `<output stem>_layers/` beside the output, with references redirected. The output must be a new standalone `.usd`, `.usda`, or `.usdc` file; package output is not supported.
 - External layers used only by unselected variants are not enumerated or healed; their references keep pointing at the original assets. Selecting such a variant later does not imply that its geometry was healed.
 - All or nothing: if any BrepArray fails, nothing is written, and the `RuntimeError` names each failure.
-- Rejected, because the result could not be written back faithfully: BRep geometry authored in a variant or composed from several layers, GeomSubsets other than face or Brep material bindings, and purpose-specific subset material bindings. Material subsets must be authored entirely under the BRep's defining prim spec: overrides or additional subsets in consuming layers or internal-reference sites are rejected before publishing output, since rebuilding subset names/indices would invalidate those opinions. Array-level material overrides remain supported.
+- Rejected, because the result could not be written back faithfully: BRep geometry authored in a variant or composed from several layers or prim specs, GeomSubsets other than face or Brep material bindings, and purpose-specific subset material bindings. Material subsets must be authored entirely under the BRep's defining prim spec: overrides or additional subsets in consuming layers or internal-reference sites are rejected before publishing output, since rebuilding subset names/indices would invalidate those opinions. Array-level material overrides remain supported.
+
+### Healing and validating on an open stage (C++)
+
+`SmApiUsdHeal.h` has the three steps `heal_file` is built on: `SmApiUsdFindBrepArraySites` (defining specs and any problem), `SmApiUsdHealBrepArray` (heal one prim without changing the stage; thread-safe; best effort) and `SmApiUsdWriteHealedBrepArray` (write at the spec in the root layer, which must be the edit target). Heal each site with no problem once, then write the results one at a time.
+
+`SmApiUsdGeometryValidate.h` has `SmApiUsdGeometryValidate`: import one BrepArray prim without healing and run `SmBrep::AssertValid` on each Brep without changing the stage, as `brep_geometry_validator` does. It returns each failed check; an invalid Brep is not an error. Thread-safe while the stage is not modified.
 
 ## Choosing File Format
 

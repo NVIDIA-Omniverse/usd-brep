@@ -202,6 +202,17 @@ class BrepValidatorBoundaryTestCase(BrepValidatorBaseTestCase):
                     stage, prim = self._analytic_face("Torus", axis, start, 1.0)
                     self.assertIn("BA.660", self._codes(self._issues(prim)))
 
+    def test_cone_semi_angle_range_matches_schema(self):
+        # The schema allows (-pi/2, pi/2): 0 is a cylinder, which create_cylinder exports,
+        # and a negative angle is a cone that narrows along its axis.
+        cases = ((0.0, False), (-0.3, False), (0.3, False),
+                 (math.pi / 2, True), (-math.pi / 2, True), (math.nan, True))
+        for semi_angle, rejected in cases:
+            with self.subTest(semi_angle=semi_angle):
+                stage, prim = self._analytic_face("Cone")
+                prim.GetAttribute("brep:surface:cone:semiAngle").Set(Vt.DoubleArray([semi_angle]))
+                self.assertEqual("BA.515" in self._codes(self._issues(prim)), rejected)
+
     def test_sphere_latitude_bounds_are_not_periodic(self):
         for lower, upper in ((-math.pi, 0.0), (0.0, math.pi)):
             with self.subTest(lower=lower, upper=upper):

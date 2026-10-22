@@ -27,6 +27,7 @@
 #include "UsdBrepRead.h"
 
 #include "UsdBrepDebugTools.h"
+#include "UsdBrepDiagnostics.h"
 
 #include <cmath>
 #include <string>
@@ -196,6 +197,108 @@ SmExtent2d GetBoundedFaceRangeForUsd(const SmFace* pFace, const SmExtent2d& crFa
     SmExtent2d sBoundedDomain(sMin, sMax);
     return sBoundedDomain.IsBounded() ? sBoundedDomain : crFaceDomain;
 }
+
+// USD stores sphere, cylinder, cone and torus faces by their canonical (STEP) placement,
+// but face topology follows the NURBS parameterization, whose normal is reversed when
+// m_bSwapUV XOR m_bInsideOut (e.g. after a fillet's OrientTrimmedSurfaces).
+bool AnalyticUsdNormalOpposesFaceNormal(SmSurface* pSurface)
+{
+    if (pSurface == NULL
+        || !(   pSurface->IsKindOf(SmSphere_TYPE)
+             || pSurface->IsKindOf(SmCylinder_TYPE)
+             || pSurface->IsKindOf(SmCone_TYPE)
+             || pSurface->IsKindOf(SmTorus_TYPE)))
+    {
+        return false;
+    }
+    SmSurfOfRevolution* pRevolution = static_cast<SmSurfOfRevolution*>(pSurface);
+    return (pRevolution->GetSwapUVBit() != FALSE) != (pRevolution->GetInsideOut() != FALSE);
+}
+
+// SwapUV()s the faces for which AnalyticUsdNormalOpposesFaceNormal holds, and swaps them
+// back in Restore() (or on destruction). Faces sharing their surface are skipped with a
+// warning, because SmFace::SwapUV() swaps the surface too.
+class ScopedAnalyticFaceOrientationForUsd
+{
+public:
+    ScopedAnalyticFaceOrientationForUsd() = default;
+    ScopedAnalyticFaceOrientationForUsd(const ScopedAnalyticFaceOrientationForUsd&) = delete;
+    ScopedAnalyticFaceOrientationForUsd& operator=(const ScopedAnalyticFaceOrientationForUsd&) = delete;
+
+    ~ScopedAnalyticFaceOrientationForUsd()
+    {
+        SE(Restore());
+    }
+
+    // Swaps the faces back; returns the first failure.
+    SmStatus Restore()
+    {
+        SmStatus eStatus = SM_SUCCESS;
+        for (ULONG ii = m_vSwappedFaces.GetSize(); ii > 0; --ii)
+        {
+            const SmStatus eSwapStatus = m_vSwappedFaces[ii - 1]->SwapUV();
+            if (eStatus == SM_SUCCESS)
+            {
+                eStatus = eSwapStatus;
+            }
+        }
+        m_vSwappedFaces.SetSize(0);
+        return eStatus;
+    }
+
+    SmStatus Apply(SmBrep* pBrep)
+    {
+        SmTArray<SmFace*> sFaces;
+        pBrep->GetFaces(sFaces);
+
+        std::unordered_map<const SmSurface*, ULONG> sSurfaceUseCounts;
+        for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+        {
+            ++sSurfaceUseCounts[sFaces[ii]->GetSurface()];
+        }
+
+        // Record all faces before swapping any: a failed Add() empties the array.
+        for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+        {
+            SmFace*    pFace    = sFaces[ii];
+            SmSurface* pSurface = pFace->GetSurface();
+            if (!AnalyticUsdNormalOpposesFaceNormal(pSurface))
+            {
+                continue;
+            }
+            const ULONG lSurfaceUses = sSurfaceUseCounts[pSurface];
+            if (lSurfaceUses != 1)
+            {
+                USDBREP_WARN("USD export: face %lu shares its analytic surface with %lu other face(s), so its UV "
+                             "parameterization is not swapped to match the USD surface; it may re-import "
+                             "with reversed loops.",
+                             static_cast<unsigned long>(ii),
+                             static_cast<unsigned long>(lSurfaceUses - 1));
+                continue;
+            }
+            if (m_vSwappedFaces.Add(pFace) >= SM_BIG_ULONG)
+            {
+                m_vSwappedFaces.SetSize(0);
+                SER(SM_ERR_OUT_OF_MEMORY);
+            }
+        }
+
+        // On failure, keep only the faces already swapped, so Restore() undoes those.
+        for (ULONG ii = 0; ii < m_vSwappedFaces.GetSize(); ++ii)
+        {
+            const SmStatus sStatus = m_vSwappedFaces[ii]->SwapUV();
+            if (sStatus != SM_SUCCESS)
+            {
+                m_vSwappedFaces.SetSize(ii);
+                SER(sStatus);
+            }
+        }
+        return SM_SUCCESS;
+    }
+
+private:
+    SmTArray<SmFace*> m_vSwappedFaces;
+};
 
 } // namespace
 
@@ -456,6 +559,116 @@ static void smu_CompressFlatKnots
     }
 
 } // end smu_CompressFlatKnots
+
+/*******************************************************************//**
+PURPOSE: rtn TRUE when a NURBS order read from USD is one SMLib can use.
+         NLib's surface evaluators (e.g. N_SrfBasisDerivs) size their
+         basis-function stack arrays by NL_MAXDEG, so a surface of higher
+         degree overflows the stack on the first evaluation. A curve of
+         higher degree evaluates, but extruding or sweeping it builds such
+         a surface. A degree-0 surface cannot be differentiated and a
+         degree-0 curve has a zero tangent. So this accepts exactly orders
+         2 through NL_MAXDEG + 1.
+
+NOTES: 1. Call it as soon as the order is read: the callers size arrays and
+          index the packed knot and control-vertex arrays from it.
+       2. An order of 0 wraps the degree to UINT32_MAX, which is rejected.
+***********************************************************************/
+static bool smu_IsNurbDegreeSupported
+ (uint32_t      iDegree, // in : polynomial degree, i.e. the USD order - 1
+  const TCHAR * pWhat)   // in : what the order belongs to, for the error message
+{
+  if (iDegree >= 1 && iDegree <= NL_MAXDEG)
+    { return true; }
+
+  TCHAR sMessage[SM_TBLOCK_SIZE];
+  SM_SPRINTF(sMessage,
+             _T("%s order %u is outside the supported range 2 to %d."),
+             pWhat,
+             iDegree + 1u,
+             NL_MAXDEG + 1);
+  ERR_MSG(sMessage);
+  return false;
+
+} // end smu_IsNurbDegreeSupported
+
+/*******************************************************************//**
+PURPOSE: rtn TRUE when a NURB read from USD has at least order = degree + 1
+         control vertices in one direction; otherwise report it.
+
+NOTES: helper for the smu_Create...3d_For...Index() readers; call it after
+       smu_IsNurbDegreeSupported().
+***********************************************************************/
+static bool smu_IsNurbVertexCountValid
+ (uint32_t      iVertexCount, // in : control vertex count read from USD
+  uint32_t      iDegree,      // in : polynomial degree, i.e. the USD order - 1, already
+                              //      checked by smu_IsNurbDegreeSupported()
+  const TCHAR * pWhat)        // in : what the count belongs to, for the error message
+{
+  if (iVertexCount > iDegree)
+    { return true; }
+
+  TCHAR sMessage[SM_TBLOCK_SIZE];
+  SM_SPRINTF(sMessage,
+             _T("%s has fewer control vertices (%u) than its order (%u)."),
+             pWhat,
+             iVertexCount,
+             iDegree + 1u);
+  ERR_MSG(sMessage);
+  return false;
+
+} // end smu_IsNurbVertexCountValid
+
+/*******************************************************************//**
+PURPOSE: rtn TRUE when the lCount values a reader takes from a packed USD
+         array, starting at lStartIndex, all lie within it; otherwise report
+         which array falls short.
+
+NOTES: 1. helper for the smu_Create...3d_For...Index() readers.
+       2. The counts come from the file, so the end of the span is never
+          formed: a huge count cannot wrap it back into bounds.
+***********************************************************************/
+static bool smu_IsPackedSpanInBounds
+ (size_t        lStartIndex, // in : first array index the reader uses
+  size_t        lCount,      // in : number of values the reader uses
+  size_t        lArraySize,  // in : size of the packed array
+  const TCHAR * pWhat,       // in : what reads the span, for the error message
+  const TCHAR * pArrayName)  // in : the packed array, for the error message
+{
+  if (lStartIndex <= lArraySize && lCount <= lArraySize - lStartIndex)
+    { return true; }
+
+  TCHAR sMessage[SM_TBLOCK_SIZE];
+  SM_SPRINTF(sMessage,
+             _T("%s needs %zu %s from index %zu, but the array holds only %zu."),
+             pWhat,
+             lCount,
+             pArrayName,
+             lStartIndex,
+             lArraySize);
+  ERR_MSG(sMessage);
+  return false;
+
+} // end smu_IsPackedSpanInBounds
+
+/*******************************************************************//**
+PURPOSE: advance a start index into a packed USD array by an authored count,
+         stopping at the end of the array.
+
+NOTES: 1. helper for smu_CreateSmBSplineCurve2d_ForEdgeuseIndex()
+       2. The count is 64-bit, so a huge authored count cannot wrap. Stopping at
+          the end makes every later curve fail its bounds check instead of
+          being read from the wrong place.
+***********************************************************************/
+static void smu_AdvancePackedStartIndex
+ (uint32_t & rStartIndex, // i/o: start index into a packed array
+  uint64_t   lCount,      // in : number of entries to skip
+  size_t     lArraySize)  // in : size of that packed array
+{
+  const uint64_t lEnd = static_cast<uint64_t>(rStartIndex) + lCount;
+  rStartIndex = static_cast<uint32_t>(lEnd < lArraySize ? lEnd : lArraySize);
+
+} // end smu_AdvancePackedStartIndex
 
 /*******************************************************************//**
 PURPOSE: rtn SmBSplineCurve Obj built from BrepCurve array data
@@ -720,8 +933,22 @@ static SmBSplineCurve * smu_CreateSmBSplineCurve3d_ForEdgeIndex
 
     uint32_t iDimension   = 3;
     uint32_t iDeg         = sOrdersArray[iNurbIndex] - 1;
+    if (!smu_IsNurbDegreeSupported(iDeg, _T("NURBS curve")))
+      { return NULL; }
     uint32_t iVertexCount = sVertexCountArray[iNurbIndex];
     uint32_t iKnotCount   = iVertexCount + iDeg + 1;
+
+    // The counts come from the file: check them, and that the packed arrays hold the spans this
+    // curve reads, before anything is sized or read from them. The knot count is formed in 64
+    // bits so a huge count cannot wrap it. The weights share the control vertices' start index
+    // and are read only when their array is as long as the control vertices', so the control
+    // vertex check covers them.
+    if (!smu_IsNurbVertexCountValid(iVertexCount, iDeg, _T("NURBS curve")) ||
+        !smu_IsPackedSpanInBounds(lVertexIndex, iVertexCount, sCVsArray.size(),
+                                  _T("NURBS curve"), _T("control vertices")) ||
+        !smu_IsPackedSpanInBounds(lKnotIndex, static_cast<size_t>(iVertexCount) + iDeg + 1, sKnotsArray.size(),
+                                  _T("NURBS curve"), _T("knots")))
+      { return NULL; }
 
     SmTArray<SmPoint3d> sCPts   (iVertexCount);
     SmTArray<double>    sWeights(iVertexCount);
@@ -802,8 +1029,22 @@ static SmBSplineCurve * smu_CreateSmBSplineCurve3d_ForWireEdgeIndex
 
     uint32_t iDimension   = 3;
     uint32_t iDeg         = sOrdersArray[iNurbIndex] - 1;
+    if (!smu_IsNurbDegreeSupported(iDeg, _T("NURBS curve")))
+      { return NULL; }
     uint32_t iVertexCount = sVertexCountArray[iNurbIndex];
     uint32_t iKnotCount   = iVertexCount + iDeg + 1;
+
+    // The counts come from the file: check them, and that the packed arrays hold the spans this
+    // curve reads, before anything is sized or read from them. The knot count is formed in 64
+    // bits so a huge count cannot wrap it. The weights share the control vertices' start index
+    // and are read only when their array is as long as the control vertices', so the control
+    // vertex check covers them.
+    if (!smu_IsNurbVertexCountValid(iVertexCount, iDeg, _T("NURBS curve")) ||
+        !smu_IsPackedSpanInBounds(lVertexIndex, iVertexCount, sCVsArray.size(),
+                                  _T("NURBS curve"), _T("control vertices")) ||
+        !smu_IsPackedSpanInBounds(lKnotIndex, static_cast<size_t>(iVertexCount) + iDeg + 1, sKnotsArray.size(),
+                                  _T("NURBS curve"), _T("knots")))
+      { return NULL; }
 
     SmTArray<SmPoint3d> sCPts   (iVertexCount);
     SmTArray<double>    sWeights(iVertexCount);
@@ -879,22 +1120,42 @@ static SmBSplineCurve *  smu_CreateSmBSplineCurve2d_ForEdgeuseIndex
         return NULL;
       }
 
-    // no work - no UVTrimCurve
-    if (sOrdersArray[iEdgeuseIndex] == 0 || sVertexCountArray[iEdgeuseIndex] == 0)
-    { return NULL; }
+    // The schema packs vertexCount control vertices and vertexCount + order knots for every
+    // edgeuse, whether or not its curve can be used. Every return below that skips a curve
+    // advances past exactly that, so a skipped record cannot shift the records after it.
+    const uint64_t lAuthoredOrder       = sOrdersArray[iEdgeuseIndex];
+    const uint64_t lAuthoredVertexCount = sVertexCountArray[iEdgeuseIndex];
+
+    const auto fAdvancePackedCurve = [&]()
+      {
+        smu_AdvancePackedStartIndex(rSpans.m_lEdgeuseBSplineCurve2d_ControlVerticesStartIndex,
+                                    lAuthoredVertexCount,
+                                    sCVsArray.size());
+        smu_AdvancePackedStartIndex(rSpans.m_lEdgeuseBSplineCurve2d_KnotStartIndex,
+                                    lAuthoredVertexCount + lAuthoredOrder,
+                                    sKnotsArray.size());
+      };
+
+    // no work - (order, vertexCount) = (0, 0) is the placeholder for an edgeuse without a UV trim
+    if (lAuthoredOrder == 0 && lAuthoredVertexCount == 0)
+      { return NULL; }
 
     uint32_t iDimension   = 2;
     uint32_t iDeg         = sOrdersArray[iEdgeuseIndex] - 1;
     uint32_t iVertexCount = sVertexCountArray[iEdgeuseIndex];
     uint32_t iKnotCount   = iVertexCount + iDeg + 1;
 
-    const auto fAdvancePackedCurve = [&]()
+    // Discard a trim of unsupported order (including order 0 with control vertices) or with no
+    // control vertices, like the other unusable trims below; SMLib rebuilds it from the 3D edge
+    // when it is needed.
+    if (!smu_IsNurbDegreeSupported(iDeg, _T("NURBS UV trim curve")) || iVertexCount == 0)
       {
-        rSpans.m_lEdgeuseBSplineCurve2d_ControlVerticesStartIndex += iVertexCount ;
-        rSpans.m_lEdgeuseBSplineCurve2d_KnotStartIndex += iKnotCount ;
-      };
+        fAdvancePackedCurve();
+        return NULL;
+      }
 
-    if (lVertexIndex + iVertexCount > sCVsArray.size() || lKnotIndex + iKnotCount > sKnotsArray.size())
+    if (lVertexIndex + lAuthoredVertexCount > sCVsArray.size() ||
+        lKnotIndex + lAuthoredVertexCount + lAuthoredOrder > sKnotsArray.size())
       {
         SM_ASSERT_MSG(FALSE, _T("smu_CreateSmBSplineCurve2d_ForEdgeuseIndex: packed UV curve arrays are out of bounds"));
         fAdvancePackedCurve();
@@ -1041,10 +1302,31 @@ static SmBSplineSurface * smu_CreateSmBSplineSurface3d_ForFaceIndex
 
     uint32_t iUDeg         = sUOrdersArray[lSurfaceIndex] - 1;
     uint32_t iVDeg         = sVOrdersArray[lSurfaceIndex] - 1;
+
+    if (!smu_IsNurbDegreeSupported(iUDeg, _T("NURBS surface U")) ||
+        !smu_IsNurbDegreeSupported(iVDeg, _T("NURBS surface V")))
+      { return NULL; }
+
     uint32_t iUVertexCount = sUVertexCountArray[lSurfaceIndex];
     uint32_t iVVertexCount = sVVertexCountArray[lSurfaceIndex];
     uint32_t iUKnotCount   = iUVertexCount + iUDeg + 1;
     uint32_t iVKnotCount   = iVVertexCount + iVDeg + 1;
+
+    // The counts come from the file: check them, and that the packed arrays hold the spans this
+    // surface reads, before anything is sized or read from them. The control vertex and knot
+    // counts are formed in 64 bits so huge counts cannot wrap them; 65536 x 65536 control
+    // vertices used to wrap to 0. The weights share the control vertices' start index and are
+    // read only when their array is as long as the control vertices', so the control vertex
+    // check covers them.
+    if (!smu_IsNurbVertexCountValid(iUVertexCount, iUDeg, _T("NURBS surface U")) ||
+        !smu_IsNurbVertexCountValid(iVVertexCount, iVDeg, _T("NURBS surface V")) ||
+        !smu_IsPackedSpanInBounds(lVertexIndex, static_cast<size_t>(iUVertexCount) * iVVertexCount, sCVsArray.size(),
+                                  _T("NURBS surface"), _T("control vertices")) ||
+        !smu_IsPackedSpanInBounds(lUKnotIndex, static_cast<size_t>(iUVertexCount) + iUDeg + 1, sUKnotsArray.size(),
+                                  _T("NURBS surface"), _T("U knots")) ||
+        !smu_IsPackedSpanInBounds(lVKnotIndex, static_cast<size_t>(iVVertexCount) + iVDeg + 1, sVKnotsArray.size(),
+                                  _T("NURBS surface"), _T("V knots")))
+      { return NULL; }
 
     uint32_t iNumCPts = iUVertexCount * iVVertexCount;
     SmTArray<SmPoint3d> sCPts   (iNumCPts);
@@ -1634,6 +1916,11 @@ SmStatus BrepAppend_SMLibToUsdBrep
         SmTArray<ULONG>        sSmBrep_VertexShell_VertexIndices ;      // list of all BrepData VertexShells_VertyexIndices - used to map SmBrepData to compacted usd BrepArrayData VertexIndices 
         SmTArray<ULONG>        sSmBrep_WireEdge_CurveIndicies ;         // list of all BrepData WireEdge indices - used to map SmBrepData to compacted usd BrepArrayData WireEdgeIndices 
         SmTArray<ULONG>        sSmBrep_LoopAndWireEdgeType_EUIndicies ; // list of all BrepData Loop_TYPE and WireEdge_TYPE Edgeuses indices - used to map SmBrepData to compacted usd BrepArrayData EdgeuseIndices 
+
+        // Match analytic faces to their USD surface before FromBrep. Declared before
+        // pBrepData_ii so the swaps are undone after that BrepData is deleted.
+        ScopedAnalyticFaceOrientationForUsd sAnalyticFaceOrientation;
+        SER(sAnalyticFaceOrientation.Apply(pBrep_ii));
 
         // Face-range calculation may attach missing UV trims. Prepare it before
         // FromBrep snapshots the trim pointers/indices, so newly generated trims
@@ -2420,6 +2707,11 @@ SmStatus BrepAppend_SMLibToUsdBrep
               } // end Vertices
   
           } // end scope: move BrepData_ii data into the rArrays arrays
+
+        // Delete the BrepData before swapping the faces back, and report a failed swap.
+        sClean.Clear();
+        delete pBrepData_ii;
+        SER(sAnalyticFaceOrientation.Restore());
       } // end iter every SmBrep_ii being added to UsdBrepArrayGprim and UsdBrepArray
 
 #ifdef SM_DEBUG_CODE
@@ -4498,7 +4790,7 @@ SMU_EXPORT SmStatus CreateSmBrep_FromUsdCylinder
     // Create the SmBrep
     prSmBrep = new (crSmContext) SmBrep();
     SmPrimitiveCreation sPC(prSmBrep->GetInfiniteRegion());
-    sPC.CreateCone(dHeight, dRadius, dRadius, 0., 360., sOrigin);
+    sPC.CreateCylinder(dHeight, dRadius, sOrigin);
 
     // Apply local XFormOps
     bool resetXformStack;

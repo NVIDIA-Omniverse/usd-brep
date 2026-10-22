@@ -22,7 +22,9 @@
 #include <SmAxis2Placement.h>
 #include <SmCircle.h>
 #include <SmCone.h>
+#include <SmCrvOnSurf.h>
 #include <SmPrimitiveCreation.h>
+#include <SmProjectedCurve.h>
 #include <SmBSplineCurve.h>
 #include <SmCylinder.h>
 #include <SmSphere.h>
@@ -30,6 +32,7 @@
 #include <SmTorus.h>
 #include <SmEdge.h>
 #include <SmFace.h>
+#include <SmFaceProps.h>
 #include <SmFeatureExecutive.h>
 #include <SmLine.h>
 #include <SmPlane.h>
@@ -39,6 +42,9 @@
 
 #include <cmath>
 #include <limits>
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 
 static SmBoolean sm_TestPointClose(const SmPoint3d& crActual, const SmPoint3d& crExpected)
 {
@@ -973,6 +979,22 @@ SmStatus TestSmPrincipalDirectionPairing()
 }
 
 //*************************************************************************
+// A rotation's aux vector is made perpendicular to the axis, so a tilted aux
+// vector and the X axis give equal curves.
+//*************************************************************************
+
+SmStatus TestSmProjectedCurveRotationAxes()
+{
+    SmContext& rContext = *SmApiGetOrCreateContext();
+    SmLine sLine;
+    SmPoint3d sOrigin(0.0, 0.0, 0.0);
+    SmVector3d sAxis(0.0, 0.0, 1.0), sTilted(1.0, 0.0, 1.0), sXAxis(1.0, 0.0, 0.0);
+    SmProjectedCurve sTiltedRot(&sLine, &sOrigin, &sAxis, &sTilted, SM_PT_ROTATION, FALSE, &rContext);
+    SmProjectedCurve sXAxisRot(&sLine, &sOrigin, &sAxis, &sXAxis, SM_PT_ROTATION, FALSE, &rContext);
+    return (sTiltedRot == sXAxisRot) ? SM_SUCCESS : SM_ERR;
+}
+
+//*************************************************************************
 // SmCone::EvaluateSTEP must return the cross derivative Duv, not zero. For a
 // cone Duv = Rv * (-sinU X + cosU Y); check it against a central difference of
 // EvaluateSTEP's own Du in V, so the check is independent of the U units.
@@ -1269,6 +1291,103 @@ SmStatus TestSmCurveSweepFailureCleanup()
 }
 
 //*************************************************************************
+// SmFace::HasSeamProblem must hand its seam curves to its output rather than
+// copy them, which leaks the originals. Copies of the output, and output
+// copied from a caller's SmFaceProps, must use their own seam's UV curve,
+// which outlives the original or the cache.
+//*************************************************************************
+
+// TRUE when crCrvClass's UV curve is its own seam curve's.
+static SmBoolean sm_UsesOwnSeamUVCurve(const SmCurveClassification& crCrvClass)
+{
+    const SmCurve* pSeam = crCrvClass.GetCurve();
+    const SmCurve* pUVCurve = crCrvClass.GetAnyUVCurve1();
+    return pSeam != NULL && pSeam->IsKindOf(SmCrvOnSurf_TYPE) && pUVCurve != NULL
+        && pUVCurve == ((const SmCrvOnSurf*)pSeam)->GetUVCurve()
+        && pUVCurve->GetNaturalInterval().GetLength() > 0.0;
+}
+
+SmStatus TestSmSeamCurveOwnership()
+{
+    SmApiCreateContext();
+    // A cylinder's side face has a U seam; a torus face has U and V seams.
+    SmBrep* pCylinder = NULL;
+    SER( SmApiCreateCylinder(SmVector3d(0,0,0), 1.0, 2.0, pCylinder) );
+    SmObjDelete sCylinderCleanup(pCylinder);
+    SmBrep* pTorus = NULL;
+    SER( SmApiCreateTorus(SmVector3d(0,0,0), 5.0, 1.0, pTorus) );
+    SmObjDelete sTorusCleanup(pTorus);
+
+    ULONG aSeamCount[2] = { 0, 0 };
+    for( SmBrep* pBrep : { pCylinder, pTorus } )
+    {
+        SmTArray<SmFace*> sFaces;
+        pBrep->GetFaces(sFaces);
+        for( ULONG ii = 0; ii < sFaces.GetSize(); ++ii )
+        {
+            const SmContext& crContext = *sFaces[ii]->GetContext();
+            SmSurfParamType eCrossed, eMissing, eNearMiss;
+
+            // Copy the output, then delete it.
+            SmCurveClassification* aOutput[2] = { new (crContext) SmCurveClassification,
+                                                  new (crContext) SmCurveClassification };
+            sFaces[ii]->HasSeamProblem(*aOutput[0], *aOutput[1], eCrossed, eMissing, eNearMiss);
+            SmBoolean aHasSeam[2];
+            SmCurveClassification aCopied[2] = { *aOutput[0], *aOutput[1] };
+            SmCurveClassification aAssigned[2];
+            for( int jj = 0; jj < 2; ++jj )
+            {
+                aAssigned[jj] = *aOutput[jj];
+                aHasSeam[jj] = aOutput[jj]->GetCurve() != NULL;
+                delete aOutput[jj];
+            }
+
+            // Copy the output from a caller's SmFaceProps, then delete it. A new SmFaceProps
+            // does not know the surface is periodic, so say so.
+            SmCurveClassification aCached[2];
+            {
+                const SmSurface* pSurface = sFaces[ii]->GetSurface();
+                SmBoolean bPeriodicU = pSurface->IsPeriodic(pSurface->GetNaturalUVDomain(), SM_SP_U);
+                SmBoolean bPeriodicV = pSurface->IsPeriodic(pSurface->GetNaturalUVDomain(), SM_SP_V);
+                SmFaceProps sFaceProps(&crContext);
+                sFaces[ii]->HasSeamProblem(aCached[0], aCached[1], eCrossed, eMissing, eNearMiss, FALSE,
+                                           &bPeriodicU, &bPeriodicV, &sFaceProps);
+            }
+
+            for( int jj = 0; jj < 2; ++jj )
+            {
+                if( !aHasSeam[jj] )
+                    continue;
+                ++aSeamCount[jj];
+                if( !sm_UsesOwnSeamUVCurve(aCopied[jj]) || !sm_UsesOwnSeamUVCurve(aAssigned[jj])
+                    || !sm_UsesOwnSeamUVCurve(aCached[jj]) )
+                    return SM_ERR;
+            }
+        }
+    }
+    if( aSeamCount[0] == 0 || aSeamCount[1] == 0 )
+        return SM_ERR;
+
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
+    // A copied seam curve leaks the original: level-2 AssertValid must not grow the heap.
+    const int iWarmUp = 10, iRuns = 100;
+    size_t lBase = 0;
+    for( int ii = 0; ii < iWarmUp + iRuns; ++ii )
+    {
+        if( ii == iWarmUp )
+            lBase = mallinfo2().uordblks;
+        for( SmBrep* pBrep : { pCylinder, pTorus } )
+            if( !pBrep->AssertValid(NULL, SM_LEVEL_2, SM_WALK) )
+                return SM_ERR;
+    }
+    const size_t lUsed = mallinfo2().uordblks;
+    if( lUsed > lBase && (lUsed - lBase) / iRuns > 1024 )
+        return SM_ERR;
+#endif
+    return SM_SUCCESS;
+}
+
+//*************************************************************************
 // EvaluateSTEP derivatives must be with respect to the STEP parameters, whose
 // angles are in degrees. Compare every populated derivative through order 3
 // with central differences in the surface's own parameters. Also verify that
@@ -1448,6 +1567,10 @@ SmStatus TestSmGeneral()
         return( stat );
 
     stat = TestSmCurveSweepFailureCleanup();
+    if( stat != SM_SUCCESS )
+        return( stat );
+
+    stat = TestSmSeamCurveOwnership();
     if( stat != SM_SUCCESS )
         return( stat );
 

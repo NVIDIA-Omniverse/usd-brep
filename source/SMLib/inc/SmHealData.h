@@ -236,6 +236,7 @@ class SM_EXPORT SmHealData
   SmProbArray<SmFaceProps>      m_sBadFaceProps_FlatCorner ; // link: SmFaceProps::&m_lBadFlatCorners // Bad
                                                                                     
   SmProbArray<SmFaceProps> m_sBadFaceProps_MissingSeam ;     // link: SmFaceProps::&m_bBadMissingSeam  // list of Faces with Missing Seams 
+  SmProbArray<SmFaceProps> m_sBadFaceProps_CrossedPole ;     // link: SmFaceProps::&m_bBadCrossedPole // boundary edges crossing an interior surface pole
   SmProbArray<SmFaceProps> m_sBadFaceProps_CrossedSeam ;     // link: SmFaceProps::&m_bBadCrossedSeam  // list of Faces with LoopEdges crossing a seam 
   SmProbArray<SmFaceProps> m_sBadFaceProps_NearMissSeam ;    // link: SmFaceProps::&m_bBadNearMissSeam // list of Faces with LoopEdges nearly coin with a seam 
                                                                                                

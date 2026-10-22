@@ -222,6 +222,13 @@ public:
                                             //    : XY Axes = Plane of Start and End angles measured from X Axis                            
   );
 
+  SmStatus CreateCylinder
+  (
+    double dHeight,                               // in : height of result, [greater than zero]
+    double dRadius,                               // in : radius of result
+    const  SmAxis2Placement & crRefFrame          // in : Origin = base centre, Z Axis = cylinder axis
+  );
+
   SmStatus CreateCone
   (
     double dHeight,                               // in : height of result                                     
@@ -287,8 +294,8 @@ public:
   SmStatus CreateLinearSweep
   (
     SmTArray<SmCurve*> & cp3DCurves,              // in : Must be coplanar - ObjMem:[owned and managed by new Edges] 
-    const SmVector3d   & crSweepVec,              // in : The sweep vector                                          
-    double               dSweepDist,              // in : Sweep = SweepDist * SweepVec                              
+    const SmVector3d   & crSweepVec,              // in : The sweep direction (non-zero; magnitude ignored)
+    double               dSweepDist,              // in : Sweep = SweepDist * unit(SweepVec)
     ULONG                nRepetitions,            // in : Number of end to end sweeps                               
     SmBoolean            bCapEnds,                // in : TRUE = build end caps                                     
     SmBoolean            bTestContinuity = TRUE   // in : TRUE = split input curves at C1 discontinuties               
@@ -305,7 +312,7 @@ public:
   SmStatus CreateLinearSweep
   ( 
     SmTArray<SmFace *> & aFaces,                  // in : Faces to sweep                 
-    const SmVector3d   & crSweepVec,              // in : The sweep vector               
+    const SmVector3d   & crSweepVec,              // in : The sweep direction (non-zero; magnitude ignored)
     double               dSweepDist,              // in : The sweep distance             
     ULONG                nRepetitions,            // in : Number of end to end sweeps    
     SmBoolean            bCapEnds                 // in : Cap ends if true               

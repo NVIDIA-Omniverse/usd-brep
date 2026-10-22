@@ -3228,7 +3228,7 @@ NL_FLAG N_DistPtInfLine( NL_LINESEG lsg, NL_POINT P, NL_REAL *d )
 {
     NL_FLAG error, flg;
 
-    NL_POINT Q;
+    NL_POINT Q = { 0.0, 0.0, 0.0 };
 
     NL_REAL t;
 
@@ -3285,7 +3285,7 @@ NL_FLAG N_DistPtPlane( NL_PLANE pln, NL_POINT P, NL_REAL *d )
 {
     NL_FLAG error;
 
-    NL_POINT Q;
+    NL_POINT Q = { 0.0, 0.0, 0.0 };
 
     /* Project point onto the plane */
 

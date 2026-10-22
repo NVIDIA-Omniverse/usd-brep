@@ -25,8 +25,8 @@ This package must not include source-specific (CAD importer) headers or types. S
 
 Gate adapter conformance on the **unhealed** path. Run
 [schema checks](../../tools/brep_validator_cli/README.md), then
-[geometry validation](../../tools/brep_geometry_validator/src/brep_geometry_validator_main.cpp)
-with `--level 2 --no-healer`, then
+[geometry validation](../../tools/brep_geometry_validator/README.md)
+with `--level 2`, then
 [smtess_usd](../../tools/smtess_usd/src/smtess_usd_main.cpp) **without** `--heal`,
 requiring the expected body count, nonempty meshes and no failed faces.
 

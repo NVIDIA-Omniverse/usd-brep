@@ -418,8 +418,9 @@ class UsdToOcctExternalRoundTripTestCase(_UsdToOcctRoundTripMixin):
         samples = self._discover()
         if not samples:
             reason = (
-                f"no external .brep samples in {self.inputs_dir} "
-                "(populate it or set OCCT_BREP_EXTERNAL_DIR; see its README)"
+                "optional third-party samples, not included: OpenCASCADE's data/occ .brep files cannot be "
+                "shipped with this repository because of their license. To run them, copy them into "
+                f"{self.inputs_dir} or set OCCT_BREP_EXTERNAL_DIR (see its README)"
             )
             _SUMMARY.record_suite_skip("external", reason)
             self.skipTest(reason)

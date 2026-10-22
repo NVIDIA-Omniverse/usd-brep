@@ -121,7 +121,7 @@ if __name__ == "__main__":
         if is_macos_build and "-h" not in sys.argv and "--help" not in sys.argv:
             if _platform_target_from_argv(sys.argv) != "macos-universal":
                 print(
-                    "macOS build requires -p macos-universal (see README.md — macOS local development).",
+                    "macOS build requires -p macos-universal (see BUILDING.md — macOS local development).",
                     file=sys.stderr,
                 )
                 sys.exit(1)

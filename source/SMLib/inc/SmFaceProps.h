@@ -199,6 +199,13 @@ public:
     SmTArray<SmTouchData>   m_sRawTouchListV;                // set:[SmFace::HasSeamProblems()] SeamV RawTouches : m_pCrvClassV mapped to Loop, Pole, and NoVertex_Pole touches
     SmTArray<SmTouchData>   m_sDoneTouchListV;               // set:[SmFace::HasSeamProblems()] SeamV DoneTouches: m_sRawTouchListV purged of cracks, tangent, strut and periodice touches
 
+    // Cache one interior pole crossing. After splitting, Stage 2 finds the next crossing.
+    SmBooleanUL      m_bBadCrossedPole = FALSE;              // link: SmHealData::m_sBadFaceProps_CrossedPole
+                                                             // TRUE = interior crossing cached; FALSE = none cached (also the reset value).
+                                                             // Pole-side SM_SS_* bits are stored in m_lPoles and m_lNoVertexPoles.
+    SmEdge          *m_pCrossedPoleEdge = NULL;              // borrowed boundary edge; invalidated with Stage 2
+    double           m_dCrossedPoleParameter = 0.0;          // split parameter on m_pCrossedPoleEdge
+
     SmBooleanUL      m_bBadCrossedSeam = FALSE;              // link: SmHealData::m_sBadFaceProps_CrossedSeam
                                                              // set:[SmFaceProps::SetProps_Stage2()] 
     SmSurfParamType  m_eBadCrossedSeam = SM_SP_UNKNOWN;      // set:[SmFace::HasSeamProblems()] BadCrossedSeamFlag: 
@@ -237,8 +244,8 @@ public:
                                                              //
     SmTriedLinkType m_eBeenThroughSplitEdgesAtSeam = SM_TRY_NONE; // link: SmHealData::m_sRanFaceProps_SplitEdgesAtSeam
                                                              // one of: SM_TRY_NONE,     // obj not yet run through Fix_SplitEdgesAtSeam Fix function
-                                                             //         SM_TRY_FIXED,    // obj run through Fix_SplitEdgesAtSeam fix function - all Seam probs fixed
-                                                             //         SM_TRY_NOFIX,    // obj run through Fix_SplitEdgesAtSeam fix function - some Seam probs not fixed
+                                                             //         SM_TRY_FIXED,    // obj run through Fix_SplitEdgesAtSeam fix function - all pole/seam crossings fixed
+                                                             //         SM_TRY_NOFIX,    // obj run through Fix_SplitEdgesAtSeam fix function - some pole/seam crossings not fixed
                                                              //
 
     SmTriedLinkType m_eBeenThroughSplitFacesAtSeam = SM_TRY_NONE; // link: SmHealData::m_sRanFaceProps_SplitFaceAtSeam

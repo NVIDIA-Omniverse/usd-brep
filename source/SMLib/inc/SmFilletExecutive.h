@@ -343,6 +343,11 @@ public:
     double                                     dThumbweight=1.0   ///< [in] : Used only when eXSectType == SM_FSG_BLEND_CURVE       <br>
   ); 
 
+private:
+  // SM_ERR_INVALID_INPUT unless every edge is a live edge of pBrep.
+  SmStatus CheckEdgesAreInBrep( SmBrep * pBrep, const SmTArray< SmEdge* > & rEdgePtrs );
+
+public:
   // User level, for edge filleting: Creates a FilletCorner in m_vFilletCorners for every m_vFilletedVertices vertex and 
   //                                adds [vertex,SmFilletCorner] entry pair to m_vVertexCornerMap and then 
   //                                calls DoFilleting() after SetFilletParameters() call.
@@ -441,6 +446,11 @@ public:
   SmStatus SetFilletBrepEdgeMap      ();
   void     SetSelfIntersectionHandler(SmSelfIntersectionHandler *pSelfIntersectionHandler)
               { m_pSelfIntersectionHandler = pSelfIntersectionHandler; }
+
+  // FALSE for a radius or chamfer width below 8x the Brep tolerance (below that, some fillets
+  // come out non-manifold, crash or hang), and for NaN.
+  static SmBoolean IsRadiusSupported(double dRadius, double dBrepTol)
+              { return dRadius >= 8.0 * dBrepTol * (1.0 - SM_EFF_ZERO_SQRT); }
 
   // Other processing
   SmStatus ProcessSmoothEdgeSequences();

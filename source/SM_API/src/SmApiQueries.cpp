@@ -23,6 +23,8 @@
 #include <SmTools.h>
 #include <SmPointClass.h>
 #include <SmShape.h>
+#include <vector>
+#include <algorithm>
 
 /*******************************************************************//**
 PURPOSE --- Find the closest point on a brep to a given point
@@ -68,9 +70,8 @@ SmApiStatus SmApiGetClosestPoint
 
 // Count how many sample points of pSample fall strictly inside pTarget's solid
 // material (rInside) vs strictly outside it (rOutside). Samples are pSample's
-// vertices plus one interior point per face; the per-face points add coverage
-// where the vertices are sparse or land on pTarget's boundary (a sphere, for
-// instance, carries only its two pole vertices). SM_PC_REGION covers BOTH the
+// vertices, one interior point per face, and one point on each piece of each
+// edge between its crossings of pTarget's boundary. SM_PC_REGION covers BOTH the
 // solid interior and the exterior/void, so "inside" is SM_PC_REGION with a
 // non-void region; boundary hits count as neither (a shared boundary is not
 // containment).
@@ -98,10 +99,44 @@ static void sm_CountContainedSamples
             sPts.Add( sFacePt );
     }
 
+    // One point on each piece of each edge between its crossings of pTarget's
+    // boundary: each piece is wholly inside or outside pTarget.
+    SmTArray<SmEdge*> sEdges;  pSample->GetEdges( sEdges );
+    for( ULONG ii = 0; ii < sEdges.GetSize(); ++ii )
+    {
+        const SmCurve* pCurve = sEdges[ii]->GetCurve();
+        const SmExtent1d sIvl = sEdges[ii]->GetInterval();
+        if( pCurve == NULL )
+            continue;
+        std::vector<double> sParams;
+        sParams.push_back( sIvl.GetMin() );
+        SmSolutionArray sXs;
+        if( SmTopologySolver::BrepCurveSolve( pTarget, *pCurve, sIvl, SM_SO_INTERSECT, SM_SR_ALL,
+                (double)sZoneTol, SM_BIG_DOUBLE, NULL, sXs ) == SM_SUCCESS )
+        {
+            for( ULONG kk = 0; kk < sXs.GetSize(); ++kk )
+            {
+                sParams.push_back( sXs[kk].m_vStart[0] );
+                if( sXs[kk].m_eSolutionType == SM_ST_RANGE_OF_VALUES )
+                    sParams.push_back( sXs[kk].m_vEnd[0] );
+            }
+        }
+        sParams.push_back( sIvl.GetMax() );
+        std::sort( sParams.begin(), sParams.end() );
+        for( ULONG kk = 0; kk + 1 < sParams.size(); ++kk )
+        {
+            if( sParams[kk+1] - sParams[kk] <= SM_EFF_ZERO * ( 1.0 + sIvl.GetLength() ) )
+                continue;
+            SmPoint3d sMid;
+            if( pCurve->EvaluatePoint( 0.5 * ( sParams[kk] + sParams[kk+1] ), sMid ) == SM_SUCCESS )
+                sPts.Add( sMid );
+        }
+    }
+
     for( ULONG ii = 0; ii < sPts.GetSize(); ++ii )
     {
         SmPointClassification sPC;
-        if( pTarget->Point3DClassify( sPts[ii], sZoneTol, FALSE, sPC ) != SM_SUCCESS )
+        if( pTarget->Point3DClassify( sPts[ii], sZoneTol, TRUE, sPC ) != SM_SUCCESS )
             continue;
         if( sPC.GetPointClass() == SM_PC_REGION )
         {
@@ -144,9 +179,9 @@ NOTES ---   Combines the boundary-to-boundary minimum distance (BrepBrepSolve,
     point of one Brep shares one classification against the other, so the
     BrepBrepSolve closest-approach point pair is a sufficient witness.
 
-    TOUCHING vs INTERPENETRATING still uses vertex/face-point sampling, so an
-    overlap missed by every sample may under-report as TOUCHING. Reliable for
-    typical CAD assemblies.
+    TOUCHING vs INTERPENETRATING samples vertices, face points and edge pieces,
+    so an overlap that no edge crosses and no sample lands in may under-report
+    as TOUCHING.
 ***********************************************************************/
 SmApiStatus SmApiBrepRelationship
 (
@@ -791,9 +826,11 @@ static SmApiStatus sm_BrepComputePropertiesAbout
 PURPOSE --- Compute the enclosed volume of a Brep using analytic
     integration over trimmed NURBS boundaries.
 
-USAGE NOTES --- Accuracy is clamped to [1e-8, 1e-1]; non-finite values are
-    rejected.  The Brep should be a closed manifold solid.  Integration uses
-    the bounding-box midpoint and the mass-properties core.
+USAGE NOTES --- Accuracy values tighter than
+    1e-8 are not recommended because roundoff can prevent convergence.
+    Non-finite values are rejected.  The Brep should be a closed manifold
+    solid. Integration uses the bounding-box midpoint and the mass-properties
+    core.
 ***********************************************************************/
 SmApiStatus SmApiBrepComputeVolume
 (
@@ -807,8 +844,6 @@ SmApiStatus SmApiBrepComputeVolume
 
     if( !SM_IS_VALID_DOUBLE( dRelativeAccuracy ) )
         { return SM_ERR_INVALID_INPUT; }
-    if( dRelativeAccuracy < 1.0e-8 ) { dRelativeAccuracy = 1.0e-8; }
-    if( dRelativeAccuracy > 1.0e-1 ) { dRelativeAccuracy = 1.0e-1; }
 
     SmExtent3d sBBox;
     SER( pBrep->CalculateBoundingBox(sBBox) );
@@ -828,9 +863,9 @@ SmApiStatus SmApiBrepComputeVolume
 PURPOSE --- Compute the total surface area of a Brep: the sum of its
     trimmed face areas.
 
-USAGE NOTES --- Each face goes through SmApiFaceComputeArea, so the
-    accuracy envelope and per-face orientation handling are the same as
-    for single faces; non-finite accuracy is rejected.  Unlike
+USAGE NOTES --- Each face goes through SmApiFaceComputeArea, so its accuracy
+    guidance and per-face orientation handling are the same as for single
+    faces; non-finite accuracy is rejected.  Unlike
     SmApiBrepComputeMassProperties, the Brep does not have to be a closed
     solid: sheet bodies and open shells are accepted.  A Brep with no
     faces has area 0.
@@ -868,14 +903,16 @@ SmApiStatus SmApiBrepComputeArea
 PURPOSE --- Compute area, volume, mass, centroid, and the mass moments /
     products of inertia of a Brep about a caller-supplied origin.
 
-USAGE NOTES --- A single ComputePreciseProperties integration about crOrigin.
+USAGE NOTES --- Integrates once about the bounding-box midpoint and shifts
+    the results to crOrigin, which avoids cancellation for a distant origin.
     Moments/products are about axes through crOrigin (parallel to world axes);
-    rCentroid = crOrigin + staticMoment/mass, independent of crOrigin.  For
+    rCentroid is independent of crOrigin.  For
     centroidal inertia, call again passing the returned rCentroid as crOrigin.
-    Accuracy is clamped to [1e-4, 1e-1].  Returns SM_ERR_INVALID_INPUT for a
-    non-finite accuracy/origin, a non-finite / sub-SM_EFF_ZERO density, an
-    SM_AI_MASS_PROPERTIES-attributed input (would override the density), or a
-    non-solid / zero-mass Brep.
+    Accuracy values tighter than 1e-8 are not
+    recommended because roundoff can prevent convergence. Returns
+    SM_ERR_INVALID_INPUT for a non-finite accuracy/origin, a non-finite /
+    sub-SM_EFF_ZERO density, an SM_AI_MASS_PROPERTIES-attributed input (would
+    override the density), or a non-solid / zero-mass Brep.
 ***********************************************************************/
 SmApiStatus SmApiBrepComputeMassProperties
 (
@@ -894,12 +931,8 @@ SmApiStatus SmApiBrepComputeMassProperties
     if( pBrep == NULL )
         { return SM_ERR_INVALID_INPUT; }
 
-    // Reject non-finite accuracy before clamping (NaN slips past both ordered
-    // comparisons); finite out-of-range values still clamp to [1e-4, 1e-1].
     if( !SM_IS_VALID_DOUBLE( dRelativeAccuracy ) )
         { return SM_ERR_INVALID_INPUT; }
-    if( dRelativeAccuracy < 1.0e-4 ) { dRelativeAccuracy = 1.0e-4; }
-    if( dRelativeAccuracy > 1.0e-1 ) { dRelativeAccuracy = 1.0e-1; }
 
     // The kernel floors any density below SM_EFF_ZERO to 1.0, so a sub-epsilon
     // (or non-positive / non-finite) value would give a misleading unit-density
@@ -936,9 +969,13 @@ SmApiStatus SmApiBrepComputeMassProperties
 
     SmMassPropertyBehavior sBehavior( dDensity );
 
+    SmExtent3d sBBox;
+    SER( pBrep->CalculateBoundingBox(sBBox) );
+    const SmPoint3d sMid = sBBox.GetMid();
+
     double dArea = 0.0, dVolume = 0.0, dMass = 0.0;
     SmTArray<SmVector3d> sMoments;
-    SER( sm_BrepComputePropertiesAbout( pBrep, dRelativeAccuracy, sBehavior, crOrigin,
+    SER( sm_BrepComputePropertiesAbout( pBrep, dRelativeAccuracy, sBehavior, sMid,
                                         dArea, dVolume, dMass, sMoments ) );
 
     // Reject a degenerate zero/non-finite mass or non-positive volume before
@@ -950,14 +987,19 @@ SmApiStatus SmApiBrepComputeMassProperties
     rdArea             = dArea;
     rdVolume           = dVolume;
     rdMass             = dMass;
-    // sMoments[4] is the density-weighted static moment about crOrigin; divide
-    // by mass to recover the geometric centroid.
-    rCentroid          = crOrigin + ( sMoments[4] / dMass );
-    // [7] = mass moments of inertia about crOrigin (integral of (y^2+z^2) dm,
-    // ...); [6] = products as raw positive integrals (yz, zx, xy dm), whose
-    // negatives are the inertia-tensor off-diagonals.
-    rMomentsOfInertia  = sMoments[7];
-    rProductsOfInertia = sMoments[6];
+    // sMoments[4] = static moment S about sMid; [7] = moments of inertia
+    // (y^2+z^2, ...); [6] = products (yz, zx, xy) as raw positive integrals.
+    const SmVector3d sS = sMoments[4];
+    // Shift to crOrigin: with d = sMid - crOrigin, the integral of (a+d_a)(b+d_b) dm
+    // gains d_a S_b + d_b S_a + d_a d_b m.
+    const SmVector3d d = sMid - crOrigin;
+    const auto fShift = [&](ULONG a, ULONG b) { return d[a] * sS[b] + d[b] * sS[a] + d[a] * d[b] * dMass; };
+    rMomentsOfInertia  = sMoments[7] + SmVector3d( fShift(1, 1) + fShift(2, 2),
+                                                   fShift(0, 0) + fShift(2, 2),
+                                                   fShift(0, 0) + fShift(1, 1) );
+    rProductsOfInertia = sMoments[6] + SmVector3d( fShift(1, 2), fShift(2, 0), fShift(0, 1) );
+    // Last: rCentroid may alias crOrigin.
+    rCentroid          = sMid + ( sS / dMass );
 
     return SM_SUCCESS;
 
@@ -1081,12 +1123,13 @@ static double sm_FaceAreaEstimate( const SmExtent3d & crBBox )
 PURPOSE --- Compute the surface area of a face within its trim
     boundary using numerical integration.
 
-USAGE NOTES --- dRelativeAccuracy is clamped to [1e-4, 1e-1] to match
-    SmApiBrepComputeVolume.  Origin of integration is the face's
-    bounding-box midpoint for numerical conditioning.  The returned
-    area is positive regardless of face orientation -- it is a
-    geometric, not a signed, quantity. Area-only precise integration skips
-    volume and moment components, retaining the area accuracy control.
+USAGE NOTES --- dRelativeAccuracy values
+    tighter than 1e-8 are not recommended because roundoff can prevent
+    convergence. Origin of integration is the face's bounding-box midpoint for
+    numerical conditioning. The returned area is positive regardless of face
+    orientation -- it is a geometric, not a signed, quantity. Area-only
+    precise integration skips volume and moment components, retaining the area
+    accuracy control.
 ***********************************************************************/
 SmApiStatus SmApiFaceComputeArea
 (
@@ -1098,8 +1141,8 @@ SmApiStatus SmApiFaceComputeArea
     if( pFace == NULL )
         { return SM_ERR_INVALID_INPUT; }
 
-    if( dRelativeAccuracy < 1.0e-4 ) { dRelativeAccuracy = 1.0e-4; }
-    if( dRelativeAccuracy > 1.0e-1 ) { dRelativeAccuracy = 1.0e-1; }
+    if( !SM_IS_VALID_DOUBLE( dRelativeAccuracy ) )
+        { return SM_ERR_INVALID_INPUT; }
 
     SmExtent3d sBBox;
     SER( pFace->CalculateBoundingBox( sBBox ) );
@@ -1259,8 +1302,8 @@ SmApiStatus SmApiFaceComputeCentroid
     if( pFace == NULL )
         { return SM_ERR_INVALID_INPUT; }
 
-    if( dRelativeAccuracy < 1.0e-4 ) { dRelativeAccuracy = 1.0e-4; }
-    if( dRelativeAccuracy > 1.0e-1 ) { dRelativeAccuracy = 1.0e-1; }
+    if( !SM_IS_VALID_DOUBLE( dRelativeAccuracy ) )
+        { return SM_ERR_INVALID_INPUT; }
 
     SmExtent3d sBBox;
     SER( pFace->CalculateBoundingBox( sBBox ) );

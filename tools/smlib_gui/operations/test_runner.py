@@ -21,6 +21,7 @@ from .overlays import (
 
 PROG_TEST_SUITES = (
     "topology",
+    "healing",
     "booleans",
     "offset",
     "fillets",

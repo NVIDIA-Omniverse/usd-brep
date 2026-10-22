@@ -54,7 +54,7 @@ NL_PUBLIC NL_REAL NL_ZCTL; /* 1.0e-12   Zero coefficient tolerance  */
 NL_PUBLIC NL_REAL NL_WMIN;   /* 1.0e-03   Minimum weight                  */
 NL_PUBLIC NL_REAL NL_WMAX;   /* 100.0     Maximum weight                  */
 
-NL_PUBLIC NL_DEGREE NL_DMAX; /* 16        Maximum degree.   This should   */
+NL_PUBLIC NL_DEGREE NL_DMAX; /* 17        Maximum degree.   This should   */
 /*                    agree with NL_MAXDEG in nurbsdef.h */
 /*                    if using the fast evaluators    */
 

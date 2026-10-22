@@ -1039,15 +1039,11 @@ enum SmCrvDirOnFaceType
   SM_CD_ON,               // SrfDir on a FaceBndry points Tangent to that Bndry
   SM_CD_OUT,              // SrfDir at a SrfPt points towards 'Out' FacePts as defined by the 'lefthand' rule for Face Loopuses
   SM_CD_LAMINA,           // SrfDir on a Lamina SrfBndry points out of the Surface
-  SM_CD_SEAM,             // SrfDir on a Seam SrfBndry points out of the Surface
+  SM_CD_SEAM,             // Direction leaves a seam side with a bounding edgeuse
   SM_CD_POLE,             // SrfDir on a Pole SrfBndry marked by a Vertex points out of the Surface
-  SM_CD_POLE_NO_VERTEX    // SrfDir on a Pole SrfBndry NOT marked by a Vertex points out of the Surface
-                            //   gwc note: The SM_CD_POLE_NO_VERTEX value may seem like mixing a topology concept with 
-                            //         geometry concepts.  But in this enum all these classifications are
-                            //         a mix of geometry and topology concepts.  The SM_CD_POLE_NO_VERTEX
-                            //         was created to simplify communications within the healer.  In the end
-                            //         SMLib may want to add SM_CD_LAMINA_NO_EDGE and SM_CD_SEAM_NO_EDGE if the
-                            //         the healer wants to start tracking that kind of information.
+  SM_CD_POLE_NO_VERTEX,   // SrfDir on a Pole SrfBndry NOT marked by a Vertex points out of the Surface
+  SM_CD_SEAM_NO_EDGEUSE   // Direction leaves a seam side without a bounding edgeuse;
+                         // a 3D edge may still exist on the opposite periodic side.
 } ;
 
 void DumpCrvDirOnFaceType(const TCHAR      * pOptLabel,       // in : optional Character string label, NULL to ignore

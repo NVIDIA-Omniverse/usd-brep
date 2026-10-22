@@ -26,8 +26,10 @@ API_EXPORT SmStatus TestSmBoolean();
 API_EXPORT SmStatus TestSmBooleanBoundsExample();
 API_EXPORT SmStatus TestSmMassProperties();
 API_EXPORT SmStatus TestSmPrecisePropertySelection();
+API_EXPORT SmStatus TestSmFaceAreaTinyTrimSpans();
 API_EXPORT SmStatus TestSmBrepDistance();
 API_EXPORT SmStatus TestSmMaterialCensus();
+API_EXPORT SmStatus TestSmBrepRefreshGaps();
 API_EXPORT SmStatus TestSmMergeBreps();
 API_EXPORT SmStatus TestSmTessellate();
 API_EXPORT SmStatus TestSmProjectBrepOntoPlane();
@@ -47,6 +49,7 @@ API_EXPORT SmStatus TestSmBooleanLists();
 API_EXPORT SmStatus TestSmShellBrepFull();
 API_EXPORT SmStatus TestSmOffsetBrepFull();
 API_EXPORT SmStatus TestSmStitchIntoSolid();
+API_EXPORT SmStatus TestSmBooleanLampWellEndpoints();
 API_EXPORT SmStatus TestSmStitchIntoShell();
 API_EXPORT SmStatus TestSmUnifyNormals();
 API_EXPORT SmStatus TestSmAdvancedStitch();
@@ -68,8 +71,10 @@ API_EXPORT SmStatus TestSmCreateRectangle();
 API_EXPORT SmStatus TestSmCreateRegularPolygon();
 API_EXPORT SmStatus TestSmProjectCurveToSurface();
 API_EXPORT SmStatus TestSmLiftUVCurve();
+API_EXPORT SmStatus TestSmRemoveOneKnotLargeRange();
 API_EXPORT SmStatus TestSmMakeCurvesCompatible();
 API_EXPORT SmStatus TestSmOrderCurves();
+API_EXPORT SmStatus TestSmReverseUnclampedCurve();
 API_EXPORT SmStatus TestSmRemoveCurveKnots();
 API_EXPORT SmStatus TestSmCreateHelixInvalidInputs();
 API_EXPORT SmStatus TestSmCreateCurveInvalidInputs();
@@ -83,7 +88,7 @@ API_EXPORT SmStatus TestSmVariableRadiusFillet();
 API_EXPORT SmStatus TestSmSurfaceSurfaceFillet();
 API_EXPORT SmStatus TestSmFilletPreview();
 API_EXPORT SmStatus TestSmSetBevelCorners();
-API_EXPORT SmStatus TestSmRemoveFillet();
+API_EXPORT SmStatus TestSmRemoveFilletNurbsPlanes();
 
 
 // TestSmGeneral
@@ -95,16 +100,20 @@ API_EXPORT SmStatus TestSmStatusAssertMacros();
 API_EXPORT SmStatus TestSmTranslate();
 API_EXPORT SmStatus TestSmPolyBrepMassPropertiesWinding();
 API_EXPORT SmStatus TestSmPrincipalDirectionPairing();
+API_EXPORT SmStatus TestSmProjectedCurveRotationAxes();
 API_EXPORT SmStatus TestSmSTEPDerivativeUnits();
 API_EXPORT SmStatus TestSmSTEPDerivativesExample();
 API_EXPORT SmStatus TestSmConeSTEPCrossDerivative();
 API_EXPORT SmStatus TestSmPlanarFacesFailureCleanup();
 API_EXPORT SmStatus TestSmEdgeCurveOwnership();
 API_EXPORT SmStatus TestSmCurveSweepFailureCleanup();
+API_EXPORT SmStatus TestSmSeamCurveOwnership();
 
 
 // TestSmHeal
+API_EXPORT SmStatus TestSmHealVoxelGrowItems();
 API_EXPORT SmStatus TestSmHealBrep();
+API_EXPORT SmStatus TestSmHealVoxelCoincidentPairs();
 
 // TestSmImportExport
 API_EXPORT SmStatus TestSmImportExport();
@@ -132,7 +141,9 @@ API_EXPORT SmStatus TestSmCreateRotationalSweep();
 API_EXPORT SmStatus TestSmCreateLinearSweep();
 API_EXPORT SmStatus TestSmCreateLinearSweepPlane();
 API_EXPORT SmStatus TestSmCreateLinearSweepCylinder();
+API_EXPORT SmStatus TestSmCreateLinearSweepOblique();
 API_EXPORT SmStatus TestSmCreateDraftSweep();
+API_EXPORT SmStatus TestSmCreateLinearSweepRepeatedCapped();
 API_EXPORT SmStatus TestSmCreateSwungPrimitive();
 API_EXPORT SmStatus TestSmCreateSkinPrimitive();
 API_EXPORT SmStatus TestSmCreateSkinFromFaces();
@@ -153,6 +164,7 @@ API_EXPORT SmStatus TestSmCreateSurfaceRevolutionCone();
 API_EXPORT SmStatus TestSmCreateSurfaceRevolutionTruncCone();
 API_EXPORT SmStatus TestSmCreateOffsetSurface();
 API_EXPORT SmStatus TestSmCreateSkinSurface();
+API_EXPORT SmStatus TestSmReverseUnclampedSurface();
  
 
 

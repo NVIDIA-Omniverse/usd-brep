@@ -19,6 +19,8 @@
 #include <SmMessages.h>
 #include <SmBrep.h>
 #include <SmFace.h>
+#include <SmBSplineSurface.h>
+#include <NL_Geometry.h>   // gw_CPOINT
 
 //*************************************************************************
 // 
@@ -663,6 +665,56 @@ SmStatus TestSmCreateSkinSurface()
         return stat;
     if (!pResult)
         return SM_ERR;
+
+    return SM_SUCCESS;
+}
+
+
+//*************************************************************************
+// A surface whose u knot vector is not clamped, reversed in u, traces the
+// original backwards in u.
+//*************************************************************************
+SmStatus TestSmReverseUnclampedSurface()
+{
+    gw_CPOINT sNet[4][3];
+    gw_CPOINT* pRows[4];
+    for (int i = 0; i < 4; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            double w = 1.0 + 0.1 * (i + 2 * j);
+            sNet[i][j].x = i * w;
+            sNet[i][j].y = j * w;
+            sNet[i][j].z = ((i + j) % 2) * w;
+            sNet[i][j].w = w;
+        }
+        pRows[i] = sNet[i];
+    }
+    double dU[7] = { 0.0, 0.0, 0.0, 1.2, 2.0, 3.0, 4.0 };
+    double dV[6] = { 0.0, 0.0, 0.0, 1.0, 1.0, 1.0 };
+
+    // u runs over [U[p],U[r-p]] = [0,2] and maps to 4-u on the reversed surface.
+    SmBSplineSurface sSurface(3, 2, 2, 2, 6, 5, pRows, dU, dV);
+    SmPoint3d sBefore[7][7];
+    for (int i = 0; i <= 6; i++)
+    {
+        for (int j = 0; j <= 6; j++)
+            SER(sSurface.EvaluatePoint(SmPoint2d(2.0 * i / 6.0, j / 6.0), sBefore[i][j]));
+    }
+
+    SER(sSurface.Reverse(SM_SP_U));
+
+    for (int i = 0; i <= 6; i++)
+    {
+        for (int j = 0; j <= 6; j++)
+        {
+            SmPoint3d sAfter;
+            SER(sSurface.EvaluatePoint(SmPoint2d(4.0 - 2.0 * i / 6.0, j / 6.0), sAfter));
+            double dDist = fabs(sAfter.x - sBefore[i][j].x) + fabs(sAfter.y - sBefore[i][j].y) + fabs(sAfter.z - sBefore[i][j].z);
+            if (dDist > 1.0e-12)
+                return SM_ERR;
+        }
+    }
 
     return SM_SUCCESS;
 }

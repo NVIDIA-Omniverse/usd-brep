@@ -73,6 +73,7 @@ Create a surface of revolution by rotating a curve around an axis.
 - For a full surface of revolution, use `angle_deg=360`.
 - The curve should not cross the rotation axis (produces self-intersection).
 - This produces a standalone surface, not a solid. For a solid of revolution, use `rotational_sweep` instead.
+- Only the first surface of the revolved result is returned. The revolve splits the curve at interior tangent discontinuities (kinks) and revolves each piece separately, so for a kinked curve use `rotational_sweep`.
 
 ```python
 arc = sm.create_arc((5, 0, 0), 2.0, 0, 180)
@@ -112,6 +113,7 @@ Build a `Brep` made of planar faces from one or more closed planar curve loops.
 - The input curves are consumed on success (the new faces use them); do not reuse them afterwards. On failure, the curves remain owned by the caller.
 - Multiple closed loops on the same plane produce one face per loop (or with-holes faces if loops nest), all packed into a single `Brep`.
 - Returns a sheet body (open shell), not a manifold solid. Use `linear_sweep` or stitching to extrude/close into a solid.
+- Endpoint matching uses the new Brep's default tolerance; it cannot be set.
 - Wraps `SmApiCreatePlanarFaces` from `SmApiTrimmedSurfaces.h`. Lives with the surface creators rather than the trimming ops because it is a creation primitive — it constructs a Brep from scratch given curve loops.
 
 ```python
@@ -138,5 +140,5 @@ Surfaces are turned into faces/BReps via trimming operations (`SmApiTrimSurfaceW
 - `create_surface_from_ordered_points` — surface fit to ordered point grid
 - `create_surface_from_random_points` — surface fit to unordered point cloud
 - `create_extrude_surface` — extrusion surface from curve and vector
-- `create_sweep_surface` — general sweep surface from generation curve along path curve
+- `create_sweep_surface` — general sweep surface from generation curve along path curve. The profile is reoriented along the path (not only translated) and the result approximates the exact sweep within a fixed 1e-5 tolerance.
 - `create_skin_surface` — lofted surface through multiple profile curves

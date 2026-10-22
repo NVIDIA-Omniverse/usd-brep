@@ -1340,6 +1340,12 @@ SmBoolean SmEdgeDefinition::IsInteriorPoint(
   if(eStat != SM_SUCCESS  ||  ! bSuccess )
     { return FALSE; }
 
+  // SM_SO_MINIMIZE succeeds for any converged closest point, however far away.
+  // A TRUE result lets UpdateEdges() trim this EdgeDef to rdParam, so the position
+  // must actually lie on the curve.  Written as !(<=) so a NaN distance is rejected.
+  if(!(dDropDist <= sTol3d) )
+    { return FALSE; }
+
   // Sometimes for very short Edges, the point will be at or near the far end.  We don't want that.
   if(bAtStart == TRUE  &&  rdParam > m_pXSectInterval.GetMid() )
     { return FALSE; }
@@ -1459,6 +1465,10 @@ static int iDebugMe2=0;
 
       if(eStat != SM_SUCCESS )
       {
+          // MakeEdgeInFace() can fail after it has implanted the curves in a new Edge of
+          // Brep1, so forget any curve that now has an owner instead of deleting it.
+          if(m_pXSectCurve3d  != NULL && m_pXSectCurve3d ->GetOwner() != NULL ) { m_pXSectCurve3d  = NULL; }
+          if(m_pXSectUVCurve1 != NULL && m_pXSectUVCurve1->GetOwner() != NULL ) { m_pXSectUVCurve1 = NULL; }
           this->Destruct(); // Get rid of our curves, which were not consumed.
           SER( eStat) ;
       }
@@ -3292,6 +3302,7 @@ PURPOSE: Combine two ProtoEdges: Add in the contents of another ProtoEdge into t
 
 USAGE NOTES---- 
    Moves the EdgeDefinitions from pOtherPE into this PE.
+   Also moves pOtherPE's coincident ProtoFaces onto this PE.
 ***********************************************************************/
 void SmProtoEdge::CombineProtoEdge( SmProtoEdge *pOtherPE )
 {
@@ -3329,12 +3340,32 @@ void SmProtoEdge::CombineProtoEdge( SmProtoEdge *pOtherPE )
 
   // Add in other PE's EdgeDefinitions, and remove them from pOtherPE.
   // Don't worry about combining these here, that will happen in Resolve().
-  for(ii=0;ii<pOtherPE->m_sEdgeDefs.GetSize();ii++)
+  // AddEdgeDefinition already removes pED from its previous owner, so a forward
+  // loop over pOtherPE->m_sEdgeDefs would shrink the array and skip every second entry.
+  // Walk a copy of the list.
+  SmTArray<SmEdgeDefinition *> sOtherEDs = pOtherPE->m_sEdgeDefs;
+  for(ii=0;ii<sOtherEDs.GetSize();ii++)
   {
-      SmEdgeDefinition *pED = pOtherPE->m_sEdgeDefs[ii];
+      SmEdgeDefinition *pED = sOtherEDs[ii];
       this->AddEdgeDefinition( pED) ;
       pOtherPE->RemoveEdgeDefinition( pED) ;
   }
+
+  // Take over pOtherPE's coincident ProtoFaces. The caller deletes pOtherPE right after
+  // this call, and RemoveProtoEdge does not update ProtoFaces, so a ProtoFace would
+  // otherwise keep pOtherPE in m_sCoincPEs.
+  for(ii=0;ii<pOtherPE->m_sCoincPFs.GetSize();ii++)
+  {
+      SmProtoFace *pPF = pOtherPE->m_sCoincPFs[ii];
+      if(pPF == NULL)
+        { continue; }
+      SmTArray<SmProtoEdge *> *pPFEdges = pPF->GetCoincProtoEdges();
+      ULONG idx;
+      if(pPFEdges->FindElement( pOtherPE, idx))
+        { pPFEdges->RemoveAt( idx) ; }
+      pPF->RelateCoincidentPF( this) ;
+  }
+  pOtherPE->m_sCoincPFs.ReSet() ;
 
 } // end SmProtoEdge::CombineProtoEdge
 
@@ -3565,6 +3596,23 @@ USAGE NOTES----
 ***********************************************************************/
 SmProtoTopologyManager::~SmProtoTopologyManager()
 {
+  // Cut the ProtoVertex <-> ProtoEdge links first: a ProtoVertex can still list a ProtoEdge that
+  // has moved to another ProtoVertex, and its destructor would then write into a deleted ProtoEdge.
+  ULONG ii ;
+  for ( ii = 0 ; ii < m_sPEs.GetSize() ; ii++ )
+    {
+      if ( m_sPEs[ii] == NULL ) { continue ; }
+      m_sPEs[ii]->SetStartProtoVertex( NULL ) ;
+      m_sPEs[ii]->SetEndProtoVertex( NULL ) ;
+    }
+  for ( ii = 0 ; ii < m_sPVs.GetSize() ; ii++ )
+    {
+      if ( m_sPVs[ii] != NULL )
+        {
+          m_sPVs[ii]->GetProtoEdges().ReSet() ;
+        }
+    }
+
   // Let these guys do the work.
   SmObjsDelete< SmProtoVertex* > sCleanPVs( &m_sPVs) ;
   SmObjsDelete< SmProtoEdge*   > sCleanPEs( &m_sPEs) ;
@@ -6027,7 +6075,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
                           if(pEdgeMate != NULL )
                             { m_pTI->RemoveRelationship( pE1, pEdgeMate) ; }
                           if(pOtherVtxMate != NULL )
-                            { m_pTI->RemoveRelationship( pBrep2Vtx2, pOtherVtxMate) ; }
+                            { m_pTI->RemoveRelationship( pBrep1Vtx2, pOtherVtxMate) ; }
 
 
                           //cbi Update this ProtoTopoMgr: need to find the EdgeDefs for pE1, pE2.
@@ -6228,7 +6276,9 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
                     || sDeletedEdges2.IsIn( pThisED->GetFinalEdge( 2 ) ) )
                   {
                       pThisPE->RemoveEdgeDefinition( pThisED) ;
-                      pThisED->Destruct();
+                      // No Destruct(): this EdgeDefinition was imprinted, so its curves belong to
+                      // the Breps' Edges (the deleted Edge took its own along). The destructor
+                      // deletes only the curves no Brep took.
                       delete pThisED; pThisED = NULL;
                   }
               }
@@ -7096,7 +7146,7 @@ SmBoolean bDebugMe=FALSE;
   
       // locals
       SmBoolean                 bReplaceCoinPE = FALSE ;
-      SmProtoFace             * pPF            = NULL ;
+      SmTArray<SmProtoFace *>   sReplacePFs;       // every ProtoFace that listed a PE of the group
       SmTArray<SmProtoFace *>   sPFs           = GetProtoFaces() ;
       
       // gwc - does this next section need to be rewritten for multiple CoinPF cases
@@ -7108,11 +7158,10 @@ SmBoolean bDebugMe=FALSE;
 
       // PFs keep a list of coincident PEs. Remember when any Overlap PE is also a PF coincident PE so that stale pointers can be refreshed.
       
-      // remember the first pPF where any of the sOverLappingGroup are listed as a pPF->CoinProtoEdge - gwc: should we check all pPF and keep a list?
+      // Check every ProtoFace: the group can be coincident with more than one, and its PEs are deleted below.
       for(jj=0;jj<sPFs.GetSize();jj++)
         {
-          // remember 1st ProtoFace found with CoinPEs from this OverlappingPE group - gwc: should we check all pPF and keep a list?
-          pPF = sPFs[jj] ; 
+          SmProtoFace * pPF = sPFs[jj];
 
           // locals
           SmTArray<SmProtoEdge *> * pCoinPEs = pPF->GetCoincProtoEdges() ;
@@ -7125,7 +7174,7 @@ SmBoolean bDebugMe=FALSE;
           if(pCoinPEs->GetSize() != sSize )
             {
               bReplaceCoinPE = TRUE ;
-              break ;
+              sReplacePFs.Add(pPF);
             }
         } // end check for these PEs on existing PFs
   
@@ -7216,7 +7265,7 @@ SmBoolean bDebugMe=FALSE;
       //   pTopo1         = 1st min dim Brep1 src object found, lDim1 = dim of pTopo1
       //   pTopo2         = 1st min dim Brep2 src object found, lDim2 = dim of pTopo2
       //   bReplaceCoinPE = TRUE when any Overlap PE is also a Face coincident PE
-      //   pF             = First Face where any Overlapping PE was listed as a CoinFace (bReplaceCoinPE == TRUE), else NULL
+      //   sReplacePFs    = every ProtoFace where any Overlapping PE was listed as a CoinPE (empty when bReplaceCoinPE == FALSE)
       // all PE[ii]->OverlapGroupPEs have been removed from ProtoTopo model and deleted
       // all PE[ii]->OverlapGroupPVs whose PE counts went to zero have been deleted
       
@@ -7447,12 +7496,15 @@ SmBoolean bDebugMe=FALSE;
                                                        // out: optional, TRUE  = rpNewPE was created, NULL to ignore, default:[NULL]
                                                        //                FALSE = rpNewPE was found
                                                        // 
-              // when any OverlappingPE was a CoinPE in pPF - add all New or Found PEs back into the PF->CoincPE list
+              // when any OverlappingPE was a CoinPE in a PF - add all New or Found PEs back into each of those PF->CoincPE lists
               if(pNewPE && bReplaceCoinPE)
                 {
-                  SmTArray< SmProtoEdge* > * pCoinPEs;
-                  pCoinPEs = pPF->GetCoincProtoEdges();
-                  pCoinPEs->AddUnique(pNewPE) ;
+                  for(ULONG ll = 0; ll < sReplacePFs.GetSize(); ll++)
+                    {
+                      SmTArray< SmProtoEdge* > * pCoinPEs;
+                      pCoinPEs = sReplacePFs[ll]->GetCoincProtoEdges();
+                      pCoinPEs->AddUnique(pNewPE);
+                    }
                 }
             } // end for each curve interval
         } // end for each curve classification

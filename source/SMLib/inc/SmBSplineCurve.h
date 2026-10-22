@@ -229,7 +229,7 @@ public:
   
   static SmStatus CreateCanonical(const SmContext           & crContext,            ///< [in] : context for new object construction                            <br>
                                   ULONG                       lDimension,           ///< [in] : valid dimension - 2 or 3                                       <br>
-                                  ULONG                       lDegree,              ///< [in] : valid degree - 1 through 32                                    <br>
+                                  ULONG                       lDegree,              ///< [in] : valid degree - 1 through 17                                    <br>
                                   const SmTArray<SmPoint3d> & crControlPointsList,  ///< [in] : Euclidian form of the control points.                          <br>
                                   SmBSplineCurveForm          eBSplineCurveForm,    ///< [in] : oneof  SM_CF_POLYLINE_FORM,  SM_CF_PARABOLIC_ARC,              <br>
                                                                                     ///<      :    SM_CF_CIRCULAR_ARC,   SM_CF_HYPERBOLIC_ARC,                 <br>

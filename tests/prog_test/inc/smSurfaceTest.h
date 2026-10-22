@@ -25,6 +25,7 @@ PT_EXPORT SmStatus my_test_csi_tangency(void);
 PT_EXPORT SmStatus my_test_csi_coincidence();
 PT_EXPORT SmStatus my_test_cs_nurb(void);
 PT_EXPORT SmStatus my_test_drop_curve();
+PT_EXPORT SmStatus my_test_bspline_surface_component_ctor();
 PT_EXPORT SmStatus my_test_ss_nurb(void);
 
 PT_EXPORT SmStatus my_test_surf_methods(void);

@@ -21,6 +21,9 @@ static py::dict tessellation_report_to_dict(const SmTessellationReport& report)
     return result;
 }
 
+// Kept from bind_tessellation, not imported by name: the wheel installs the module as usd_brep._omni_solid.
+static PyObject* g_tessellationError = nullptr;
+
 static void check_tessellation_status(SmStatus status, const SmTessellationReport& report)
 {
     if (status == SM_SUCCESS) return;
@@ -30,7 +33,7 @@ static void check_tessellation_status(SmStatus status, const SmTessellationRepor
     }
     catch (const std::runtime_error& error)
     {
-        py::object type = py::module_::import("_omni_solid").attr("TessellationError");
+        py::object type = py::reinterpret_borrow<py::object>(g_tessellationError);
         py::object exception = type(error.what());
         exception.attr("report") = tessellation_report_to_dict(report);
         exception.attr("failures") = exception.attr("report")["failures"];
@@ -68,8 +71,8 @@ py::object smpy_tessellate(SmBrep* brep, double chord_height_tol, double curve_a
 
 void bind_tessellation(py::module_& m)
 {
-    m.attr("TessellationError") = py::reinterpret_steal<py::object>(
-        PyErr_NewException("_omni_solid.TessellationError", PyExc_RuntimeError, nullptr));
+    g_tessellationError = PyErr_NewException("_omni_solid.TessellationError", PyExc_RuntimeError, nullptr);
+    m.attr("TessellationError") = py::reinterpret_borrow<py::object>(g_tessellationError);
 
     // inspect.signature() does not work on pybind11 builtins, so the keyword defaults
     // below are otherwise unreadable from Python except by parsing the docstring.

@@ -85,4 +85,6 @@ curves = sm.intersect_brep_with_plane(box, (0, 0, 5), (0, 0, 1))
 
 This is useful for finding where profiles cross, computing trim points, and building intersection graphs.
 
+It uses a fixed absolute tolerance of 0.001 model units, raises `RuntimeError` (`SM_ERR`) when the curves do not intersect, and reports an overlapping stretch by its start point only.
+
 - **`intersect_faces(face1, face2)`** — trimmed face-versus-face intersection. Returns `(curves, points)` clipped to both faces' trimming loops. Requires `Face` handles obtained from topology traversal (e.g. `brep.faces()`).

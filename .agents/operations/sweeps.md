@@ -28,6 +28,7 @@ Extrude curves along a direction vector to create a solid.
 - Curves should form a closed planar loop for a manifold solid result. Open curves produce sheet bodies.
 - The direction vector defines the sweep direction; it does not need to be a unit vector. The actual sweep distance is `distance`, not the vector magnitude.
 - `cap_ends=True` creates planar cap faces at both ends. Set `False` for an open shell.
+- The result Brep uses the default tolerance; it cannot be set.
 
 ```python
 circ = sm.create_circle((0, 0, 0), 5.0)

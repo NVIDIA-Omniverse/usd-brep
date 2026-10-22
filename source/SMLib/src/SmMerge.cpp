@@ -2955,8 +2955,14 @@ static ULONG lDebugCount = 0 ;
                               // 3.2a find any edges connected to pVertex that can be
                               //      intersected, inserted, and related to m_pOther to
                               //      try and plug gaps in intersection loops.
-                              SmStatus eStat = m_vTI.CloseIntersectionLoop( pVertex, bMadeNewTopology );
+                              // This could delete entities in our stored pointers:
+                              SmTArray< SmVertex* > sDelVerts;
+                              SmTArray< SmEdge*   > sDelEdges;
+                              SmStatus eStat = m_vTI.CloseIntersectionLoop( pVertex, bMadeNewTopology, sDelVerts, sDelEdges );
                               // (Was SER. [B601])
+
+                              m_sIntersectionVertices.RemoveElements( sDelVerts, m_sIntersectionVertices );
+                              m_sIntersectionEdges   .RemoveElements( sDelEdges, m_sIntersectionEdges    );
 
                               // Note: ReIntersectAtVertex() has never been known to help anything,
                               // and it's expensive and complicates the algorithm.

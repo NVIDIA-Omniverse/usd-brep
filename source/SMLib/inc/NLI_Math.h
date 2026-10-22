@@ -76,4 +76,28 @@ NL_INLINE NL_VOID NI_VectorBlendCPt_specialized
     else
         Bw->w = NL_NOW;
 } /* end NI_VectorBlendCPt_specialized */
+
+/*******************************************************************/ /**
+ PURPOSE: Reverse the knots U[0..m] into V[0..m] (V may be U):
+  V[i] = U[0]+U[m]-U[m-i].
+
+ NOTES: The end values are swapped exactly, so a clamped end block is
+  copied bit for bit and only the other knots go through the subtraction.
+ ***********************************************************************/
+NL_INLINE NL_VOID NI_ReverseKnots( NL_REAL *U, NL_INDEX m, NL_REAL *V )
+{
+    NL_INDEX i;
+    NL_REAL u0 = U[0];
+    NL_REAL um = U[m];
+    NL_REAL c = u0 + um;
+    NL_REAL a, b;
+
+    for ( i = 0; i <= m / 2; i++ )
+    {
+        a = U[i];
+        b = U[m - i];
+        V[i] = ( b EQ um ) ? u0 : ( ( b EQ u0 ) ? um : c - b );
+        V[m - i] = ( a EQ um ) ? u0 : ( ( a EQ u0 ) ? um : c - a );
+    }
+} /* end NI_ReverseKnots */
 #endif

@@ -40,7 +40,7 @@ git log -1 --format='%H %cs %s' -- source/schema/omniSolid/resources/schema.usda
 
 Confirm `source/schema/omniSolid/resources/schema.usda` exists at the checked-out revision. If network freshness is required, fetch only after checking local work.
 
-In `solidmodeling`, the validator wrappers expect built USD and OmniSolid dependencies. `tools/brep_validator_cli/validate_usd.sh` configures the usual repository paths. A missing plugin can make a real BrepArray appear untyped or undiscoverable.
+In a source checkout, the validator wrappers expect built USD and OmniSolid dependencies. `tools/brep_validator_cli/validate_usd.sh` configures the usual repository paths. A missing plugin can make a real BrepArray appear untyped or undiscoverable.
 
 ## Compare Schema Layers
 
@@ -126,7 +126,6 @@ These are observations against the 2026-07-14 source baseline. Recheck current c
 
 | Area | Schema contract | Implementation behavior to audit |
 |---|---|---|
-| Cone semi-angle (`BA.515`) | `(-pi/2, pi/2)`; zero explicitly degenerates to a cylinder | Validator description and check require `(0, pi/2)`, rejecting schema-permitted zero and negative values |
 | NURBS order (`BA.590`, `BA.651`) | Positive order and order `<= vertexCount` | Validator adds minimum order 2 |
 | UV NURBS zero sentinel (`BA.380`, `BA.590`) | Every authored UV NURBS order is positive and bounded by `vertexCount` | Validator special-cases `order == 0` and `vertexCount == 0` as "no UV trim curve," accepting values the schema does not define |
 | Authorship (`BA.005`, `BA.070`, etc.) | Properties are declared, but the schema does not mark all as required on an empty typed prim | Validator requires broad authorship; treat this as policy unless authoritative schema documentation requires the data |

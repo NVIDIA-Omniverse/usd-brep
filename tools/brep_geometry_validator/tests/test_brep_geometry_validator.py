@@ -27,7 +27,7 @@ class TestBrepGeometryValidator(unittest.TestCase):
 
     def run_validator(self, path, *extra_args, timeout=30):
         return subprocess.run(
-            [self.binary, "--level", "0", "--no-healer", "--quiet", *extra_args, str(path)],
+            [self.binary, "--level", "0", "--quiet", *extra_args, str(path)],
             text=True,
             capture_output=True,
             timeout=timeout,
@@ -46,6 +46,12 @@ class TestBrepGeometryValidator(unittest.TestCase):
         match = re.search(r"BREP_GEOMETRY .* breps=(\d+)", result.stdout)
         self.assertIsNotNone(match, result.stdout)
         self.assertEqual(int(match.group(1)), expected)
+
+    def test_checks_breps_unhealed(self):
+        # Healing on import repairs this file's reversed edge range, so it would pass.
+        result = self.run_validator(self.repo / "TestFiles/brep_validator/Test_BA_235_Invalid_edge_range_order.usda")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("breps=2 invalid=1 ", result.stdout)
 
     def test_instance_root_imports_components(self):
         stage = Usd.Stage.CreateNew(str(self.work / "instance_root.usda"))
@@ -183,6 +189,27 @@ class TestBrepGeometryValidator(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("no BrepArray prims found", result.stderr)
         self.assertRegex(result.stdout, r"BREP_GEOMETRY_DISCOVERY .* visited=201")
+
+    def test_parallel_matches_serial(self):
+        # Valid and invalid Breps, checked on several threads at once.
+        stage = Usd.Stage.CreateNew(str(self.work / "parallel.usda"))
+        names = ["CubeBrepArray", "Test_BA_110_Invalid_faceuse_orientationType_token",
+                 "Test_BA_155_Invalid_U_range_order", "Test_BA_160_Invalid_V_range_order"]
+        for index in range(64):
+            prim = stage.DefinePrim(f"/P{index}")
+            prim.GetReferences().AddReference(
+                str(self.repo / f"TestFiles/brep_validator/{names[index % len(names)]}.usda"), Sdf.Path("/World"))
+        stage.GetRootLayer().Save()
+
+        def run(workers):
+            result = subprocess.run([self.binary, "--workers", workers, stage.GetRootLayer().realPath],
+                                    text=True, capture_output=True, timeout=120, check=False)
+            return sorted(result.stdout.splitlines())
+
+        serial = run("1")
+        self.assertTrue(any("FAIL[" in line for line in serial), serial)
+        for _ in range(3):
+            self.assertEqual(run("8"), serial)
 
 
 if __name__ == "__main__":

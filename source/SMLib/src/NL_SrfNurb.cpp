@@ -3238,7 +3238,7 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
 
     NL_DEGREE p, q;
 
-    NL_REAL *UP, *VP, *UQ = NULL, *VQ = NULL, c, a;
+    NL_REAL *UP, *VP, *UQ = NULL, *VQ = NULL;
 
     NL_CPOINT ** Pw, ** Qw = NULL;
 
@@ -3270,17 +3270,6 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
     {
         case NL_UDIR:
 
-            c = UP[0] + UP[r];
-
-            if( surP NEQ surQ )
-            {
-                for ( i = 0; i <= p; i++ )
-                {
-                    UQ[i] = UP[i];
-                    UQ[n + i + 1] = UP[n + i + 1];
-                }
-            }
-
             if( surP EQ surQ )
             {
                 k = n / 2;
@@ -3293,14 +3282,7 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
                     }
                 }
 
-                k = r / 2 - p;
-
-                for ( i = 1; i <= k; i++ )
-                {
-                    a = UP[r - p - i];
-                    UP[r - p - i] = c - UP[p + i];
-                    UP[p + i] = c - a;
-                }
+                NI_ReverseKnots( UP, r, UP );
             }
             else
             {
@@ -3312,10 +3294,7 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
                     }
                 }
 
-                k = r - 2 * p - 1;
-
-                for ( i = 1; i <= k; i++ )
-                    UQ[r - p - i] = c - UP[p + i];
+                NI_ReverseKnots( UP, r, UQ );
 
                 for ( j = 0; j <= s; j++ )
                     VQ[j] = VP[j];
@@ -3323,17 +3302,6 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
             break;
 
         case NL_VDIR:
-
-            c = VP[0] + VP[s];
-
-            if( surP NEQ surQ )
-            {
-                for ( j = 0; j <= q; j++ )
-                {
-                    VQ[j] = VP[j];
-                    VQ[m + j + 1] = VP[m + j + 1];
-                }
-            }
 
             if( surP EQ surQ )
             {
@@ -3347,14 +3315,7 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
                     }
                 }
 
-                k = s / 2 - q;
-
-                for ( j = 1; j <= k; j++ )
-                {
-                    a = VP[s - q - j];
-                    VP[s - q - j] = c - VP[q + j];
-                    VP[q + j] = c - a;
-                }
+                NI_ReverseKnots( VP, s, VP );
             }
             else
             {
@@ -3366,13 +3327,10 @@ NL_FLAG N_SrfReverse( NL_SURFACE *surP, NL_FLAG dir, NL_SURFACE *surQ, NL_STACKS
                     }
                 }
 
-                k = s - 2 * q - 1;
-
                 for ( i = 0; i <= r; i++ )
                     UQ[i] = UP[i];
 
-                for ( j = 1; j <= k; j++ )
-                    VQ[s - q - j] = c - VP[q + j];
+                NI_ReverseKnots( VP, s, VQ );
             }
             break;
 

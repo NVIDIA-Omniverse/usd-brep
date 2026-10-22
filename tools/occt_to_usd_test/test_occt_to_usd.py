@@ -880,6 +880,30 @@ class OcctBrepCorpusTestCase(_OcctBrepConvertMixin):
         self.assertEqual(list(prim.GetAttribute("loop:edgeuseCount").Get()), [2])
         self.assertEqual(list(prim.GetAttribute("edgeuse:edgeIndex").Get()), [0, 1])
 
+    def test_plane_face_range_covers_bspline_extreme_between_samples(self):
+        """A plane's face:range must reach the true extreme of a B-spline edge, not just sampled points.
+
+        The range used to come from 24 uniform samples per edge, so a long B-spline edge whose
+        bulge fell between samples was left outside the face domain. SMLib then built UV trims
+        inside that domain that strayed from the edge, and the face area came out wrong.
+
+        The fixture's cubic edge runs from (100, 0) to (0, 0) at y = 10 except for a spike to
+        y = 460/11 (t = 0.524) whose knot spans, 0.517 to 0.531, all lie between two adjacent
+        samples of an even spacing of 1/24 or 1/64. Both of those samplings read y = 10 on each side
+        of the spike, so they neither see it nor refine it. The plane's frame is the world XY frame,
+        so u = x and v = y.
+        """
+        brep_path = self.inputs_dir / "plane_bspline_bulge.brep"
+        prim = self._single_brep_prim(self._convert(brep_path))
+        self.assertEqual(list(prim.GetAttribute("face:surfaceType").Get()), ["BrepSurfacePlaneAPI"])
+
+        uv_range = prim.GetAttribute("face:range").Get()
+        self.assertEqual(len(uv_range), 2)
+        self.assertAlmostEqual(float(uv_range[0][0]), 0.0, places=9)
+        self.assertAlmostEqual(float(uv_range[1][0]), 100.0, places=9)
+        self.assertAlmostEqual(float(uv_range[0][1]), 0.0, places=9)
+        self.assertAlmostEqual(float(uv_range[1][1]), 460.0 / 11.0, places=9)
+
     def test_genuine_full_period_faces_remain_analytic(self):
         """Natural one-period faces retain analytic surfaces and repeated seam-edge topology."""
         for filename, surface_type in (
@@ -955,8 +979,9 @@ class OcctBrepExternalTestCase(_OcctBrepConvertMixin):
         samples = self._discover()
         if not samples:
             reason = (
-                f"no external .brep samples in {self.inputs_dir} "
-                "(populate it or set OCCT_BREP_EXTERNAL_DIR; see its README)"
+                "optional third-party samples, not included: OpenCASCADE's data/occ .brep files cannot be "
+                "shipped with this repository because of their license. To run them, copy them into "
+                f"{self.inputs_dir} or set OCCT_BREP_EXTERNAL_DIR (see its README)"
             )
             _SUMMARY.record_suite_skip("external", reason)
             self.skipTest(reason)

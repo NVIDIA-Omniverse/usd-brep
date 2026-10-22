@@ -20,6 +20,11 @@ GENERAL NOTES:
 #include <SmApiTypes.h>
 #endif
 
+/// Uses a fixed absolute tolerance of 0.001 model units; it cannot be set by the
+/// caller. If pCurve1 == pCurve2, finds self-intersections. Results are appended
+/// to the output arrays. No intersections returns SM_ERR (the kernel itself
+/// succeeds with no solutions; this wrapper treats that as failure). An overlap
+/// is reported by its start point and parameters only.
 SMAPI_EXPORT SmApiStatus SmApiIntersectCurves( 
     SmCurve* pCurve1,                       ///< [in ]: Curve to intersect                                           <br>
     SmCurve* pCurve2,                       ///< [in ]: Curve to intersect                                           <br>

@@ -31,6 +31,7 @@ GENERAL NOTES:
 #include <SmSphere.h>
 #include <SmTorus.h>
 #include <SmTol.h>
+#include <NL_Nurbsdef.h>    // NL_MAXDEG
 
 /*******************************************************************//**
 PURPOSE --- True for a finite dimension (radius, length, height) above zero.
@@ -388,7 +389,29 @@ SmApiStatus SmApiCreateCylinder
     SmBrep*& rpResult           ///< [out]: Resulting SmBrep
 )
 {
-    return SmApiCreateCone(crOrigin, dRadius, dRadius, dHeight, rpResult);
+    rpResult = NULL;
+    if( !SmApiIsPositiveDim( dRadius ) || !SmApiIsPositiveDim( dHeight ) )
+        return( SM_ERR_INVALID_INPUT );
+
+    SmVector3d sXaxis(1.0,0.0,0.0);
+    SmVector3d sYaxis(0.0,1.0,0.0);
+
+    SmAxis2Placement sRefFrame;
+    sRefFrame.SetCanonical( crOrigin, sXaxis, sYaxis );
+
+    SmBrep* pBrep = new (*SmApiGetOrCreateContext()) SmBrep();
+    SmObjDelete sBrepCleanup( pBrep );
+
+    SmPrimitiveCreation sPC(pBrep->GetInfiniteRegion());
+    SER( sPC.CreateCylinder( dHeight, dRadius, sRefFrame ) );
+
+#ifdef SM_ASSERT_VALID
+    SM_ASSERT_VALID( pBrep );
+#endif
+
+    sBrepCleanup.Clear();
+    rpResult = pBrep;
+    return( SM_SUCCESS );
 
 } // SmApiCreateCylinder
 
@@ -482,6 +505,8 @@ SmApiStatus SmApiCreateCone
 
     SmPrimitiveCreation sPC(pBrep->GetInfiniteRegion());
     SER( sPC.CreateCone( dHeight, dRadiusBase, dRadiusTop, 0.0, 360.0, sRefFrame ) );
+    // CreateCone leaves edit mode on, in which face caches ignore the trim loops
+    pBrep->m_bEditingEnabled = FALSE;
 
 #ifdef SM_ASSERT_VALID
     SM_ASSERT_VALID( pBrep );
@@ -933,6 +958,7 @@ SmApiStatus SmApiCreatePartialCone
 
     SmPrimitiveCreation sPC(pBrep->GetInfiniteRegion());
     SER( sPC.CreateCone( dHeight, dRadiusBase, dRadiusTop, dStartAngleDeg, dEndAngleDeg, sRefFrame ) );
+    pBrep->m_bEditingEnabled = FALSE;  // as in SmApiCreateCone
 
 #ifdef SM_ASSERT_VALID
     SM_ASSERT_VALID( pBrep );
@@ -1335,12 +1361,21 @@ NOTES ---   Uses SmPrimitiveCreation::CreateSkinFromFaces
 SmApiStatus SmApiCreateSkinFromFaces
 (
     SmTArray<SmFace*>& rFaces,              ///< [in ]: Sequence of faces whose loops to loft between
-    ULONG lDegree,                          ///< [in ]: Degree in loft direction: 1=linear, 2=quad, 3=cubic
+    ULONG lDegree,                          ///< [in ]: Degree in loft direction: 1=linear, 2=quad, 3=cubic, up to NL_MAXDEG
     SmTArray<SmFace*>& rNewFaces,           ///< [out]: Resulting lofted faces
     SmBrep*& rpResult                      ///< [out]: Resulting SmBrep
 )
 {
     rpResult = NULL;
+
+    // NLib's surface evaluators size their basis-function stack arrays by
+    // NL_MAXDEG, so evaluating a loft of higher degree overflows the stack.
+    if( lDegree < 1 || lDegree > NL_MAXDEG )
+    {
+        rNewFaces.ReSet();
+        return SM_ERR_INVALID_INPUT;
+    }
+
     SmBrep* pBrep = new (*SmApiGetOrCreateContext()) SmBrep();
     SmObjDelete sBrepCleanup( pBrep );
 

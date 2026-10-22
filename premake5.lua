@@ -140,6 +140,12 @@ workspace "usd-brep"
         -- lib/ libraries find it without LD_LIBRARY_PATH.
         linkoptions { "-Wl,--disable-new-dtags", "-Wl,-rpath,'$$ORIGIN/../lib'", "-Wl,-rpath,'$$ORIGIN/../extraLibs'" }
 	    runpathdirs { target_dir }
+    filter { "system:linux", "platforms:aarch64" }
+        -- GCC fuses a*b+c into one FMA instruction by default when the target always has one, as
+        -- aarch64 does and baseline x86-64 does not. FMA rounds once instead of twice, so aarch64
+        -- results differed from x86-64 and Windows, and marginal geometry could take a different
+        -- branch. Keep the multiply and add separate so every platform rounds the same way.
+        buildoptions { "-ffp-contract=off" }
     filter { "system:macosx" }
         platforms { "universal" }
         -- Change paths from 'macosx' to 'macos'. Premake likes 'macosx', but the rest of our

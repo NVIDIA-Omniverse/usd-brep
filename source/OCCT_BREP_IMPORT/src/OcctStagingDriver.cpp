@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace occt
 {
@@ -1528,6 +1530,106 @@ pxr::GfRange2d ComputeFullPeriodAxialDomainFrom3dBoundary(
     return sDomain;
 }
 
+// Extend rRange with the minimum and maximum of dot(C(t) - rOrigin, rDirection) over [dFirst, dLast].
+// Uniform samples alone miss extremes that fall between them: a long B-spline edge can bulge well
+// past its nearest sample. Sample inside every knot span (a span is one polynomial piece, so a few
+// samples bracket its extremes), then refine each sampled local extreme by golden-section search
+// between its neighbouring samples. Other curve types get 24 uniform samples.
+void AccumulateCurveProjectionRange(
+    const SPreparedCurve3d& rCurve,
+    double dFirst,
+    double dLast,
+    const pxr::GfVec3d& rOrigin,
+    const pxr::GfVec3d& rDirection,
+    pxr::GfRange1d& rRange
+)
+{
+    const auto fValue = [&](double t)
+    {
+        return pxr::GfDot(EvalCurve3dPoint(rCurve, t) - rOrigin, rDirection);
+    };
+
+    if (dLast < dFirst)
+    {
+        std::swap(dFirst, dLast);
+    }
+
+    // Breakpoints: the ends of [dFirst, dLast] and every distinct knot strictly inside it.
+    std::vector<double> vBreaks{ dFirst };
+    int iSamplesPerPiece = 24;
+    if (rCurve.bBSpline)
+    {
+        for (const double dKnot : rCurve.vKnots)
+        {
+            if (dKnot > vBreaks.back() && dKnot < dLast)
+            {
+                vBreaks.push_back(dKnot);
+            }
+        }
+        iSamplesPerPiece = (std::max)(8, 2 * rCurve.iDegree + 2);
+    }
+    vBreaks.push_back(dLast);
+
+    std::vector<double> vParams;
+    for (size_t iPiece = 0; iPiece + 1 < vBreaks.size(); ++iPiece)
+    {
+        for (int ii = 0; ii < iSamplesPerPiece; ++ii)
+        {
+            const double dFraction = static_cast<double>(ii) / static_cast<double>(iSamplesPerPiece);
+            vParams.push_back(vBreaks[iPiece] + (vBreaks[iPiece + 1] - vBreaks[iPiece]) * dFraction);
+        }
+    }
+    vParams.push_back(dLast);
+
+    std::vector<double> vValues(vParams.size());
+    for (size_t ii = 0; ii < vParams.size(); ++ii)
+    {
+        vValues[ii] = fValue(vParams[ii]);
+        rRange.UnionWith(vValues[ii]);
+    }
+
+    constexpr double kInvPhi = 0.6180339887498949;
+    constexpr int kGoldenIterations = 60; // shrinks the bracket by kInvPhi^60, about 3e-13
+    for (size_t ii = 1; ii + 1 < vParams.size(); ++ii)
+    {
+        const bool bMax = vValues[ii] > vValues[ii - 1] && vValues[ii] >= vValues[ii + 1];
+        const bool bMin = vValues[ii] < vValues[ii - 1] && vValues[ii] <= vValues[ii + 1];
+        if (!bMax && !bMin)
+        {
+            continue;
+        }
+        // Search for the maximum of dSign * value, so one loop handles both kinds of extreme.
+        const double dSign = bMax ? 1.0 : -1.0;
+        double dA = vParams[ii - 1];
+        double dB = vParams[ii + 1];
+        double dC = dB - kInvPhi * (dB - dA);
+        double dD = dA + kInvPhi * (dB - dA);
+        double dFC = dSign * fValue(dC);
+        double dFD = dSign * fValue(dD);
+        for (int iIter = 0; iIter < kGoldenIterations; ++iIter)
+        {
+            if (dFC > dFD)
+            {
+                dB = dD;
+                dD = dC;
+                dFD = dFC;
+                dC = dB - kInvPhi * (dB - dA);
+                dFC = dSign * fValue(dC);
+            }
+            else
+            {
+                dA = dC;
+                dC = dD;
+                dFC = dFD;
+                dD = dA + kInvPhi * (dB - dA);
+                dFD = dSign * fValue(dD);
+            }
+        }
+        rRange.UnionWith(dSign * dFC);
+        rRange.UnionWith(dSign * dFD);
+    }
+}
+
 pxr::GfRange2d ComputePlaneLoopDomainFrom3dBoundary(
     const OcctFileSource& rSource,
     const OcctFileSource::Loop& rLoop,
@@ -1564,12 +1666,12 @@ pxr::GfRange2d ComputePlaneLoopDomainFrom3dBoundary(
         if (sGeom.pCurve3d)
         {
             const pxr::GfMatrix4d sCurveXf = ResolveLocation(rSource.Model(), sGeom.iCurveLocation) * rCoedge.mEdgeLoc;
-            constexpr int kSamples = 24;
-            for (int ii = 0; ii <= kSamples; ++ii)
-            {
-                const double t = sGeom.dFirst + (sGeom.dLast - sGeom.dFirst) * (static_cast<double>(ii) / static_cast<double>(kSamples));
-                fProject(EvalCurve3dPoint(*sGeom.pCurve3d, sCurveXf, t));
-            }
+            const SPreparedCurve3d sCurve = PrepareCurve3d(*sGeom.pCurve3d, sCurveXf);
+            pxr::GfRange1d sURange;
+            pxr::GfRange1d sVRange;
+            AccumulateCurveProjectionRange(sCurve, sGeom.dFirst, sGeom.dLast, rSurface.sOrigin, sUDir, sURange);
+            AccumulateCurveProjectionRange(sCurve, sGeom.dFirst, sGeom.dLast, rSurface.sOrigin, sVDir, sVRange);
+            sDomain.UnionWith(pxr::GfRange2d(pxr::GfVec2d(sURange.GetMin(), sVRange.GetMin()), pxr::GfVec2d(sURange.GetMax(), sVRange.GetMax())));
         }
 
         const int aiVerts[2] = { sGeom.iStartVertexStorageIndex, sGeom.iEndVertexStorageIndex };

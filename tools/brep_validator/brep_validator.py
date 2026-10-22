@@ -1178,7 +1178,7 @@ class BrepArrayRequirements(Requirement, Enum):
     BA_515 = (
         "BA.515",
         "brep-surface-cone-semiAngle-valid-range",
-        "The brep:surface:cone:semiAngle attribute must contain values in the range (0, pi/2) exclusive.",
+        "The brep:surface:cone:semiAngle attribute must contain values in the range (-pi/2, pi/2) exclusive.",
         "capabilities/visualization/brep/requirements/brep-surface-cone-semiAngle-valid-range.html",
         "Core USD",
         ("correctness",),
@@ -5087,7 +5087,7 @@ class BrepValidator(BaseRuleChecker):
         - BA_512: Axis vectors are unit length
         - BA_513: RefDirection vectors are unit length
         - BA_514: Axis and refDirection are orthogonal
-        - BA_515: SemiAngle in valid range (0, pi/2)
+        - BA_515: SemiAngle in valid range (-pi/2, pi/2)
         """
         import math
 
@@ -5165,13 +5165,14 @@ class BrepValidator(BaseRuleChecker):
                 )
                 break
 
-        # BA_515: SemiAngle must be in (0, pi/2) exclusive
+        # BA_515: SemiAngle must be in (-pi/2, pi/2) exclusive, as the schema says: 0 is a cylinder,
+        # and a negative angle is a cone whose radius decreases along the axis
         half_pi = math.pi / 2.0
         for i, semi_angle in enumerate(cone_semi_angles):
-            if semi_angle <= 0.0 or semi_angle >= half_pi:
+            if not -half_pi < semi_angle < half_pi:
                 self._AddFailedCheck(
                     requirement=cap.BrepArrayRequirements.BA_515,
-                    message=f"brep:surface:cone:semiAngle[{i}] = {semi_angle} is not in valid range (0, pi/2).",
+                    message=f"brep:surface:cone:semiAngle[{i}] = {semi_angle} is not in valid range (-pi/2, pi/2).",
                     at=brep_array,
                 )
                 break

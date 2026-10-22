@@ -700,8 +700,10 @@ SmBoolean bDebugMe = FALSE ;
 
   rbExactConversion = TRUE ;
 
-  // make sure to return the proper end value for closed curve seam conversions
-  if(m_cpCurve->IsClosed(m_cpCurve->GetNaturalInterval()))
+  // make sure to return the proper end value for closed curve seam conversions.
+  // The seam adjustments only apply at the ends of the knot/angle tables, so test those
+  // cheap conditions first and evaluate IsClosed() (three curve evaluations) only there.
+  if(m_vNaturalKnots.GetSize() > 0 && m_vAngles.GetSize() > 0)
     {
       SmBoolean bInsideOut = m_cpCurve->GetInsideOut() ;
       double dScaledZero   =  (m_vNaturalKnots.GetLast() - m_vNaturalKnots[0])
@@ -709,23 +711,23 @@ SmBoolean bDebugMe = FALSE ;
                              * SM_EFF_ZERO_DEG ;
 
       // when values are at opposing ends - move the end angle
-      if     (   ( bInsideOut && (   SM_ARE_SAME_TO_TOL(dNurbsParameter,     m_vNaturalKnots.GetLast(),dScaledZero)
+      const SmBoolean bMoveToMin =
+                 ( bInsideOut && (   SM_ARE_SAME_TO_TOL(dNurbsParameter,     m_vNaturalKnots.GetLast(),dScaledZero)
                                   && SM_ARE_SAME_TO_TOL(rdPolarParameterDeg, m_vAngles[0],             SM_EFF_ZERO_DEG)))
               || (!bInsideOut && (   SM_ARE_SAME_TO_TOL(dNurbsParameter,     m_vNaturalKnots[0], dScaledZero)
-                                  && SM_ARE_SAME_TO_TOL(rdPolarParameterDeg, m_vAngles.GetLast(),SM_EFF_ZERO_DEG))))
-        { 
-          // increment, rather than PolarParam = minAngle, to preserve tolerances 
-          rdPolarParameterDeg -= 360.0 ; 
-        }
-      else if(   ( bInsideOut && (   SM_ARE_SAME_TO_TOL(dNurbsParameter,     m_vNaturalKnots[0], dScaledZero)
+                                  && SM_ARE_SAME_TO_TOL(rdPolarParameterDeg, m_vAngles.GetLast(),SM_EFF_ZERO_DEG)));
+      const SmBoolean bMoveToMax = !bMoveToMin && (
+                 ( bInsideOut && (   SM_ARE_SAME_TO_TOL(dNurbsParameter,     m_vNaturalKnots[0], dScaledZero)
                                   && SM_ARE_SAME_TO_TOL(rdPolarParameterDeg, m_vAngles.GetLast(),SM_EFF_ZERO_DEG)))
               || (!bInsideOut && (   SM_ARE_SAME_TO_TOL(dNurbsParameter,     m_vNaturalKnots.GetLast(),dScaledZero)
-                                  && SM_ARE_SAME_TO_TOL(rdPolarParameterDeg, m_vAngles[0],             SM_EFF_ZERO_DEG))))
-        { 
-          // increment, rather than PolarParam = maxAngle, to preserve tolerances 
-          rdPolarParameterDeg += 360.0 ; 
-        }
+                                  && SM_ARE_SAME_TO_TOL(rdPolarParameterDeg, m_vAngles[0],             SM_EFF_ZERO_DEG))));
 
+      if((bMoveToMin || bMoveToMax) && m_cpCurve->IsClosed(m_cpCurve->GetNaturalInterval()))
+        {
+          // increment, rather than PolarParam = min/maxAngle, to preserve tolerances
+          if(bMoveToMin) { rdPolarParameterDeg -= 360.0 ; }
+          else           { rdPolarParameterDeg += 360.0 ; }
+        }
     } // end closed curve check
 
 #ifdef SM_DEBUG_CODE

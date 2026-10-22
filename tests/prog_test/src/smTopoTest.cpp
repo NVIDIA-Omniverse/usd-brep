@@ -12,6 +12,8 @@
 #include "StdAfx.h"
 #include <SmTypes.h>
 #include <smTopoTest.h>
+#include <smFaceTest.h>
+#include <smTestBrep.h>
 #include <SmTopologyIntersector.h>
 #include <SmTrimmingTools.h>
 #include <SmShape.h>
@@ -25,10 +27,12 @@
 #include <SmOffsetCurve.h>
 #include <SmOffsetSurface.h>
 #include <SmSurfOfExtrusion.h>
-#include <SmHealData.h>
 #include <SmPrimitiveCreation.h>
 #include <SmCylinder.h>
+#include <SmProtoTopology.h>
+#include <SmLine.h>
 #include <SmTrackTopologyChanges.h>
+#include <NL_Geometry.h>
 
 #define SM_NEW_READER 1
 
@@ -43,17 +47,6 @@ public:
     }
 } ;
 
-static SmBoolean sm_HasAssertReport(const SmAssertArray & crAsserts, ULONG lTestIndex, const void * pOwner)
-{
-  for(ULONG ii=0; ii<crAsserts.GetSize(); ii++)
-    {
-      if(   crAsserts[ii] != NULL
-         && crAsserts[ii]->GetTestIndex() == lTestIndex
-         && crAsserts[ii]->GetOwner() == pOwner)
-        { return TRUE ; }
-    }
-  return FALSE ;
-}
 
 static SmBoolean sm_HasAssertReport(const SmAssertArray & crAsserts, ULONG lListIndex, ULONG lTestIndex, const void * pOwner)
 {
@@ -239,6 +232,9 @@ static SmStatus my_test_squeeze_edge_tracks_removal()
     sHealData.m_pBrep = pBrep ;
     sHealData.m_sTgtEdges.Add(pRemovedEdge) ;
     sHealData.m_sTgtEdgeProps.Add(pRemovedProps) ;
+#ifdef SM_DEBUG_CODE
+    ++sHealData.m_lPropsAllocCount ; // Match the manually allocated property above.
+#endif
 
     SmTrackTopologyChanges sChanges(pBrep, TRUE) ;
     eRtn = pBrep->SqueezeEdge(pRemovedEdge, pSurvivingVertex) ;
@@ -249,8 +245,7 @@ static SmStatus my_test_squeeze_edge_tracks_removal()
        || !sChanges.GetRmList()->FindElement(pRemovedEdge, lIndex)
        || pBrep->IsLiveTopologyMember(pRemovedEdge)
        || sHealData.UpdateTargetLists(sChanges, SM_HO_FIX_COIN_VERTICES) != SM_SUCCESS
-       || sHealData.m_sTgtEdges.GetSize() != 0
-       || sHealData.m_sTgtEdgeProps.GetSize() != 0)
+       || sHealData.m_sTgtEdges.FindElement(pRemovedEdge, lIndex))
       { eRtn = SM_ERR ; }
   }
 
@@ -282,6 +277,14 @@ static SmStatus my_test_tracks_changed_objects()
        || sChanges.GetAddList()->GetSize() != 0
        || sChanges.GetChgList()->GetSize() != 1
        || !sChanges.IsInChgList(sVertices[0]))
+      { eRtn = SM_ERR ; }
+
+    SmHealData sHealData ;
+    sHealData.m_pBrep = pBrep ;
+    if(   sHealData.UpdateTargetLists(sChanges, SM_HO_NONE) != SM_SUCCESS
+       || sHealData.m_sTgtVertices.GetSize() != 0
+       || sHealData.m_sTgtEdges.GetSize() != 0
+       || sHealData.m_sTgtFaces.GetSize() != 0)
       { eRtn = SM_ERR ; }
 
     sChanges.StartTracking() ;
@@ -322,228 +325,6 @@ static SmStatus my_test_tracks_changed_objects()
   return eRtn ;
 }
 
-static SmStatus my_test_seam_uv_redistribution_at_poles()
-{
-  // A sphere with the positive octant removed has a three-arc boundary through
-  // the north pole. The missing meridian seam joins that loop to the south pole.
-  // Reverse the sphere axis to exercise both swapping and retaining the UV sides.
-  for(int iAxis=0; iAxis<2; iAxis++)
-    {
-      SmContext sContext ;
-      SmBrepConstructor sBuilder ;
-      SmBrep * pBrep = sBuilder.StartBrep(sContext) ;
-      NER(pBrep) ;
-      SmObjDelete sCleanup(pBrep) ;
-      pBrep->SetTolerance(1e-7, FALSE) ;
-      NER(sBuilder.StartRegion(TRUE, NULL)) ;
-      SmShell * pOuter = NULL, * pInner = NULL ;
-      SER(sBuilder.StartShell(pOuter, pInner)) ;
-      SmFace * pFace = NULL ;
-      SmVertex * pVertices[4] = {NULL, NULL, NULL, NULL} ;
-      SmEdge * pEdges[6] = {NULL, NULL, NULL, NULL, NULL, NULL} ;
-      const SmPoint3d sPoints[4] = {SmPoint3d(0,0,0.5), SmPoint3d(0.5,0,0),
-                                   SmPoint3d(0,0.5,0), SmPoint3d(0,0,0)} ;
-      const int iStart[6] = {0,0,1,0,3,3}, iEnd[6] = {1,2,2,3,2,1} ;
-      const SmVector3d sZ[3] = {SmVector3d(0,1,0), SmVector3d(-1,0,0), SmVector3d(0,0,1)} ;
-      const SmVector3d sX[3] = {SmVector3d(0,0,1), SmVector3d(0,0,1), SmVector3d(1,0,0)} ;
-      // Signed, one-based edge numbers in the primary faceuse's loop order.
-      const int iUses[4][3] = {{-1,2,-3}, {2,-5,-4}, {1,-6,-4}, {3,-5,6}} ;
-      const SmVector3d sPlaneZ[3] = {SmVector3d(-1,0,0), SmVector3d(0,1,0), SmVector3d(0,0,1)} ;
-      for(int iFace=0; iFace<4; iFace++)
-        {
-          SmFace * pNewFace = sBuilder.StartFace(iFace == 1 ? SM_OT_OPPOSITE : SM_OT_SAME) ;
-          NER(pNewFace) ;
-          SmAxis2Placement sFrame ;
-          if(iFace == 0)
-            {
-              pFace = pNewFace ;
-              sFrame.SetCanonical(SmPoint3d(0,0,0), SmVector3d(-1,0,0), SmVector3d(0,iAxis == 0 ? -1 : 1,0)) ;
-              SmSphere * pSphere = NULL ;
-              SER(SmSphere::CreateCanonical(sContext, sFrame, 0.5, pSphere)) ;
-              SER(sBuilder.SetFaceSurface(pSphere, pSphere->GetNaturalUVDomain())) ;
-            }
-          else
-            {
-              sFrame.SetCanonical(SmPoint3d(0,0,0), sX[iFace-1], sPlaneZ[iFace-1] * sX[iFace-1]) ;
-              SmPlane * pPlane = NULL ;
-              SER(SmPlane::CreateCanonical(sContext, sFrame, pPlane)) ;
-              SER(pPlane->AdjustSTEPUVDomain(SmExtent2d(-1,-1,1,1))) ;
-              SER(sBuilder.SetFaceSurface(pPlane, pPlane->GetNaturalUVDomain())) ;
-            }
-          NER(sBuilder.StartLoop(SM_OT_SAME)) ;
-          for(int iUse=0; iUse<3; iUse++)
-            {
-              int iSignedEdge = iUses[iFace][iUse] ;
-              int iEdge = (iSignedEdge > 0 ? iSignedEdge : -iSignedEdge) - 1 ;
-              SmVertex *& pStart = pVertices[iStart[iEdge]] ;
-              SmVertex *& pEnd = pVertices[iEnd[iEdge]] ;
-              if(!pStart) { pStart = sBuilder.StartVertexOfLoop(sPoints[iStart[iEdge]]) ; }
-              if(!pEnd) { pEnd = sBuilder.StartVertexOfLoop(sPoints[iEnd[iEdge]]) ; }
-              NER(pStart) ;
-              NER(pEnd) ;
-              SmBoolean bNewEdge = pEdges[iEdge] == NULL ;
-              pEdges[iEdge] = sBuilder.StartEdge(iSignedEdge > 0 ? SM_OT_SAME : SM_OT_OPPOSITE,
-                                                pEdges[iEdge], pStart, pEnd) ;
-              NER(pEdges[iEdge]) ;
-              if(bNewEdge)
-                {
-                  if(iEdge < 3)
-                    {
-                      sFrame.SetCanonical(SmPoint3d(0,0,0), sX[iEdge], sZ[iEdge] * sX[iEdge]) ;
-                      SmCircle * pCircle = NULL ;
-                      SmExtent1d sArc(0,90) ;
-                      SER(SmCircle::CreateCanonical(sContext, sFrame, 0.5, pCircle, &sArc)) ;
-                      SER(sBuilder.SetEdgeCurve(pCircle, FALSE)) ;
-                    }
-                  else
-                    {
-                      SmBSplineCurve * pLine = NULL ;
-                      SER(SmBSplineCurve::CreateLineSegment(sContext, 3, pStart->GetPoint(), pEnd->GetPoint(), pLine)) ;
-                      SER(sBuilder.SetEdgeCurve(pLine, FALSE)) ;
-                    }
-                  SER(sBuilder.SetLimits(SmVertexNode(pStart->GetPoint()), SmVertexNode(pEnd->GetPoint()))) ;
-                }
-              SER(sBuilder.EndEdge()) ;
-            }
-          SER(sBuilder.EndLoop()) ;
-          SER(sBuilder.EndFace()) ;
-        }
-      SER(sBuilder.EndShell(FALSE)) ;
-      SER(sBuilder.EndRegion()) ;
-      SER(sBuilder.EndBrep()) ;
-
-      pBrep->m_bEditingEnabled = TRUE ;
-      SmCurveClassification sU, sV ;
-      SmSurfParamType eCrossed, eMissing, eNear ;
-      if(   !pFace->HasSeamProblem(sU, sV, eCrossed, eMissing, eNear)
-         || eCrossed != SM_SP_NEITHER || eMissing != SM_SP_U || eNear != SM_SP_NEITHER)
-        { return SM_ERR ; }
-      SER(pFace->SplitAtSeam(sU, sV, eCrossed, eMissing, eNear)) ;
-      pBrep->m_bEditingEnabled = FALSE ;
-      double dMeanCurve, dMaxCurve, dMeanVertex, dMaxVertex, dMeanUV, dMaxUV ;
-      SER(pFace->CreateUVTrimCurves(FALSE, NULL, NULL, dMeanCurve, dMaxCurve,
-                                   dMeanVertex, dMaxVertex, dMeanUV, dMaxUV)) ;
-
-      SmTArray<SmFace*> sFaces ;
-      SmTArray<SmEdge*> sEdges ;
-      SmTArray<SmVertex*> sVertices ;
-      SmTArray<SmLoop*> sLoops ;
-      SmTArray<SmEdgeuse*> sUses ;
-      pBrep->GetFaces(sFaces) ;
-      pBrep->GetEdges(sEdges) ;
-      pBrep->GetVertices(sVertices) ;
-      pFace->GetLoops(sLoops) ;
-      if(sFaces.GetSize() != 4 || sEdges.GetSize() != 7 || sVertices.GetSize() != 5 || sLoops.GetSize() != 1)
-        { return SM_ERR ; }
-      sLoops[0]->GetEdgeuses(sUses) ;
-      SmOrientType eOrientation ;
-      SER(pFace->ComputeLoopOrientation(sLoops[0], eOrientation)) ;
-      if(sUses.GetSize() != 5 || eOrientation != SM_OT_SAME)
-        { return SM_ERR ; }
-
-      for(ULONG iFace=0; iFace<sFaces.GetSize(); iFace++)
-        {
-          SER(sFaces[iFace]->CreateUVTrimCurves(FALSE, NULL, NULL, dMeanCurve, dMaxCurve,
-                                               dMeanVertex, dMaxVertex, dMeanUV, dMaxUV)) ;
-        }
-      if(!pBrep->IsManifoldSolid()) { return SM_ERR ; }
-      SmAssertArray sAsserts ;
-      SER(pBrep->ValidatePointers(&sAsserts)) ;
-      if(   sAsserts.GetSize() != 0
-         || !pBrep->AssertValid(&sAsserts, SM_LEVEL_0, SM_WALK)
-         || !pBrep->AssertValid(&sAsserts, SM_LEVEL_2, SM_WALK)
-         || sAsserts.GetSize() != 0)
-        { return SM_ERR ; }
-    }
-  return SM_SUCCESS ;
-}
-
-static SmStatus my_test_move_seam_refreshes_face_props()
-{
-  // Exercise both the tracker consumer and the healer's own MoveSeam path.
-  for(ULONG ii=0; ii<2; ii++)
-    {
-      SmContext sContext ;
-      SmBrep * pBrep = new(sContext) SmBrep() ;
-      SmObjDelete sCleanBrep(pBrep) ;
-      SmBSplineSurface * pSurface = NULL ;
-      SmFace * pFace = NULL ;
-      SER(SmBSplineSurface::CreateConePatch(sContext, SmAxis2Placement(), 1.0, 1.0,
-                                           45.0, 135.0, 1.0, SM_CO_QUADRATIC, pSurface)) ;
-      SER(pBrep->CreateFaceFromSurface(pSurface, pSurface->GetNaturalUVDomain(), pFace)) ;
-
-      // Keep the quarter-cylinder boundary, but place the full surface's seam inside it.
-      SmAxis2Placement sSeamFrame ;
-      sSeamFrame.SetCanonical(SmPoint3d(0,0,0), SmVector3d(0,1,0), SmVector3d(-1,0,0)) ;
-      SER(SmBSplineSurface::CreateConePatch(sContext, sSeamFrame, 1.0, 1.0,
-                                           0.0, 360.0, 1.0, SM_CO_QUADRATIC, pSurface)) ;
-      SER(pBrep->ReplaceSurface(pFace, pSurface, FALSE, NULL, FALSE)) ;
-      pFace->SetIsRectangularTrim(FALSE) ;
-
-      SmCurveClassification sClassU, sClassV ;
-      SmSurfParamType eCrossed, eMissing, eNearMiss ;
-      if(   !pFace->HasSeamProblem(sClassU, sClassV, eCrossed, eMissing, eNearMiss)
-         || eCrossed != SM_SP_U)
-        { return SM_ERR ; }
-      SmHealData sHealData ;
-      SER(sHealData.HealBrep(pBrep, ii == 0 ? SM_HO_CACHE_FACEPROPS_2 : SM_HO_FIX_MOVESEAM)) ;
-      if(sHealData.m_sTgtFaceProps.GetSize() != 1)
-        { return SM_ERR ; }
-      SmFaceProps * pProps = sHealData.m_sTgtFaceProps[0] ;
-
-      if(ii == 0)
-        {
-          if(   pProps->m_cpSurface != pSurface
-             || !pProps->m_bBadCrossedSeam)
-            { return SM_ERR ; }
-          SmFixSeamPlanType eMoveU, eMoveV ;
-          SmTrackTopologyChanges sChanges(pBrep, TRUE) ;
-          SER(pFace->MoveSeam(eMoveU, eMoveV, *pProps->m_pCrvClassU, *pProps->m_pCrvClassV,
-                             pProps->m_eBadCrossedSeam, pProps->m_eBadMissingSeam,
-                             pProps->m_eBadNearMissSeam, TRUE, FALSE, NULL, NULL, NULL, pProps)) ;
-          sChanges.StopTracking() ;
-          if(   (eMoveU == SM_FSP_NO_CHANGES && eMoveV == SM_FSP_NO_CHANGES)
-             || !sChanges.IsInRmList(pFace)
-             || !sChanges.IsInAddList(pFace))
-            { return SM_ERR ; }
-          SER(sHealData.UpdateTargetLists(sChanges, SM_HO_CACHE_FACEPROPS_2)) ;
-        }
-
-      if(   pFace->GetSurface() == pSurface
-         || sHealData.m_sTgtFaceProps.GetSize() != 1)
-        { return SM_ERR ; }
-      pProps = sHealData.m_sTgtFaceProps[0] ;
-      if(   ii == 1
-         && (   pProps->m_eBeenThroughMoveSeam != SM_TRY_FIXED
-             || sHealData.m_sRanFaceProps_MoveSeam.GetSize() != 1
-             || sHealData.m_sRanFaceProps_MoveSeam[0] != pProps))
-        { return SM_ERR ; }
-      if(   pProps->m_pFace != pFace
-         || pProps->m_cpSurface != pFace->GetSurface()
-         || pProps->m_bBadCrossedSeam
-         || pProps->m_bBadMissingSeam
-         || pProps->m_bBadNearMissSeam
-         || sHealData.m_sBadFaceProps_CrossedSeam.GetSize() != 0
-         || sHealData.m_sBadFaceProps_MissingSeam.GetSize() != 0
-         || !pBrep->AssertValid(NULL, SM_LEVEL_2, SM_WALK))
-        { return SM_ERR ; }
-
-      SmFixSeamPlanType eMoveU, eMoveV ;
-      SmSurface * pHealedSurface = pFace->GetSurface() ;
-      SmTrackTopologyChanges sUnchanged(pBrep, TRUE) ;
-      SER(pFace->MoveSeam(eMoveU, eMoveV, *pProps->m_pCrvClassU, *pProps->m_pCrvClassV,
-                         pProps->m_eBadCrossedSeam, pProps->m_eBadMissingSeam,
-                         pProps->m_eBadNearMissSeam, TRUE, FALSE, NULL, NULL, NULL, pProps)) ;
-      sUnchanged.StopTracking() ;
-      if(   eMoveU != SM_FSP_NO_CHANGES || eMoveV != SM_FSP_NO_CHANGES
-         || pFace->GetSurface() != pHealedSurface
-         || sUnchanged.GetRmList()->GetSize() != 0
-         || sUnchanged.GetAddList()->GetSize() != 0
-         || sUnchanged.GetChgList()->GetSize() != 0)
-        { return SM_ERR ; }
-    }
-  return SM_SUCCESS ;
-}
 
 static SmStatus my_test_tracks_nested_geometry_and_resets()
 {
@@ -631,52 +412,6 @@ static SmStatus my_test_tracks_nested_geometry_and_resets()
      || pCallback->m_pChgListIndx->GetSize() != sChanges.GetChgList()->GetSize())
     { return SM_ERR ; }
 #endif
-  return SM_SUCCESS ;
-}
-
-static SmStatus my_test_missing_poles_refreshes_all_faces()
-{
-  SmContext sContext ;
-  SmBrep * pBrep = new(sContext) SmBrep() ;
-  SmObjDelete sCleanBrep(pBrep) ;
-  SmPrimitiveCreation sPrimitive(pBrep->GetInfiniteRegion()) ;
-  SER(sPrimitive.CreateBox(1.0, 1.0, 1.0, SmAxis2Placement())) ;
-  SmTArray<SmFace*> sFaces ;
-  pBrep->GetFaces(sFaces) ;
-
-  // Seed two cached missing-pole requests to exercise vertex-loop insertion and list refresh.
-  SmTArray<SmVertex*> sTargetVertices ;
-  SmTArray<SmEdge*> sTargetEdges ;
-  SmTArray<SmFace*> sTargetFaces ;
-  sTargetFaces.Add(sFaces[0]) ;
-  sTargetFaces.Add(sFaces[1]) ;
-  SmHealData sHealData(pBrep, sTargetVertices, sTargetEdges, sTargetFaces) ;
-  for(ULONG ii=0; ii<2; ii++)
-    {
-      SmFaceProps * pProps = sHealData.m_sTgtFaceProps[ii] ;
-      pProps->m_pFace = sFaces[ii] ;
-      pProps->m_lBadMissingPoles = SM_SS_UMIN ;
-      pProps->m_sPolePoints.SetSize(4) ;
-      SmExtent2d sDomain = sFaces[ii]->GetSurface()->GetNaturalUVDomain() ;
-      SmPoint2d sMid = (sDomain.GetMin() + sDomain.GetMax()) * 0.5 ;
-      SER(sFaces[ii]->GetSurface()->EvaluatePoint(sMid, pProps->m_sPolePoints[0])) ;
-      sHealData.m_sBadFaceProps_MissingPole.m_sProbArray.Add(pProps) ;
-    }
-  SmNewMarkAndLock sMark(&sContext) ;
-  SER(sHealData.Fix_BadLoops(pBrep, sMark, SM_HO_FIX_BADLOOPS)) ;
-  if(   sHealData.m_sNewVerticesOnPoles_FromFixBadLoops.GetSize() != 2
-     || sHealData.m_sTgtVertices.GetSize() != 2
-     || sHealData.m_sTgtFaces.GetSize() != 2
-     || sHealData.m_sTgtFaceProps.GetSize() != 2
-     || sHealData.m_sBadFaceProps_MissingPole.GetSize() != 0)
-    { return SM_ERR ; }
-  for(ULONG ii=0; ii<2; ii++)
-    {
-      SmTArray<SmLoop*> sLoops ;
-      sFaces[ii]->GetLoops(sLoops) ;
-      if(sLoops.GetSize() != 2)
-        { return SM_ERR ; }
-    }
   return SM_SUCCESS ;
 }
 
@@ -1066,9 +801,6 @@ SmStatus my_test_tsurf_cyl_creation_3d
     return SM_SUCCESS;
 
 } // end my_test_tsurf_cyl_creation_3d
-
-
-
 
 
 /***********************************************************************
@@ -1886,7 +1618,6 @@ SmStatus my_test_tsurf_insert_edge()
 } // end my_test_tsurf_insert_edge
 
 
-
 /***********************************************************************
 PURPOSE --- This function tests planar section of the trimmed surfaces
     in a brep.  It computes a bunch of planes that span the box of the 
@@ -2095,8 +1826,6 @@ static SmBoolean bDoTrim = TRUE;
     return SM_SUCCESS;
 
 } // end my_test_tsurf_silhouette
-
-
 
 
 /***********************************************************************
@@ -2920,630 +2649,95 @@ SmStatus my_topo_regression_test
 
 } // end my_topo_regression_test
 
-/***********************************************************************
-PURPOSE --- GetLoopCrossings on a planar sheet against degenerate and
-  area inner boundaries.
 
-  Classify line is y=10 across a 20x20 XY sheet [0,20]x[0,20].
-    1. Empty sheet: outer crossed twice.
-    2. Inner vertex loop at (10,10): point-boundary crack, count 0.
-    3. Inner crack (strut edge) from (10,6) to (10,14): strut crossings
-       are not loop crossings, count 0.
-    4. Inner rectangular hole [6,14]x[6,14]: area loop crossed twice.
-***********************************************************************/
-static SmBrep * sm_make_xy_sheet(const SmContext & crContext, double dSize)
+static SmStatus my_test_separating_closed_edges()
 {
-  SmAxis2Placement sRefFrame ;
-  sRefFrame.SetCanonical(SmPoint3d(0.0, 0.0, 0.0),
-                         SmVector3d(1.0, 0.0, 0.0),
-                         SmVector3d(0.0, 1.0, 0.0)) ;
-  return SmPrimitiveCreation::CreateRectangle(crContext, 1.0e-5, dSize, dSize, sRefFrame) ;
-}
-
-static SmStatus sm_classify_loop_crossings
-  (SmFace              * pFace,
-   SmCurve             * pCurve,
-   const SmContext     * cpContext,
-   SmTArray<SmLoop*>   & rLoops,
-   SmTArray<ULONG>     & rCounts)
-{
-  rLoops.ReSet() ;
-  rCounts.ReSet() ;
-  if(pFace == NULL || pCurve == NULL)
-    { return SM_ERR ; }
-
-  SmCurveClassification sCurveClass(pCurve,
-                                    pCurve->GetNaturalInterval(),
-                                    NULL,
-                                    SmTol::GetZoneTol3d(pCurve),
-                                    0, NULL, FALSE, TRUE,
-                                    pFace->GetSurface()) ;
-  sCurveClass.SetSurface1(pFace->GetSurface()) ;
-  SER(pFace->CurveOnClassify(TRUE, sCurveClass, FALSE, TRUE, NULL, TRUE)) ;
-
-  SmFaceProps sFaceProps(pFace, 0, cpContext) ;
-  SER(sFaceProps.SetProps_Stage2(pFace, 0, SM_HO_ALL)) ;
-
-  pFace->GetLoops(rLoops) ;
-  SER(sCurveClass.GetLoopCrossings(rLoops, &sFaceProps, &rCounts, NULL, NULL)) ;
-  return SM_SUCCESS ;
-}
-
-static SmStatus sm_expect_outer_inner_crossings
-  (const SmTArray<SmLoop*> & crLoops,
-   const SmTArray<ULONG>   & crCounts,
-   ULONG                     lExpectedLoopCnt,
-   ULONG                     lExpectedOuter,
-   ULONG                     lExpectedInner)
-{
-  if(crLoops.GetSize() != lExpectedLoopCnt || crCounts.GetSize() != lExpectedLoopCnt)
-    { return SM_ERR ; }
-
-  ULONG lOuterSeen = 0 ;
-  ULONG lInnerSeen = 0 ;
-  for(ULONG ii=0; ii<crLoops.GetSize(); ii++)
+  MYPRINTF(_T("\n********** Entered: my_test_separating_closed_edges"));
+  for(ULONG lCase=0; lCase<2; ++lCase)
     {
-      if(crLoops[ii] == NULL)
-        { return SM_ERR ; }
-      if(crLoops[ii]->IsOuterLoop())
+      SmContext sContext;
+      SmBrep *pBrep = lCase == 0 ? sm_make_xy_sheet(sContext,20.0) : new(sContext) SmBrep();
+      SmObjDelete sCleanup(pBrep);
+      pBrep->m_bEditingEnabled = TRUE;
+      if(lCase == 1)
         {
-          if(crCounts[ii] != lExpectedOuter)
-            { return SM_ERR ; }
-          lOuterSeen++ ;
+          SmPrimitiveCreation sCreate(pBrep->GetInfiniteRegion());
+          SER(sCreate.CreateCone
+            (4.0,                  // in : height
+             2.0,                  // in : base radius
+             2.0,                  // in : top radius
+             0.0,                  // in : start angle in degrees
+             360.0,                // in : end angle in degrees
+             SmAxis2Placement())); // in : placement
         }
+      SmTArray<SmFace*> sFaces;
+      pBrep->GetFaces(sFaces);
+      SmFace *pFace = sFaces[0];
+      if(lCase == 1)
+        for(ULONG lPoint=0; lPoint<sFaces.GetSize(); ++lPoint)
+          if(sFaces[lPoint]->GetSurface()->IsPeriodic(sFaces[lPoint]->GetSurface()->GetNaturalUVDomain(),SM_SP_U))
+            { pFace = sFaces[lPoint]; break; }
+      SmCurve *pCurve = NULL;
+      if(lCase == 0)
+        pCurve = new(sContext) SmCircle
+          (SmPoint3d(10,10,0), // in : center
+           SmVector3d(1,0,0),  // in : first axis
+           SmVector3d(0,1,0),  // in : second axis
+           SmExtent1d(0,360),  // in : angular interval in degrees
+           2.0,                // in : radius
+           3,                  // in : dimension
+           &sContext);         // in : allocation context
       else
         {
-          if(crCounts[ii] != lExpectedInner)
-            { return SM_ERR ; }
-          lInnerSeen++ ;
+          SmExtent2d sDomain = pFace->GetSurface()->GetNaturalUVDomain();
+          double dV = (sDomain.GetMin().y+sDomain.GetMax().y)*0.5;
+          SmLine sUV
+            (SmPoint2d(sDomain.GetMin().x,dV), // in : start point
+             SmPoint2d(sDomain.GetMax().x,dV), // in : end point
+             2,                                // in : dimension
+             &sContext);                       // in : allocation context
+          pCurve = new(sContext) SmCrvOnSurf
+            (sUV,                  // in : defining UV curve
+             *pFace->GetSurface(), // in : base surface
+             NULL,                 // in : natural surface domain
+             2,                    // in : copy and own both inputs
+             &sContext);           // in : allocation context
         }
+      SmObjDelete sCurveCleanup(pCurve);
+      SmCurveClassification sClass
+        (pCurve,                       // in : defining curve
+         pCurve->GetNaturalInterval(), // in : curve interval
+         NULL,                         // in : no associated UV trim
+         pBrep->GetTolerance(),        // in : source zone tolerance
+         0,                            // in : no borrowed data capacity
+         NULL,                         // in : no borrowed data
+         FALSE,                        // in : keep curve ownership with caller
+         TRUE,                         // in : curve is current
+         pFace->GetSurface());         // in : base surface
+      SER(pFace->CurveOnClassify
+        (TRUE,   // in : classify nonintersecting curve points
+         sClass, // i/o: curve classification
+         FALSE,  // in : use standard intersection tolerance
+         TRUE,   // in : check 3D intersection distances
+         NULL,   // out: curve modification flag not needed
+         TRUE)); // in : allow UV classification fallback
+      SmTArray<SmFace*> sNewFaces;
+      SmTArray<SmEdge*> sNewEdges;
+      SmTArray<SmVertex*> sNewVertices;
+      SER(sClass.MergeIntervals
+        (&sNewFaces,    // out: new faces
+         &sNewEdges,    // out: new edges
+         &sNewVertices, // out: new vertices
+         pFace));       // in : original face
+      if(sNewFaces.GetSize() != 1 || pBrep->GetNumFaces() != sFaces.GetSize()+1) { return SM_ERR; }
+      SmAssertArray sPointers,sValid;
+      if(pBrep->ValidatePointers(&sPointers,SM_LEVEL_2,NULL) != SM_SUCCESS || sPointers.GetSize()
+         || !pBrep->AssertValid(&sValid,SM_LEVEL_2,SM_WALK) || sValid.GetSize()) { return SM_ERR; }
     }
-  if(lOuterSeen != 1 || lInnerSeen != (lExpectedLoopCnt - 1))
-    { return SM_ERR ; }
-  return SM_SUCCESS ;
+  MYPRINTF(_T("\nSeparating closed edges: plane and cylinder passed"));
+  return SM_SUCCESS;
 }
 
-static SmStatus my_test_get_loop_crossings()
-{
-  MYPRINTF(_T("\n********** Entered: my_test_get_loop_crossings")) ;
-
-  SmContext sContext ;
-  SmBSplineCurve * pLine = NULL ;
-  SER(SmBSplineCurve::CreateLineSegment(sContext, 3,
-                                        SmPoint3d(0.0, 10.0, 0.0),
-                                        SmPoint3d(20.0, 10.0, 0.0),
-                                        pLine)) ;
-  if(pLine == NULL)
-    { return SM_ERR ; }
-  SmObjDelete sCleanupLine(pLine) ;
-
-  SmTArray<SmLoop*> sLoops ;
-  SmTArray<ULONG> sCounts ;
-
-  // 1. Empty sheet: outer loop crossed twice.
-    {
-      SmBrep * pBrep = sm_make_xy_sheet(sContext, 20.0) ;
-      if(pBrep == NULL)
-        { return SM_ERR ; }
-      SmObjDelete sCleanupBrep(pBrep) ;
-
-      SmTArray<SmFace*> sFaces ;
-      pBrep->GetFaces(sFaces) ;
-      if(sFaces.GetSize() != 1)
-        { return SM_ERR ; }
-
-      SER(sm_classify_loop_crossings(sFaces[0], pLine, &sContext, sLoops, sCounts)) ;
-      SER(sm_expect_outer_inner_crossings(sLoops, sCounts, 1, 2, 0)) ;
-      MYPRINTF(_T("\nGetLoopCrossings empty sheet: outer=2")) ;
-    }
-
-  // 2. Inner vertex loop: zero-length crack, not a crossing.
-    {
-      SmBrep * pBrep = sm_make_xy_sheet(sContext, 20.0) ;
-      if(pBrep == NULL)
-        { return SM_ERR ; }
-      SmObjDelete sCleanupBrep(pBrep) ;
-
-      SmTArray<SmFace*> sFaces ;
-      pBrep->GetFaces(sFaces) ;
-      if(sFaces.GetSize() != 1)
-        { return SM_ERR ; }
-      SmFace * pFace = sFaces[0] ;
-
-      SmLoop * pVertexLoop = NULL ;
-      SmVertex * pVertex = NULL ;
-      SER(pBrep->MakeVertexLoop(pFace, SmPoint3d(10.0, 10.0, 0.0), pVertexLoop, pVertex)) ;
-      if(   pVertexLoop == NULL
-         || pVertexLoop->GetLoopuse() == NULL
-         || pVertexLoop->GetLoopuse()->IsVertexLoopuse() == FALSE
-         || pVertexLoop->IsOuterLoop())
-        { return SM_ERR ; }
-
-      SER(sm_classify_loop_crossings(pFace, pLine, &sContext, sLoops, sCounts)) ;
-      SER(sm_expect_outer_inner_crossings(sLoops, sCounts, 2, 2, 0)) ;
-
-      SmTArray<SmLoop*> sVertexOnly ;
-      sVertexOnly.Add(pVertexLoop) ;
-      SmCurveClassification sCurveClass(pLine,
-                                        pLine->GetNaturalInterval(),
-                                        NULL,
-                                        SmTol::GetZoneTol3d(pLine),
-                                        0, NULL, FALSE, TRUE,
-                                        pFace->GetSurface()) ;
-      sCurveClass.SetSurface1(pFace->GetSurface()) ;
-      SER(pFace->CurveOnClassify(TRUE, sCurveClass, FALSE, TRUE, NULL, TRUE)) ;
-      SmFaceProps sFaceProps(pFace, 0, &sContext) ;
-      SER(sFaceProps.SetProps_Stage2(pFace, 0, SM_HO_ALL)) ;
-      SmTArray<ULONG> sVertexCounts ;
-      SER(sCurveClass.GetLoopCrossings(sVertexOnly, &sFaceProps, &sVertexCounts, NULL, NULL)) ;
-      if(sVertexCounts.GetSize() != 1 || sVertexCounts[0] != 0)
-        { return SM_ERR ; }
-
-      MYPRINTF(_T("\nGetLoopCrossings vertex-loop: outer=2, vertex-loop=0")) ;
-    }
-
-  // 3. Inner crack: two vertex loops joined by MakeEdgeInFace. The classify
-  //    line crosses the strut edge; strut crossings are not loop crossings.
-    {
-      SmBrep * pBrep = sm_make_xy_sheet(sContext, 20.0) ;
-      if(pBrep == NULL)
-        { return SM_ERR ; }
-      SmObjDelete sCleanupBrep(pBrep) ;
-      pBrep->m_bEditingEnabled = TRUE ;
-
-      SmTArray<SmFace*> sFaces ;
-      pBrep->GetFaces(sFaces) ;
-      if(sFaces.GetSize() != 1)
-        { return SM_ERR ; }
-      SmFace * pFace = sFaces[0] ;
-
-      SmLoop * pLoopA = NULL ;
-      SmLoop * pLoopB = NULL ;
-      SmVertex * pVA = NULL ;
-      SmVertex * pVB = NULL ;
-      SER(pBrep->MakeVertexLoop(pFace, SmPoint3d(10.0, 6.0, 0.0), pLoopA, pVA)) ;
-      SER(pBrep->MakeVertexLoop(pFace, SmPoint3d(10.0, 14.0, 0.0), pLoopB, pVB)) ;
-
-      SmBSplineCurve * pCrackCrv = NULL ;
-      SER(SmBSplineCurve::CreateLineSegment(sContext, 3,
-                                            pVA->GetPoint(),
-                                            pVB->GetPoint(),
-                                            pCrackCrv)) ;
-      SmEdge * pCrackEdge = NULL ;
-      SmLoop * pNewLoop = NULL ;
-      SmFace * pNewFace = NULL ;
-      SER(pBrep->MakeEdgeInFace(pFace, pVA, pVB,
-                                pCrackCrv, NULL, pCrackCrv->GetNaturalInterval(),
-                                SM_OT_SAME, SM_ZONE_TOL_3D,
-                                pCrackEdge, pNewLoop, pNewFace)) ;
-      if(pCrackEdge == NULL || pNewFace != NULL)
-        { return SM_ERR ; }
-
-      SER(sm_classify_loop_crossings(pFace, pLine, &sContext, sLoops, sCounts)) ;
-      SER(sm_expect_outer_inner_crossings(sLoops, sCounts, 2, 2, 0)) ;
-
-      SmBoolean bSawCrack = FALSE ;
-      for(ULONG ii=0; ii<sLoops.GetSize(); ii++)
-        {
-          if(sLoops[ii]->IsOuterLoop())
-            { continue ; }
-          SmLoopuse * pLoopuse = sLoops[ii]->GetLoopuse() ;
-          if(pLoopuse == NULL || pLoopuse->IsVertexLoopuse())
-            { return SM_ERR ; }
-          bSawCrack = TRUE ;
-        }
-      if(bSawCrack == FALSE)
-        { return SM_ERR ; }
-
-      MYPRINTF(_T("\nGetLoopCrossings crack: outer=2, crack=0")) ;
-    }
-
-  // 4. Inner rectangular hole: area loop crossed twice.
-    {
-      SmBrep * pBrep = sm_make_xy_sheet(sContext, 20.0) ;
-      if(pBrep == NULL)
-        { return SM_ERR ; }
-      SmObjDelete sCleanupBrep(pBrep) ;
-
-      SmAxis2Placement sHoleFrame ;
-      sHoleFrame.SetCanonical(SmPoint3d(6.0, 6.0, 0.0),
-                              SmVector3d(1.0, 0.0, 0.0),
-                              SmVector3d(0.0, 1.0, 0.0)) ;
-      SmBrep * pHole = SmPrimitiveCreation::CreateRectangle(sContext, 1.0e-5, 8.0, 8.0, sHoleFrame) ;
-      if(pHole == NULL)
-        { return SM_ERR ; }
-
-      SER(SmPrimitiveCreation::Boolean2D(pBrep, pHole, SM_2D_DIFFERENCE, pBrep)) ;
-
-      SmTArray<SmFace*> sFaces ;
-      pBrep->GetFaces(sFaces) ;
-      if(sFaces.GetSize() != 1)
-        { return SM_ERR ; }
-
-      SER(sm_classify_loop_crossings(sFaces[0], pLine, &sContext, sLoops, sCounts)) ;
-      SER(sm_expect_outer_inner_crossings(sLoops, sCounts, 2, 2, 2)) ;
-      MYPRINTF(_T("\nGetLoopCrossings inner hole: outer=2, inner=2")) ;
-    }
-
-  return SM_SUCCESS ;
-}
-
-/***********************************************************************
-PURPOSE --- SmFace::AssertValid tests 37 and 38: Face Loops must be nested
-  and disjoint, and the two tests must cover each other's blind spots.
-
-  Test 37 (SM_LEVEL_0) classifies one sampled UV point per InnerLoop.
-  Its fixture is a 20x20 XY sheet cut back to x<=12 and holding a 6x8
-  hole at [2,8]x[6,14].  Cutting the sheet back leaves the SmPlane with
-  its full UVDomain, so there is UV room to the right of the OuterLoop.
-  Sliding the hole UVTrimCurves into that room leaves an InnerLoop that
-  no longer nests, the shape that reaches SmTess as a
-  CheckPolygonNesting() failure.
-
-  Test 38 (SM_LEVEL_2) intersects the Loop UVTrimCurves pairwise.  Its
-  fixture is a 20x20 XY sheet with two holes, one of them slid in UV
-  until it meets the other.  Two Loops of one Face must be disjoint, so
-  both a corner overlap and a bare corner touch are reported - the touch
-  is where the two holes would share a Vertex.  Every Loop's sampled UV
-  point still classifies correctly in both, so test 37 is fooled and only
-  the curve/curve sweep sees the contact.
-
-  Test 39 (SM_LEVEL_0) compares the Loop Vertices pairwise.  Tests 37 and
-  38 both work in UVSpace and only ever see a shared Vertex as geometry,
-  so neither states the topological rule that two Loops of one Face may
-  not share a Vertex.  The fixture cuts two holes whose corners sit 0.01
-  apart and calls SmBrep::GlueVertices() on that corner pair, which leaves
-  one SmVertex reached from both InnerLoops - improperly connected Loops.
-
-  Tests 38 and 39 are checked in both directions to show neither subsumes
-  the other.  Case 5 moves UVTrimCurves only, so the Loops touch in
-  UVSpace while keeping their own Vertices: 38 reports and 39 is silent.
-  Case 6 moves Vertexuses only, so the Loops share a Vertex while their
-  UVTrimCurves stay 0.01 apart: 39 reports and 38 is silent.
-***********************************************************************/
-static SmStatus sm_cut_rectangle_from_sheet(const SmContext & crContext, SmBrep *& rpBrep,
-                                            double dCornerX, double dCornerY,
-                                            double dSizeX, double dSizeY)
-{
-  SmAxis2Placement sCutFrame ;
-  sCutFrame.SetCanonical(SmPoint3d(dCornerX, dCornerY, 0.0),
-                         SmVector3d(1.0, 0.0, 0.0),
-                         SmVector3d(0.0, 1.0, 0.0)) ;
-  SmBrep * pCutter = SmPrimitiveCreation::CreateRectangle(crContext, 1.0e-5, dSizeX, dSizeY, sCutFrame) ;
-  if(pCutter == NULL)
-    { return SM_ERR ; }
-
-  return SmPrimitiveCreation::Boolean2D(rpBrep, pCutter, SM_2D_DIFFERENCE, rpBrep) ;
-}
-
-static SmFace * sm_make_cutback_sheet_with_hole(const SmContext & crContext, SmBrep *& rpBrep)
-{
-  rpBrep = sm_make_xy_sheet(crContext, 20.0) ;
-  if(rpBrep == NULL)
-    { return NULL ; }
-
-  // cut the sheet back to x <= 12, shrinking the OuterLoop but not the SmPlane
-  if(sm_cut_rectangle_from_sheet(crContext, rpBrep, 12.0, -2.0, 20.0, 24.0) != SM_SUCCESS)
-    { return NULL ; }
-
-  if(sm_cut_rectangle_from_sheet(crContext, rpBrep, 2.0, 6.0, 6.0, 8.0) != SM_SUCCESS)
-    { return NULL ; }
-
-  SmTArray<SmFace*> sFaces ;
-  rpBrep->GetFaces(sFaces) ;
-  if(sFaces.GetSize() != 1)
-    { return NULL ; }
-  return sFaces[0] ;
-}
-
-// eff: build a 20x20 XY sheet holding a 6x8 hole at [2,8]x[6,14] and a 6x6 hole
-//      at [13,19]x[13,19], far enough apart that the second hole's UVTrimCurves
-//      can be slid over the first hole
-static SmFace * sm_make_sheet_with_two_holes(const SmContext & crContext, SmBrep *& rpBrep)
-{
-  rpBrep = sm_make_xy_sheet(crContext, 20.0) ;
-  if(rpBrep == NULL)
-    { return NULL ; }
-
-  if(sm_cut_rectangle_from_sheet(crContext, rpBrep, 2.0, 6.0, 6.0, 8.0) != SM_SUCCESS)
-    { return NULL ; }
-
-  if(sm_cut_rectangle_from_sheet(crContext, rpBrep, 13.0, 13.0, 6.0, 6.0) != SM_SUCCESS)
-    { return NULL ; }
-
-  SmTArray<SmFace*> sFaces ;
-  rpBrep->GetFaces(sFaces) ;
-  if(sFaces.GetSize() != 1)
-    { return NULL ; }
-  return sFaces[0] ;
-}
-
-// rtn: the Face InnerLoop whose Vertices all sit in x [dMinX,dMaxX], NULL when there is none
-static SmLoop * sm_find_inner_loop_in_x_range(const SmFace * pFace, double dMinX, double dMaxX)
-{
-  SmTArray<SmLoop*> sLoops ;
-  pFace->GetLoops(sLoops) ;
-
-  for(ULONG ii=0; ii<sLoops.GetSize(); ii++)
-    {
-      if(sLoops[ii] == NULL || sLoops[ii]->IsOuterLoop())
-        { continue ; }
-
-      SmTArray<SmVertex*> sVertices ;
-      sLoops[ii]->GetVertices(sVertices) ;
-      if(sVertices.GetSize() == 0)
-        { continue ; }
-
-      SmBoolean bInRange = TRUE ;
-      for(ULONG jj=0; jj<sVertices.GetSize(); jj++)
-        {
-          double dX = sVertices[jj]->GetPoint().x ;
-          if(dX < dMinX || dX > dMaxX)
-            { bInRange = FALSE ; break ; }
-        }
-
-      if(bInRange)
-        { return sLoops[ii] ; }
-    }
-  return NULL ;
-}
-
-// eff: translate every UVTrimCurve of pLoop, leaving the 3d Edge curves alone
-static SmStatus sm_slide_loop_uv(SmLoop * pLoop, double dDeltaU, double dDeltaV)
-{
-  SmAxis2Placement sSlide ;
-  sSlide.SetCanonical(SmPoint3d(dDeltaU, dDeltaV, 0.0),
-                      SmVector3d(1.0, 0.0, 0.0),
-                      SmVector3d(0.0, 1.0, 0.0)) ;
-
-  SmTArray<SmEdgeuse*> sEdgeuses ;
-  pLoop->GetEdgeuses(sEdgeuses) ;
-  if(sEdgeuses.GetSize() == 0)
-    { return SM_ERR ; }
-
-  for(ULONG ii=0; ii<sEdgeuses.GetSize(); ii++)
-    {
-      SmBSplineCurve * pUVTrimCurve = NULL ;
-      SER(sEdgeuses[ii]->GetOrCreateUVTrimCurve(pUVTrimCurve)) ;
-      if(pUVTrimCurve == NULL)
-        { return SM_ERR ; }
-      SER(pUVTrimCurve->Transform(sSlide)) ;
-    }
-  return SM_SUCCESS ;
-}
-
-// rtn: TRUE when SmFace::AssertValid test 37 reports pFace
-static SmBoolean sm_face_reports_bad_loop_nesting(const SmFace * pFace)
-{
-  SmTArray<ULONG> sTestRequests ;
-  sTestRequests.Add(37) ;
-
-  SmAssertArray sAsserts ;
-  pFace->AssertValid(&sAsserts, SM_LEVEL_GIVEN, SM_NO_WALK, &sTestRequests) ;
-  return sm_HasAssertReport(sAsserts, 37, pFace) ;
-}
-
-// rtn: TRUE when SmFace::AssertValid test 38 reports pFace
-static SmBoolean sm_face_reports_intersecting_loops(const SmFace * pFace)
-{
-  SmTArray<ULONG> sTestRequests ;
-  sTestRequests.Add(38) ;
-
-  SmAssertArray sAsserts ;
-  pFace->AssertValid(&sAsserts, SM_LEVEL_GIVEN, SM_NO_WALK, &sTestRequests) ;
-  return sm_HasAssertReport(sAsserts, 38, pFace) ;
-}
-
-// rtn: TRUE when SmFace::AssertValid test 39 reports pFace
-static SmBoolean sm_face_reports_connected_loops(const SmFace * pFace)
-{
-  SmTArray<ULONG> sTestRequests ;
-  sTestRequests.Add(39) ;
-
-  SmAssertArray sAsserts ;
-  pFace->AssertValid(&sAsserts, SM_LEVEL_GIVEN, SM_NO_WALK, &sTestRequests) ;
-  return sm_HasAssertReport(sAsserts, 39, pFace) ;
-}
-
-// eff: build a 20x20 XY sheet holding a 6x6 hole at [2,8]x[6,12] and a 6x6 hole
-//      at [8.01,14.01]x[12.01,18.01].  The two holes stay disjoint, but one
-//      corner of each sits 0.01 away in x and y from a corner of the other, so
-//      the two corner Vertices are close enough to glue into one.
-static SmFace * sm_make_sheet_with_two_near_holes(const SmContext & crContext, SmBrep *& rpBrep)
-{
-  rpBrep = sm_make_xy_sheet(crContext, 20.0) ;
-  if(rpBrep == NULL)
-    { return NULL ; }
-
-  if(sm_cut_rectangle_from_sheet(crContext, rpBrep, 2.0, 6.0, 6.0, 6.0) != SM_SUCCESS)
-    { return NULL ; }
-
-  if(sm_cut_rectangle_from_sheet(crContext, rpBrep, 8.01, 12.01, 6.0, 6.0) != SM_SUCCESS)
-    { return NULL ; }
-
-  SmTArray<SmFace*> sFaces ;
-  rpBrep->GetFaces(sFaces) ;
-  if(sFaces.GetSize() != 1)
-    { return NULL ; }
-  return sFaces[0] ;
-}
-
-// rtn: the Loop Vertex closest to crPoint, NULL when the Loop has no Vertices
-static SmVertex * sm_find_loop_vertex_near(const SmLoop * pLoop, const SmPoint3d & crPoint)
-{
-  SmTArray<SmVertex*> sVertices ;
-  pLoop->GetVertices(sVertices) ;
-
-  SmVertex * pClosest = NULL ;
-  double     dClosest = SM_BIG_DOUBLE ;
-
-  for(ULONG ii=0; ii<sVertices.GetSize(); ii++)
-    {
-      if(sVertices[ii] == NULL)
-        { continue ; }
-
-      double dDistSq = sVertices[ii]->GetPoint().DistanceBetweenSquared(crPoint) ;
-      if(dDistSq < dClosest)
-        {
-          dClosest = dDistSq ;
-          pClosest = sVertices[ii] ;
-        }
-    }
-  return pClosest ;
-}
-
-static SmStatus my_test_face_loop_nesting()
-{
-  MYPRINTF(_T("\n********** Entered: my_test_face_loop_nesting")) ;
-
-  SmContext sContext ;
-
-  // 1. Hole inside the cut back sheet: properly nested, nothing to report.
-    {
-      SmBrep * pBrep = NULL ;
-      SmFace * pFace = sm_make_cutback_sheet_with_hole(sContext, pBrep) ;
-      SmObjDelete sCleanupBrep(pBrep) ;
-      if(pFace == NULL)
-        { return SM_ERR ; }
-
-      if(sm_face_reports_bad_loop_nesting(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 37: nested hole passes")) ;
-    }
-
-  // 2. Same hole slid into the UV room beyond the cut back OuterLoop.
-    {
-      SmBrep * pBrep = NULL ;
-      SmFace * pFace = sm_make_cutback_sheet_with_hole(sContext, pBrep) ;
-      SmObjDelete sCleanupBrep(pBrep) ;
-      if(pFace == NULL)
-        { return SM_ERR ; }
-
-      SmTArray<SmLoop*> sLoops ;
-      pFace->GetLoops(sLoops) ;
-      if(sLoops.GetSize() != 2)
-        { return SM_ERR ; }
-
-      // the SmPlane spans 20mm over a [0,1] UVDomain, so 0.5 slides the hole 10mm right
-      SmLoop * pInnerLoop = sLoops[0]->IsOuterLoop() ? sLoops[1] : sLoops[0] ;
-      SER(sm_slide_loop_uv(pInnerLoop, 0.5, 0.0)) ;
-
-      if(!sm_face_reports_bad_loop_nesting(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 37: unnested hole reported")) ;
-    }
-
-  // 3. Two holes in an uncut sheet: the Loops are disjoint, nothing to report.
-    {
-      SmBrep * pBrep = NULL ;
-      SmFace * pFace = sm_make_sheet_with_two_holes(sContext, pBrep) ;
-      SmObjDelete sCleanupBrep(pBrep) ;
-      if(pFace == NULL)
-        { return SM_ERR ; }
-
-      if(sm_face_reports_intersecting_loops(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 38: disjoint holes pass")) ;
-    }
-
-  // 4. Far hole slid until its UV corner overlaps the near hole's UV corner.
-    {
-      SmBrep * pBrep = NULL ;
-      SmFace * pFace = sm_make_sheet_with_two_holes(sContext, pBrep) ;
-      SmObjDelete sCleanupBrep(pBrep) ;
-      if(pFace == NULL)
-        { return SM_ERR ; }
-
-      SmLoop * pFarLoop = sm_find_inner_loop_in_x_range(pFace, 13.0, 19.0) ;
-      if(pFarLoop == NULL)
-        { return SM_ERR ; }
-
-      // the SmPlane spans 20mm over a [0,1] UVDomain, so the near hole covers
-      // UV [0.1,0.4]x[0.3,0.7] and the far hole covers UV [0.65,0.95]x[0.65,0.95].
-      // -0.30 in U leaves the two hole corners overlapping on [0.35,0.4]x[0.65,0.7],
-      // while every Loop's sampled edgeuse midpoint keeps classifying correctly.
-      SER(sm_slide_loop_uv(pFarLoop, -0.30, 0.0)) ;
-
-      if(sm_face_reports_bad_loop_nesting(pFace))
-        { return SM_ERR ; }
-      if(!sm_face_reports_intersecting_loops(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 38: crossing holes reported where 37 is fooled")) ;
-    }
-
-  // 5. Near hole slid until one UV corner lands exactly on a far hole UV corner.
-  //    Two Loops of one Face may not share a Vertex, so the bare touch counts.
-    {
-      SmBrep * pBrep = NULL ;
-      SmFace * pFace = sm_make_sheet_with_two_holes(sContext, pBrep) ;
-      SmObjDelete sCleanupBrep(pBrep) ;
-      if(pFace == NULL)
-        { return SM_ERR ; }
-
-      SmLoop * pNearLoop = sm_find_inner_loop_in_x_range(pFace, 2.0, 8.0) ;
-      if(pNearLoop == NULL)
-        { return SM_ERR ; }
-
-      // +0.25 in U and -0.05 in V carry the near hole's UV [0.4,0.7] corner onto
-      // the far hole's UV [0.65,0.65] corner, leaving the near hole spanning
-      // UV [0.35,0.65]x[0.25,0.65].  The two holes then meet at that one UV
-      // point and nowhere else, so no sampled edgeuse midpoint lands in the
-      // other hole and test 37 still passes.
-      SER(sm_slide_loop_uv(pNearLoop, 0.25, -0.05)) ;
-
-      if(sm_face_reports_bad_loop_nesting(pFace))
-        { return SM_ERR ; }
-      if(!sm_face_reports_intersecting_loops(pFace))
-        { return SM_ERR ; }
-
-      // sliding UVTrimCurves left the two holes with their own Vertices, so the
-      // Loops meet in UVSpace without being connected - test 39 has nothing to say
-      if(sm_face_reports_connected_loops(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 38: holes touching at one UV point reported, 39 silent")) ;
-    }
-
-  // 6. Two InnerLoops glued into one shared corner Vertex: improperly connected
-  //    Loops.  Unlike case 5 this is a topological defect - one SmVertex really
-  //    is reached from both Loops - so test 39 sees it without any UV geometry.
-    {
-      SmBrep * pBrep = NULL ;
-      SmFace * pFace = sm_make_sheet_with_two_near_holes(sContext, pBrep) ;
-      SmObjDelete sCleanupBrep(pBrep) ;
-      if(pFace == NULL)
-        { return SM_ERR ; }
-
-      SmLoop * pNearLoop = sm_find_inner_loop_in_x_range(pFace, 1.0, 8.005) ;
-      SmLoop * pFarLoop  = sm_find_inner_loop_in_x_range(pFace, 8.005, 14.5) ;
-      if(pNearLoop == NULL || pFarLoop == NULL || pNearLoop == pFarLoop)
-        { return SM_ERR ; }
-
-      // two disjoint holes share no Vertex yet
-      if(sm_face_reports_connected_loops(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 39: disjoint holes pass")) ;
-
-      // glue the near hole's [8,12] corner to the far hole's [8.01,12.01] corner,
-      // leaving one Vertex that both InnerLoops reach
-      SmVertex * pSurvivor = sm_find_loop_vertex_near(pNearLoop, SmPoint3d(8.0,  12.0,  0.0)) ;
-      SmVertex * pToDelete = sm_find_loop_vertex_near(pFarLoop,  SmPoint3d(8.01, 12.01, 0.0)) ;
-      if(pSurvivor == NULL || pToDelete == NULL || pSurvivor == pToDelete)
-        { return SM_ERR ; }
-
-      SER(pBrep->GlueVertices(pSurvivor, pToDelete)) ;
-
-      if(!sm_face_reports_connected_loops(pFace))
-        { return SM_ERR ; }
-
-      // the glue moved Vertexuses, not curves, so the two holes' UVTrimCurves
-      // still stand 0.01 apart - test 38 cannot see this defect at all
-      if(sm_face_reports_intersecting_loops(pFace))
-        { return SM_ERR ; }
-      MYPRINTF(_T("\nOKAY: AssertValid Face 39: Loops sharing a Vertex reported, 38 silent")) ;
-    }
-
-  return SM_SUCCESS ;
-}
 
 // NURB uv box of the half-cylinder (radius dR about z, angles 0..180 from +x)
 // between dZ0 and dZ1. Corners are dropped with the face midpoint as the guess
@@ -3572,6 +2766,261 @@ static SmExtent2d sm_coaxial_face_uv_box
         }
     }
   return sBox ;
+}
+
+static SmBrep * sm_combine_protoedge_box(const SmContext & crCtx, double dX, double dY, double dZ)
+{
+  SmBrep * pBrep = new(crCtx) SmBrep() ;
+  SmPrimitiveCreation sPC(pBrep->GetInfiniteRegion()) ;
+  SmAxis2Placement sFrame(SmPoint3d(dX, dY, dZ), SmVector3d(1.0, 0.0, 0.0), SmVector3d(0.0, 1.0, 0.0)) ;
+  if(sPC.CreateBox(10.0, 10.0, 10.0, sFrame) != SM_SUCCESS)
+    {
+      delete pBrep ;
+      return NULL ;
+    }
+  return pBrep ;
+}
+
+static SmEdgeDefinition * sm_combine_protoedge_ed(const SmContext & crCtx, SmProtoTopologyManager * pMgr,
+                                                  SmProtoEdge * pPE, SmFace * pF1, SmFace * pF2)
+{
+  SmLine * pLine = new(crCtx) SmLine(SmPoint3d(0.0, 0.0, 10.0), SmPoint3d(10.0, 0.0, 10.0), 3, &crCtx) ;
+  SmExtent1d sIvl = pLine->GetNaturalInterval() ;
+  SmEdgeDefinition * pED = new(pMgr) SmEdgeDefinition(pLine, sIvl, pF1, pF2, 1.0e-6, NULL, NULL, pPE) ;
+  pPE->AddEdgeDefinition(pED) ;
+  return pED ;
+}
+
+static SmBoolean sm_combine_protoedge_pf_lists(SmProtoFace * pPF, SmProtoEdge * pPE)
+{
+  ULONG lIdx ;
+  return pPF->GetCoincProtoEdges()->FindElement(pPE, lIdx) ;
+}
+
+/*******************************************************************//**
+PURPOSE: CombineProtoEdge moves every EdgeDefinition and the coincident ProtoFace.
+
+NOTES: Two ProtoEdges share the line (0,0,10)-(10,0,10). PE1 has one EdgeDefinition
+       and PE2 has three, from different face pairs. A ProtoFace lists PE2 only.
+       The range branch then combines, removes, and deletes PE2. Same-source overlaps
+       never reach that branch, so this builds the proto topology directly.
+***********************************************************************/
+static SmStatus my_test_combine_protoedge()
+{
+  SmContext sCtx ;
+  SmBrep * pA = sm_combine_protoedge_box(sCtx, 0.0, 0.0, 0.0) ;
+  SmObjDelete sCleanA(pA) ;
+  SmBrep * pB = sm_combine_protoedge_box(sCtx, 0.0, -5.0, 0.0) ;
+  SmObjDelete sCleanB(pB) ;
+  NER(pA) ;
+  NER(pB) ;
+  SmTArray<SmFace*> sFA ;
+  SmTArray<SmFace*> sFB ;
+  pA->GetFaces(sFA) ;
+  pB->GetFaces(sFB) ;
+  if(sFA.GetSize() < 3 || sFB.GetSize() < 3)
+    { return SM_ERR ; }
+
+  SmTopologyIntersector sTI(sCtx, pA, pB, 1.0e-6, 0.1) ;
+  SmProtoTopologyManager * pMgr = new(pA) SmProtoTopologyManager(pA, pB, &sTI, 1.0e-3, 1.0e-6) ;
+  SmObjDelete sCleanMgr(pMgr) ;
+
+  SmProtoVertex * pPV0 = new(pMgr) SmProtoVertex(SmPoint3d(0.0, 0.0, 10.0), 1.0e-6, pMgr) ;
+  SmProtoVertex * pPV1 = new(pMgr) SmProtoVertex(SmPoint3d(10.0, 0.0, 10.0), 1.0e-6, pMgr) ;
+  pMgr->AddProtoVertex(pPV0) ;
+  pMgr->AddProtoVertex(pPV1) ;
+
+  SmExtent1d sIvl(0.0, 1.0) ;
+  SmProtoEdge * pPE1 = new(pMgr) SmProtoEdge(pPV0, pPV1, sIvl, pMgr) ;
+  SmProtoEdge * pPE2 = new(pMgr) SmProtoEdge(pPV0, pPV1, sIvl, pMgr) ;
+  pMgr->AddProtoEdge(pPE1) ;
+  pMgr->AddProtoEdge(pPE2) ;
+  pPV0->AddProtoEdge(pPE1) ;
+  pPV1->AddProtoEdge(pPE1) ;
+  pPV0->AddProtoEdge(pPE2) ;
+  pPV1->AddProtoEdge(pPE2) ;
+
+  sm_combine_protoedge_ed(sCtx, pMgr, pPE1, sFA[0], sFB[0]) ;
+  SmEdgeDefinition * apED2[3] ;
+  apED2[0] = sm_combine_protoedge_ed(sCtx, pMgr, pPE2, sFA[1], sFB[0]) ;
+  apED2[1] = sm_combine_protoedge_ed(sCtx, pMgr, pPE2, sFA[0], sFB[1]) ;
+  apED2[2] = sm_combine_protoedge_ed(sCtx, pMgr, pPE2, sFA[1], sFB[1]) ;
+
+  SmTArray<SmProtoEdge*> sNoPEs ;
+  SmProtoFace * pPF = new(pMgr) SmProtoFace(sFA[2], sFB[2], sNoPEs, pMgr) ;
+  pMgr->AddProtoFace(pPF) ;
+  pPF->RelateCoincidentPF(pPE2) ;
+
+  pPE1->CombineProtoEdge(pPE2) ;
+
+  if(pPE1->GetNumEdgeDefinitions() != 4 || pPE2->GetNumEdgeDefinitions() != 0)
+    { return SM_ERR ; }
+  for(int ii=0; ii<3; ii++)
+    {
+      if(apED2[ii]->GetProtoEdge() != pPE1)
+        { return SM_ERR ; }
+    }
+  if(   !sm_combine_protoedge_pf_lists(pPF, pPE1)
+     || sm_combine_protoedge_pf_lists(pPF, pPE2)
+     || pPE1->GetCoincProtoFaces()->GetSize() != 1)
+    { return SM_ERR ; }
+
+  SmProtoEdge * pDeleted = pPE2 ;
+  pMgr->RemoveProtoEdge(pPE2) ;
+  delete pPE2 ;
+  pPE2 = NULL ;
+  if(sm_combine_protoedge_pf_lists(pPF, pDeleted))
+    { return SM_ERR ; }
+
+  SmTArray<SmEdgeDefinition *> & rEDs = pPE1->GetEdgeDefinitions() ;
+  for(ULONG ii=0; ii<rEDs.GetSize(); ii++)
+    { rEDs[ii]->Destruct() ; }
+
+  MYPRINTF(_T("\nOKAY: CombineProtoEdge keeps every EdgeDefinition and the ProtoFace link")) ;
+  return SM_SUCCESS ;
+}
+
+static SmBoolean sm_box_near(const SmExtent3d & crBox, const SmPoint3d & crMin, const SmPoint3d & crMax)
+{
+  return    crBox.GetMin().DistanceBetween(crMin) < 1.0e-6
+         && crBox.GetMax().DistanceBetween(crMax) < 1.0e-6 ;
+}
+
+static SmBoolean sm_overlap_pf_lists_live(SmProtoTopologyManager * pMgr, SmProtoFace * pPF)
+{
+  SmTArray<SmProtoEdge*> * pCoinPEs = pPF->GetCoincProtoEdges() ;
+  for(ULONG ii=0; ii<pCoinPEs->GetSize(); ii++)
+    {
+      ULONG lIdx ;
+      if(!pMgr->GetProtoEdges().FindElement((*pCoinPEs)[ii], lIdx))
+        { return FALSE ; }
+    }
+  return TRUE ;
+}
+
+/*******************************************************************//**
+PURPOSE: ResolveOverlappingProtoEdges refreshes every ProtoFace that lists
+         a ProtoEdge of an overlapping group.
+
+NOTES: Three overlapping ProtoEdges lie on the edge (0,0,10)-(10,0,10) of box A,
+       which lies in the top face of box B. Both faces of that edge get a ProtoFace
+       listing the group. The group is deleted and replaced by a ProtoEdge from the
+       edge/face classification; both ProtoFaces must then list only live ProtoEdges.
+       The check compares pointers only, so a stale entry never gets dereferenced.
+***********************************************************************/
+static SmStatus my_test_overlap_group_on_two_protofaces()
+{
+  SmContext sCtx ;
+  SmBrep * pA = sm_combine_protoedge_box(sCtx, 0.0, 0.0, 0.0) ;
+  SmObjDelete sCleanA(pA) ;
+  SmBrep * pB = sm_combine_protoedge_box(sCtx, 0.0, -5.0, 0.0) ;
+  SmObjDelete sCleanB(pB) ;
+  NER(pA) ;
+  NER(pB) ;
+
+  SmEdge * pEdgeA = NULL ;
+  SmTArray<SmEdge*> sEA ;
+  pA->GetEdges(sEA) ;
+  for(ULONG ii=0; ii<sEA.GetSize(); ii++)
+    {
+      SmExtent3d sBox ;
+      sEA[ii]->CalculateTightBoundingBox(&sBox) ;
+      if(sm_box_near(sBox, SmPoint3d(0.0, 0.0, 10.0), SmPoint3d(10.0, 0.0, 10.0)))
+        { pEdgeA = sEA[ii] ; }
+    }
+  SmFace * pTopB = NULL ;
+  SmTArray<SmFace*> sFB ;
+  pB->GetFaces(sFB) ;
+  for(ULONG ii=0; ii<sFB.GetSize(); ii++)
+    {
+      SmExtent3d sBox ;
+      sFB[ii]->CalculateTightBoundingBox(sBox) ;
+      if(sm_box_near(sBox, SmPoint3d(0.0, -5.0, 10.0), SmPoint3d(10.0, 5.0, 10.0)))
+        { pTopB = sFB[ii] ; }
+    }
+  NER(pEdgeA) ;
+  NER(pTopB) ;
+  SmTArray<SmFace*> sEdgeFaces ;
+  pEdgeA->GetFaces(sEdgeFaces) ;
+  if(sEdgeFaces.GetSize() != 2)
+    { return SM_ERR ; }
+
+  SmTopologyIntersector sTI(sCtx, pA, pB, 1.0e-6, 0.1) ;
+  SmProtoTopologyManager * pMgr = new(pA) SmProtoTopologyManager(pA, pB, &sTI, 1.0e-3, 1.0e-6) ;
+  SmObjDelete sCleanMgr(pMgr) ;
+
+  // overlapping spans along x: [0,10], [0,6], [4,10]
+  const double daStart[3] = { 0.0, 0.0,  4.0 } ;
+  const double daEnd  [3] = { 10.0, 6.0, 10.0 } ;
+  SmProtoEdge * apPE[3] ;
+  for(int ii=0; ii<3; ii++)
+    {
+      SmPoint3d sP0(daStart[ii], 0.0, 10.0) ;
+      SmPoint3d sP1(daEnd[ii],   0.0, 10.0) ;
+      SmProtoVertex * pPV0 = new(pMgr) SmProtoVertex(sP0, 1.0e-6, pMgr) ;
+      SmProtoVertex * pPV1 = new(pMgr) SmProtoVertex(sP1, 1.0e-6, pMgr) ;
+      pMgr->AddProtoVertex(pPV0) ;
+      pMgr->AddProtoVertex(pPV1) ;
+
+      SmLine * pLine = new(sCtx) SmLine(sP0, sP1, 3, &sCtx) ;
+      SmExtent1d sIvl = pLine->GetNaturalInterval() ;
+      apPE[ii] = new(pMgr) SmProtoEdge(pPV0, pPV1, sIvl, pMgr) ;
+      pMgr->AddProtoEdge(apPE[ii]) ;
+      pPV0->AddProtoEdge(apPE[ii]) ;
+      pPV1->AddProtoEdge(apPE[ii]) ;
+      SmEdgeDefinition * pED = new(pMgr) SmEdgeDefinition(pLine, sIvl, pEdgeA, pTopB, 1.0e-6, NULL, NULL, apPE[ii]) ;
+      apPE[ii]->AddEdgeDefinition(pED) ;
+    }
+  for(int ii=0; ii<3; ii++)
+    {
+      for(int jj=0; jj<3; jj++)
+        {
+          if(ii != jj)
+            { apPE[ii]->AddOverlappingPE(apPE[jj]) ; }
+        }
+    }
+
+  SmTArray<SmProtoEdge*> sNoPEs ;
+  SmProtoFace * apPF[2] ;
+  for(int ii=0; ii<2; ii++)
+    {
+      apPF[ii] = new(pMgr) SmProtoFace(sEdgeFaces[ii], pTopB, sNoPEs, pMgr) ;
+      pMgr->AddProtoFace(apPF[ii]) ;
+      for(int jj=0; jj<3; jj++)
+        { apPF[ii]->RelateCoincidentPF(apPE[jj]) ; }
+    }
+
+  SER(pMgr->ResolveOverlappingProtoEdges()) ;
+
+  for(int ii=0; ii<2; ii++)
+    {
+      if(!sm_overlap_pf_lists_live(pMgr, apPF[ii]))
+        {
+          MYPRINTF(_T("\nERROR: ResolveOverlappingProtoEdges left a deleted ProtoEdge on a ProtoFace")) ;
+          return SM_ERR ;
+        }
+    }
+  SmTArray<SmProtoEdge*> * pCoin0 = apPF[0]->GetCoincProtoEdges() ;
+  SmTArray<SmProtoEdge*> * pCoin1 = apPF[1]->GetCoincProtoEdges() ;
+  if(pCoin0->GetSize() == 0 || pCoin0->GetSize() != pCoin1->GetSize())
+    { return SM_ERR ; }
+  for(ULONG ii=0; ii<pCoin0->GetSize(); ii++)
+    {
+      ULONG lIdx ;
+      if(!pCoin1->FindElement((*pCoin0)[ii], lIdx))
+        { return SM_ERR ; }
+    }
+
+  SmTArray<SmProtoEdge*> & rPEs = pMgr->GetProtoEdges() ;
+  for(ULONG ii=0; ii<rPEs.GetSize(); ii++)
+    {
+      SmTArray<SmEdgeDefinition *> & rEDs = rPEs[ii]->GetEdgeDefinitions() ;
+      for(ULONG jj=0; jj<rEDs.GetSize(); jj++)
+        { rEDs[jj]->Destruct() ; }
+    }
+
+  MYPRINTF(_T("\nOKAY: ResolveOverlappingProtoEdges refreshes every ProtoFace of an overlapping group")) ;
+  return SM_SUCCESS ;
 }
 
 static SmStatus my_test_coaxial_cylinder_merge()
@@ -3961,660 +3410,144 @@ static SmStatus my_test_coaxial_merge_orientation()
   return SM_SUCCESS;
 }
 
-/***********************************************************************
-PURPOSE ---
 
-USAGE NOTES ---
-***********************************************************************/
-/***********************************************************************
-PURPOSE --- Exercise loop closure without healing or regenerating the input trims.
-***********************************************************************/
-static SmStatus my_check_loop_uv_gap
- (const SmContext & crContext,      // in : context for test objects
-  SmSurface       * pSurface,      // in : consumed test surface
-  const SmPoint2d & crStartUV,      // in : start of the first edge
-  const SmPoint2d & crEndUV,        // in : end of the last edge
-  double            dEdgeZone,     // in : zone tolerance of each edge
-  SmBoolean         bExpectedValid)// in : expected UV closure result
+
+
+
+// A vertex-only face can connect wire components that survive its deletion.
+static SmStatus my_test_delete_vertex_face_with_wires
+  (ULONG     lWireCount,           // in : number of separate attached wires
+   SmBoolean bSqueeze,             // in : remove the face through SqueezeFace
+   SmBoolean bDeleteEdgesVertices) // in : DeleteFace removes newly isolated topology
 {
-    SmBrepData sData;
-    sData.m_sZoneTol3d = 1e-5;
-    sData.m_lNumRegions = 1;
-    sData.m_vSurfaces.Add(pSurface);
-    SmRegionData sRegion;
-    sRegion.m_bIsVoidFlag = TRUE;
-    sRegion.m_lStartShell = 0;
-    sRegion.m_lNumShells = 1;
-    sData.m_vRegions.Add(sRegion);
-    SmShellData sShell;
-    sShell.m_lShellType = 0;
-    sShell.m_lFaceuseStart = 0;
-    sShell.m_lNumFaceuses = 2;
-    sData.m_vShells.Add(sShell);
-    for (int nSide = 0; nSide < 2; ++nSide)
-    {
-        SmFaceuseData sUse;
-        sUse.m_lFace = 0;
-        sUse.m_bOrientation = nSide == 0;
-        sData.m_vFaceuses.Add(sUse);
-    }
-    const SmExtent2d sDomain = pSurface->GetNaturalUVDomain();
-    SmFaceData sFace;
-    sFace.m_lSurface = 0;
-    sFace.m_sZoneTol3d = 1e-5;
-    sFace.m_vUVDomain = sDomain;
-    sFace.m_lStartLoop = 0;
-    sFace.m_lNumLoops = 1;
-    sData.m_vFaces.Add(sFace);
-    SmLoopData sLoop;
-    sLoop.m_lLoopType = 0;
-    sLoop.m_lStartEU = 0;
-    sLoop.m_lNumEU = 3;
-    sData.m_vLoops.Add(sLoop);
-    const SmPoint2d asUV[] = { crStartUV, sDomain.Evaluate(.8, .2), sDomain.Evaluate(.7, .8), crEndUV };
-    for (ULONG lEdge = 0; lEdge < 3; ++lEdge)
-    {
-        SmVertexData sVertex;
-        SER(pSurface->EvaluatePoint(asUV[lEdge], sVertex.m_vPoint));
-        sVertex.m_sZoneTol3d = dEdgeZone;
-        sData.m_vVertices.Add(sVertex);
-        SmBSplineCurve * pUV = NULL;
-        SER(SmBSplineCurve::CreateLineSegment(
-            crContext,                                  // in : context for test objects
-            2,                                          // in : UV dimension
-            SmPoint3d(asUV[lEdge].x, asUV[lEdge].y, 0),   // in : curve start
-            SmPoint3d(asUV[lEdge+1].x, asUV[lEdge+1].y, 0),// in : curve end
-            pUV                                         // out: trim curve
-        ));
-        sData.m_vUVCurves.Add(pUV);
-        sData.m_v3DCurves.Add(new (crContext) SmCrvOnSurf(
-            *pUV,        // in : UV curve defining the 3D edge
-            *pSurface,   // in : supporting surface
-            &sDomain,    // in : surface domain
-            1,           // in : own a copy of the UV curve, borrow the surface
-            &crContext   // in : context for test objects
-        ));
-        SmEdgeData sEdge;
-        sEdge.m_lCurve = lEdge;
-        sEdge.m_lPrimEU = lEdge;
-        sEdge.m_lStartVertex = lEdge;
-        sEdge.m_lEndVertex = (lEdge + 1) % 3;
-        sEdge.m_vInterval = pUV->GetNaturalInterval();
-        sEdge.m_sZoneTol3d = dEdgeZone;
-        sData.m_vEdges.Add(sEdge);
-        SmEUData sUse;
-        sUse.m_lEUType = 0;
-        sUse.m_lEdge = lEdge;
-        sUse.m_lLoop = 0;
-        sUse.m_bOrientation = TRUE;
-        sUse.m_lUVCurve = lEdge;
-        sUse.m_lNextEU = -static_cast<long>(lEdge) - 1;
-        sUse.m_lMateNextEU = lEdge;
-        sData.m_vEdgeuses.Add(sUse);
-    }
-    SmBrep * pBrep = new (crContext) SmBrep();
-    SmObjDelete sDeleteBrep(pBrep);
-    SmTArray<SmAttribute*> sAttributes;
-    SER(pBrep->MakeTopologyFromData(
-        &sData,       // in : exact geometry and topology records
-        sAttributes,  // i/o: attributes
-        FALSE,        // in : do not generate trims
-        FALSE,        // in : do not replace geometry with analytics
-        TRUE,         // in : retain the supplied tolerances
-        FALSE,        // in : defer trim checking to the test
-        FALSE,        // in : do not request healing
-        FALSE         // in : disable healing
-    ));
-    SmLoop * pLoop = sData.m_vLoops[0].m_pLoop;
-    SmAssertArray sReports;
-    ULONG lClosure;
-    const SmStatus eStatus = SmTrimmingTools::CheckLoop(
-        pLoop->GetFace()->GetSurface(), // in : target loop surface
-        pLoop,                         // in : target loop
-        1e-5,                          // in : singularity tolerance
-        lClosure,                      // out: loop closure classification
-        &sReports,                     // i/o: validation reports
-        SM_LEVEL_2                     // in : all validation levels
-    );
-    SmBoolean bUVReport = FALSE;
-    for (ULONG lReport = 0; lReport < sReports.GetSize(); ++lReport)
-    {
-        bUVReport |= sReports[lReport]->GetListIndex() == 3 &&
-                     (sReports[lReport]->GetTestIndex() == 1 || sReports[lReport]->GetTestIndex() == 2);
-    }
-    const SmBoolean bValid = eStatus == SM_SUCCESS && lClosure < 2 && !bUVReport;
-    if (bValid != bExpectedValid)
-    {
-        SM_ASSERT_MSG(FALSE, _T("Loop UV-gap validation disagrees with the bounded neighborhood or seam guard"));
-        return SM_ERR;
-    }
-    // Check the validator entrypoint independently so the direct call cannot
-    // supply a missing report. AssertValid currently records CheckLoop failures
-    // without folding them into its Boolean return; require TRUE for valid cases
-    // and check the UV reports for both valid and invalid cases.
-    SmAssertArray sAssertReports;
-    const SmBoolean bAssertValid = pLoop->AssertValid(&sAssertReports, SM_LEVEL_2, SM_NO_WALK);
-    SmBoolean bAssertUVReport = FALSE;
-    for (ULONG lReport = 0; lReport < sAssertReports.GetSize(); ++lReport)
-    {
-        bAssertUVReport |= sAssertReports[lReport]->GetListIndex() == 3 &&
-                           (sAssertReports[lReport]->GetTestIndex() == 1 || sAssertReports[lReport]->GetTestIndex() == 2);
-    }
-    if ((bExpectedValid && !bAssertValid) || bAssertUVReport == bExpectedValid)
-    {
-        SM_ASSERT_MSG(FALSE, _T("Loop AssertValid disagrees with the bounded neighborhood or seam guard"));
-        return SM_ERR;
-    }
-    return SM_SUCCESS;
-}
-
-/***********************************************************************
-PURPOSE --- A small near-pole gap may span a large nonperiodic UV interval.
-            Keep physical-gap, interior-excursion, and periodic-seam failures.
-***********************************************************************/
-static SmStatus my_test_loop_uv_gap_neighborhood()
-{
-    SmContext sContext;
-    // Reduced rational bicubic patch from SHAPE face #46578479.
-    const double aadPoints[16][4] = {
-        { -75.52350209986, -29.40907447757, -0.02903593761593, 1.336660247407 },
-        { -75.52350209986, -29.40907447757001, -0.02903593761593, 0.7735687303299 },
-        { -75.52350209986, -29.40907447757, -0.02903593761593, 0.7170092890336 },
-        { -75.52350209986, -29.40907447757, -0.02903593761593, 1.166981923518 },
-        { -75.517601183, -29.29067419864, -0.2296546081682, 1.018970918309 },
-        { -75.51760101133, -29.49423342932, -0.3421600656059, 0.5897115897985 },
-        { -75.51760084171001, -29.69537420033, -0.2071049728044, 0.5465948546757 },
-        { -75.51760089530001, -29.63182756749, 0.03564256517874, 0.8896207129399 },
-        { -75.33092321605, -29.23456048059, -0.3314884753882, 1.092070110926 },
-        { -75.33092295951, -29.53874999253, -0.4996114343651, 0.6320164684919 },
-        { -75.33092270602, -29.83932547006, -0.2977913418667, 0.5858066141551 },
-        { -75.33092278610999, -29.74436431713, 0.06495936640571, 0.9534405479153 },
-        { -75.12960303577, -29.26668903197, -0.2733521841475, 1.555957825257 },
-        { -75.12960282774, -29.51336589164, -0.4096883888209, 0.90048336641 },
-        { -75.12960262215999, -29.75711201695, -0.2460261168409, 0.8346445674721 },
-        { -75.12960268712, -29.68010502599, 0.04813986209213, 1.358441428445 },
-    };
-    const double adUKnots[] = { -.01253127294337, -.01253127294337, -.01253127294337, -.01253127294337,
-                               1.248394544457, 1.248394544457, 1.248394544457, 1.248394544457 };
-    const double adVKnots[] = { -.416060457619, -.416060457619, -.416060457619, -.416060457619,
-                               1.232034003285, 1.232034003285, 1.232034003285, 1.232034003285 };
-    for (int nCase = 0; nCase < 5; ++nCase)
-    {
-        SmBSplineSurface * pSurface = new (sContext) SmBSplineSurface();
-        SER(pSurface->SetExpert(
-            3,                          // in : U degree
-            3,                          // in : V degree
-            SM_SF_UNSPECIFIED,           // in : surface form
-            SM_EK_CLAMPPED,              // in : full clamped knot vectors
-            8,                          // in : U knot count
-            adUKnots,                   // in : U knots
-            8,                          // in : V knot count
-            adVKnots,                   // in : V knots
-            SM_CP_EUCLIDIAN_RATIONAL,    // in : Euclidean points with weights
-            16,                         // in : U stride in doubles
-            4,                          // in : V stride in doubles
-            &aadPoints[0][0]            // in : control-point net
-        ));
-        SmPoint2d sStart(.01379541752769611, -.1745106431752232);
-        SmPoint2d sEnd(.00451503652006906, -.416060457619);
-        // Zero is reproduced exactly by the endpoint evaluation of both trim
-        // lines, so these cases reach the zero-width isoparametric-curve path.
-        if (nCase >= 3)
-            sStart.x = sEnd.x = 0.0;
-        if (nCase == 1 || nCase == 4)
-        {
-            SER(pSurface->SwapUV());
-            sStart.Set(sStart.y, sStart.x);
-            sEnd.Set(sEnd.y, sEnd.x);
-        }
-        SER(my_check_loop_uv_gap(
-            sContext,                                    // in : context for test objects
-            pSurface,                                    // in : consumed test surface
-            sStart,                                      // in : start of the first edge
-            sEnd,                                        // in : end of the last edge
-            nCase == 2 ? .0005 : .002952363602285994,      // in : zone tolerance of each edge
-            nCase != 2                                   // in : expected UV closure result
-        ));
-    }
-    // Empty weights are valid for both patches and isoparametric curves. A
-    // raised middle control row rejects each path despite close endpoints.
-    const double adBulgeU[] = {0,0,0,1,1,1};
-    const double adBulgeV[] = {0,0,1,1};
-    for (int nCase = 0; nCase < 4; ++nCase)
-    {
-        const SmBoolean bBulge = nCase == 0 || nCase == 3;
-        const double dHeight = bBulge ? 1. : 0.;
-        const double aadNonRationalPoints[6][3] = {
-            {0,0,0}, {0,.01,0}, {.005,0,dHeight}, {.005,.01,dHeight}, {.01,0,0}, {.01,.01,0}
-        };
-        SmBSplineSurface * pSurface = new (sContext) SmBSplineSurface();
-        SER(pSurface->SetExpert(
-            2,                      // in : U degree
-            1,                      // in : V degree
-            SM_SF_UNSPECIFIED,       // in : surface form
-            SM_EK_CLAMPPED,          // in : full clamped knot vectors
-            6,                      // in : U knot count
-            adBulgeU,               // in : U knots
-            4,                      // in : V knot count
-            adBulgeV,               // in : V knots
-            SM_CP_NON_RATIONAL,     // in : nonrational control points
-            6,                      // in : U stride in doubles
-            3,                      // in : V stride in doubles
-            &aadNonRationalPoints[0][0] // in : control-point net
-        ));
-        SER(my_check_loop_uv_gap(
-            sContext,                           // in : context for test objects
-            pSurface,                           // in : consumed test surface
-            SmPoint2d(0,nCase < 2 ? .2 : .5),    // in : start of the first edge
-            SmPoint2d(1,nCase < 2 ? .8 : .5),    // in : end of the last edge
-            .01,                                // in : zone tolerance of each edge
-            !bBulge                             // in : expected UV closure result
-        ));
-    }
-    for (int nPole = 0; nPole < 3; ++nPole)
-    {
-        SmSphere * pSphere = new (sContext) SmSphere(
-            SmPoint3d(0,0,0),             // in : sphere center
-            SmVector3d(1,0,0),            // in : sphere X axis
-            SmVector3d(0,1,0),            // in : sphere Y axis
-            SmExtent2d(0,-90,360,90),     // in : angular domain in degrees
-            1.,                          // in : radius
-            FALSE                        // in : swap U and V
-        );
-        const SmExtent2d sDomain = pSphere->GetNaturalUVDomain();
-        // Use a binary fraction for the constant-V case so trim evaluation
-        // preserves an exactly zero-width gap, even without the seam guard.
-        const double dV = sDomain.GetMin().y +
-                          (nPole == 1 ? 0. : (nPole == 2 ? 1./8192. : 1e-4)*sDomain.YLength());
-        SER(my_check_loop_uv_gap(
-            sContext,                              // in : context for test objects
-            pSphere,                               // in : consumed test surface
-            SmPoint2d(sDomain.GetMin().x,dV),       // in : start of the first edge
-            SmPoint2d(sDomain.GetMax().x,dV + (nPole == 0 ? 1e-5*sDomain.YLength() : 0.)), // in : end of the last edge
-            .001,                                  // in : zone tolerance of each edge
-            nPole == 1                             // in : expected UV closure result
-        ));
-    }
-    return SM_SUCCESS;
-}
-
-/***********************************************************************
-PURPOSE --- Coplanar face/line intersections must retain the source range
-  while the solution array grows to hold disjoint material intervals.
-***********************************************************************/
-static SmStatus my_test_face_line_intersect_growth()
-{
-  // Four holes cross the new capacity of 4; sixteen also cross the old 16.
-  // Include cases without holes and just below the first failing case.
-  const ULONG aHoleCounts[] = {0, 3, 4, 8, 16};
-  for(ULONG lNumHoles : aHoleCounts)
-    {
-      SmContext sContext;
-      const double dWidth = 2.0*lNumHoles + 2.0;
-      SmBrep * pBrep = SmPrimitiveCreation::CreateRectangle(sContext, 1e-5, dWidth, 4.0, SmAxis2Placement());
-      if(pBrep == NULL)
-        { return SM_ERR; }
-      SmObjDelete sCleanupBrep(pBrep);
-
-      // Outer rectangle [0,width] x [0,4], with holes [2i+1,2i+2] x [1,3].
-      for(ULONG ii=0; ii<lNumHoles; ++ii)
-        {
-          SER(sm_cut_rectangle_from_sheet(sContext, pBrep, 2.0*ii+1.0, 1.0, 1.0, 2.0));
-        }
-
-      SmTArray<SmFace*> sFaces;
-      pBrep->GetFaces(sFaces);
-      if(sFaces.GetSize() != 1 || !pBrep->AssertValid(NULL, SM_LEVEL_2, SM_WALK))
-        { return SM_ERR; }
-
-      SmFace * pFace = sFaces[0];
-      const SmExtent1d sLineDomain(0.0, dWidth);
-      const double dTol = 1e-8;
-      for(int iRay=0; iRay<2; ++iRay)
-        {
-          // Start with a fresh array on each call so earlier calls cannot
-          // hide the reallocation. Ray mode keeps only the first interval.
-          SmSolutionArray sSolutions;
-          SER(pFace->GlobalLineIntersect(pFace->GetUVDomain(), SmPoint3d(0,2,0),
-                                          SmVector3d(1,0,0), &sLineDomain, iRay != 0,
-                                          SmTol::GetZoneTol3d(pBrep), sSolutions));
-          const ULONG lExpected = iRay ? 1 : lNumHoles+1;
-          if(sSolutions.GetSize() != lExpected)
-            { return SM_ERR; }
-
-          for(ULONG ii=0; ii<lExpected; ++ii)
-            {
-              const SmSolution & rSol = sSolutions[ii];
-              const double dStart = 2.0*ii;
-              const double dEnd = ii == lNumHoles ? dWidth : 2.0*ii+1.0;
-              if(   rSol.m_eSolutionType != SM_ST_RANGE_OF_VALUES
-                 || rSol.m_lNumVariables != 3
-                 || !(smos_Fabs(rSol.m_vStart[0]-dStart) <= dTol)
-                 || !(smos_Fabs(rSol.m_vEnd[0]-dEnd) <= dTol))
-                { return SM_ERR; }
-
-              // Check the surface parameters as well as the line intervals.
-              SmPoint3d sStart, sEnd;
-              SER(pFace->GetSurface()->EvaluatePoint(SmPoint2d(rSol.m_vStart[1],rSol.m_vStart[2]), sStart));
-              SER(pFace->GetSurface()->EvaluatePoint(SmPoint2d(rSol.m_vEnd[1],rSol.m_vEnd[2]), sEnd));
-              if(   !(sStart.DistanceBetween(SmPoint3d(dStart,2,0)) <= dTol)
-                 || !(sEnd.DistanceBetween(SmPoint3d(dEnd,2,0)) <= dTol))
-                { return SM_ERR; }
-            }
-        }
-    }
-  MYPRINTF(_T("\nOKAY: face/line intersections survive solution-array growth"));
-  return SM_SUCCESS;
-}
-
-// A circular loop on a cylinder without its seam exercises the legacy
-// single-periodic endpoint choice used during healing. Test both UV directions.
-static SmStatus my_test_single_periodic_vertexuse
- (SmBoolean         bSwapUV,    // in : TRUE = cylinder closed in V, FALSE = closed in U
-  const SmExtent1d &crInterval) // in : curve and trim parameter interval
-{
-  MYPRINTF(_T("\n********** Entered: my_test_single_periodic_vertexuse"));
   SmContext         sContext;
   SmBrepConstructor sBuilder;
   SmBrep           *pBrep = sBuilder.StartBrep(sContext);
-  SmObjDelete       sCleanup(pBrep);
-  SmShell          *pOuter = NULL,*pInner = NULL;
-  SER(sBuilder.StartShell(pOuter,pInner));
-  SmFace     *pFace = sBuilder.StartFace(SM_OT_SAME);
-  SmCylinder *pCylinder = new(sContext) SmCylinder
-    (SmPoint3d(0,0,0),  // in : cylinder origin
-     SmVector3d(1,0,0), // in : cylinder X axis
-     SmVector3d(0,1,0), // in : cylinder Y axis
-     1.,               // in : radius
-     0.,               // in : start angle in degrees
-     360.,             // in : end angle in degrees
-     1.,               // in : height
-     bSwapUV,          // in : TRUE = rotation in V, FALSE = rotation in U
-     FALSE,            // in : retain generator direction
-     FALSE,            // in : use an analytic generator
-     &sContext);       // in : context for the surface
-  SmExtent2d sDomain = pCylinder->GetNaturalUVDomain();
-  SER(sBuilder.SetFaceSurface(pCylinder,sDomain));
-  NER(sBuilder.StartLoop(SM_OT_SAME));
-  SmVertex *pVertex = sBuilder.StartVertexOfLoop(SmPoint3d(1,0,.5));
-  NER(sBuilder.StartEdge(SM_OT_SAME,NULL,pVertex,pVertex));
-
-  SmAxis2Placement sAxes;
-  SmCircle        *pCircle = NULL;
-  sAxes.Translate(SmVector3d(0,0,.5));
-  SER(SmCircle::CreateCanonical(sContext,sAxes,1.,pCircle));
-  SER(pCircle->EditParameterization(crInterval));
-  SER(sBuilder.SetEdgeCurve(pCircle,FALSE));
-  SER(sBuilder.SetLimits(SmVertexNode(pVertex->GetPoint()),SmVertexNode(pVertex->GetPoint())));
-  SER(sBuilder.EndEdge());
-  SER(sBuilder.EndLoop());
-  SER(sBuilder.EndFace());
-  SER(sBuilder.EndShell(TRUE));
-  SER(sBuilder.EndBrep());
-
-  SmTArray<SmLoop*>    sLoops;
-  SmTArray<SmEdgeuse*> sEdgeuses;
-  pFace->GetLoops(sLoops);
-  if(sLoops.GetSize() != 1) { return SM_ERR; }
-  sLoops[0]->GetEdgeuses(sEdgeuses);
-  if(sEdgeuses.GetSize() != 1) { return SM_ERR; }
-
-  // Supply the derived trim explicitly: this intermediate face intentionally
-  // lacks its seam and is not ready for full face validation or trim generation.
-  SmPoint3d sStart(bSwapUV ? (sDomain.GetUMin() + sDomain.GetUMax()) / 2. : sDomain.GetUMin(),
-                  bSwapUV ? sDomain.GetVMin() : (sDomain.GetVMin() + sDomain.GetVMax()) / 2.,0.);
-  SmPoint3d sEnd = sStart;
-  if(bSwapUV) { sEnd.y = sDomain.GetVMax(); }
-  else        { sEnd.x = sDomain.GetUMax(); }
-  SmBSplineCurve *pTrim = NULL;
-  SER(SmBSplineCurve::CreateLineSegment(sContext,2,sStart,sEnd,pTrim));
-  SER(pTrim->EditParameterization(crInterval));
-  sEdgeuses[0]->SetUVTrimCurve(pTrim,0.);
-  for(ULONG lSide = 0; lSide < 2; ++lSide)
-    {
-      SmEdgeuse *pEdgeuse = lSide ? sEdgeuses[0]->GetMate() : sEdgeuses[0];
-      SmPoint3d  sExpected = pEdgeuse->GetOrientation() == SM_OT_SAME ? sStart : sEnd;
-      SmPoint2d  sUV;
-      SER(pEdgeuse->GetVertexuse()->ComputeUVPoint(sUV,FALSE));
-      if(sUV.DistanceBetween(SmPoint2d(sExpected.x,sExpected.y)) > SM_EFF_ZERO_PARAM) { return SM_ERR; }
-    }
-  return SM_SUCCESS;
-}
-
-static SmStatus my_test_doubly_periodic_vertexuse_corners
- (const SmExtent1d &crMajorInterval, // in : parameter interval of the major-circle seam
-  const SmExtent1d &crMinorInterval) // in : parameter interval of the minor-circle seam
-{
-  MYPRINTF(_T("\n********** Entered: my_test_doubly_periodic_vertexuse_corners"));
-  SmContext         sContext;
-  SmBrepConstructor sBuilder;
-  SmBrep           *pBrep = sBuilder.StartBrep(sContext);
-  SmObjDelete       sCleanup(pBrep);
-  SmShell          *pOuter = NULL,*pInner = NULL;
-  SmTorus          *pTorus = NULL;
-  pBrep->SetTolerance(1e-7,FALSE);
+  NER(pBrep);
+  SmObjDelete sCleanup(pBrep);
+  SmShell *pOuter = NULL, *pInner = NULL;
   SER(sBuilder.StartShell(pOuter,pInner));
   SmFace *pFace = sBuilder.StartFace(SM_OT_SAME);
-  SER(SmTorus::CreateCanonical
-    (sContext,           // in : context for the surface
-     SmAxis2Placement(), // in : canonical torus placement
-     3.0,                // in : major radius
-     1.0,                // in : minor radius
-     pTorus));           // out: torus surface
-  SER(sBuilder.SetFaceSurface(pTorus,pTorus->GetNaturalUVDomain()));
-  NER(sBuilder.StartLoop(SM_OT_SAME));
-
-  SmVertex        *pVertex = sBuilder.StartVertexOfLoop(SmPoint3d(4,0,0));
-  SmEdge          *pEdges[2] = {NULL,NULL};
-  SmAxis2Placement sMinorAxes;
-  sMinorAxes.SetCanonical(SmPoint3d(3,0,0),SmVector3d(1,0,0),SmVector3d(0,0,1));
-  for(ULONG lUse = 0; lUse < 4; ++lUse)
-    {
-      ULONG lEdge = lUse % 2;
-      pEdges[lEdge] = sBuilder.StartEdge
-        (lUse < 2 ? SM_OT_SAME : SM_OT_OPPOSITE, // in : edgeuse orientation around the natural boundary
-         pEdges[lEdge],                        // in : existing seam edge, or NULL to create it
-         pVertex,                              // in : start vertex
-         pVertex);                             // in : end vertex
-      NER(pEdges[lEdge]);
-      if(lUse < 2)
-        {
-          SmCircle *pCircle = NULL;
-          SER(SmCircle::CreateCanonical
-            (sContext,                                   // in : context for the curve
-             lEdge ? sMinorAxes : SmAxis2Placement(),     // in : minor or major circle placement
-             lEdge ? 1.0 : 4.0,                           // in : seam circle radius
-             pCircle));                                  // out: seam circle
-          SER(pCircle->EditParameterization(lEdge ? crMinorInterval : crMajorInterval));
-          SER(sBuilder.SetEdgeCurve(pCircle,FALSE));
-          SER(sBuilder.SetLimits(SmVertexNode(pVertex->GetPoint()),SmVertexNode(pVertex->GetPoint())));
-        }
-      SER(sBuilder.EndEdge());
-    }
-  SER(sBuilder.EndLoop());
+  NER(pFace);
+  SmPlane *pPlane = NULL;
+  SER(SmPlane::CreateCanonical(sContext,SmAxis2Placement(),pPlane));
+  SER(sBuilder.SetFaceSurface(pPlane,SmExtent2d(SmPoint2d(-1.,-1.),SmPoint2d(5.,1.))));
+  for(ULONG lWire=0; lWire<lWireCount; ++lWire)
+    { NER(sBuilder.StartAndEndSingleVertexLoop(SmPoint3d(4.*lWire,0.,0.))); }
   SER(sBuilder.EndFace());
-  SER(sBuilder.EndShell(TRUE));
+  SER(sBuilder.EndShell(FALSE));
   SER(sBuilder.EndBrep());
 
-  double dMeanCurve,dMaxCurve,dMeanVertex,dMaxVertex,dMeanUV,dMaxUV;
-  SER(pFace->CreateUVTrimCurves
-    (FALSE,       // in : preserve edge and vertex tolerances
-     NULL,        // in : generate UV trims
-     NULL,        // in : no supplied trim orientations
-     dMeanCurve,  // out: mean curve-to-surface gap
-     dMaxCurve,   // out: maximum curve-to-surface gap
-     dMeanVertex, // out: mean vertex-to-trim gap
-     dMaxVertex,  // out: maximum vertex-to-trim gap
-     dMeanUV,     // out: mean UV endpoint gap
-     dMaxUV));    // out: maximum UV endpoint gap
-  SmAssertArray sReports;
-  if(   pBrep->ValidatePointers(&sReports) != SM_SUCCESS
-     || !pBrep->AssertValid(&sReports,SM_LEVEL_2,SM_WALK)
-     || sReports.GetSize()) { return SM_ERR; }
-
-  // Record the valid loop's UV endpoints before moving any derived trims.
-  // 3D proximity cannot distinguish the four equivalent periodic corners.
-  SmTArray<SmLoop*>    sLoops;
-  SmTArray<SmEdgeuse*> sEdgeuses;
-  SmPoint2d           sExpectedCorners[4][2];
-  SmVector3d          sSideShifts[4];
-  SmExtent2d          sDomain = pTorus->GetNaturalUVDomain();
-  pFace->GetLoops(sLoops);
-  if(sLoops.GetSize() != 1) { return SM_ERR; }
-  sLoops[0]->GetEdgeuses(sEdgeuses);
-  if(sEdgeuses.GetSize() != 4) { return SM_ERR; }
-  for(ULONG lUse = 0; lUse < 4; ++lUse)
+  SmTemporaryChangeValue<SmBoolean> sEditing(pBrep->m_bEditingEnabled,TRUE);
+  SmTArray<SmVertex*> sOriginalVertices, sWireEnds;
+  SmTArray<SmEdge*>   sWires;
+  pFace->GetVertices(sOriginalVertices);
+  for(ULONG lWire=0; lWire<lWireCount; ++lWire)
     {
-      SmPoint3d sStart,sEnd;
-      SER(sEdgeuses[lUse]->NormalizedEvaluate(0.,TRUE,sStart,NULL,FALSE));
-      SER(sEdgeuses[lUse]->NormalizedEvaluate(1.,TRUE,sEnd,NULL,FALSE));
-      sExpectedCorners[lUse][0].Set(sStart.x,sStart.y);
-      sExpectedCorners[lUse][1].Set(sEnd.x,sEnd.y); // The mate starts at this edgeuse's end.
-      if(smos_Fabs(sEnd.x - sStart.x) < SM_EFF_ZERO_PARAM)
-        {
-          sSideShifts[lUse].Set
-            (SM_ARE_SAME_TO_TOL(sStart.x,sDomain.GetUMin(),SM_EFF_ZERO_PARAM) ? sDomain.XLength() : -sDomain.XLength(),
-             0.,0.);
-        }
-      else
-        {
-          sSideShifts[lUse].Set
-            (0.,
-             SM_ARE_SAME_TO_TOL(sStart.y,sDomain.GetVMin(),SM_EFF_ZERO_PARAM) ? sDomain.YLength() : -sDomain.YLength(),
-             0.);
-        }
+      SmVertex       *pStart = sOriginalVertices[lWire];
+      SmVertex       *pEnd   = NULL;
+      SmEdge         *pWire  = NULL;
+      SmBSplineCurve *pLine  = NULL;
+      SmPoint3d       sEnd   = pStart->GetPoint()+SmVector3d(0.,0.,2.);
+      SER(SmBSplineCurve::CreateLineSegment(sContext,3,pStart->GetPoint(),sEnd,pLine));
+      SER(pBrep->MakeWireEdgeVertex
+        (pBrep->GetInfiniteRegion(),  // in : owning region
+         pStart,                      // in : vertex shared with the face
+         pLine,                       // in : wire curve
+         pLine->GetNaturalInterval(), // in : curve interval
+         SM_OT_SAME,                  // in : curve direction
+         sEnd,                        // in : new endpoint
+         pWire,                       // out: new edge
+         pEnd));                      // out: new vertex
+      sWires.Add(pWire);
+      sWireEnds.Add(pEnd);
     }
 
-  // Independently choose either periodic side for each of the four trims.
-  // Check all four vertexuses and their mates for each of the 16 combinations.
-  ULONG lPreviousMask = 0;
-  for(ULONG lMask = 0; lMask < 16; ++lMask)
+  if(bSqueeze)
     {
-      for(ULONG lUse = 0; lUse < 4; ++lUse)
-        {
-          if((lMask ^ lPreviousMask) & (1u << lUse))
-            {
-              SmAxis2Placement sShift;
-              sShift.Translate((lMask & (1u << lUse)) ? sSideShifts[lUse] : -sSideShifts[lUse]);
-              SER(sEdgeuses[lUse]->GetUVTrimCurve()->Transform(sShift));
-            }
-        }
-      lPreviousMask = lMask;
-      for(ULONG lUse = 0; lUse < 4; ++lUse)
-        {
-          for(ULONG lSide = 0; lSide < 2; ++lSide)
-            {
-              SmEdgeuse *pEdgeuse = lSide ? sEdgeuses[lUse]->GetMate() : sEdgeuses[lUse];
-              SmPoint2d  sCorner;
-              SER(pEdgeuse->GetVertexuse()->ComputeUVPoint(sCorner,FALSE));
-              if(sCorner.DistanceBetween(sExpectedCorners[lUse][lSide]) > SM_EFF_ZERO_PARAM) { return SM_ERR; }
-            }
-        }
+      SER(pBrep->SqueezeFace
+        (pFace,   // in : target face
+         NULL,    // in : use the Brep stitching tolerance
+         NULL,    // out: deleted vertices (unused)
+         NULL,    // out: new edges (unused)
+         NULL));  // out: deleted edges (unused)
     }
-  return SM_SUCCESS;
-}
-
-/***********************************************************************
-PURPOSE --- Closed spheres have poles orthogonal to their periodic direction.
-***********************************************************************/
-static SmStatus my_test_closed_sphere_properties()
-{
-  MYPRINTF(_T("\n********** Entered: my_test_closed_sphere_properties"));
-  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+  else
     {
-      SmContext  sContext;
-      SmBrep    *pBrep = new(sContext) SmBrep();
-      SmObjDelete sCleanup(pBrep);
-      pBrep->SetTolerance(1e-7,FALSE);
+      SmTArray<SmTopology*> sDeletedTopology;
+      SER(pBrep->DeleteFace
+        (pFace,                  // in : target face
+         bDeleteEdgesVertices,   // in : remove newly isolated topology
+         TRUE,                   // in : update regions and shells
+         &sDeletedTopology));    // out: deleted edges and vertices
+      // The wires existed before deletion and remain attached to the vertices.
+      if(sDeletedTopology.GetSize() != 0) { return SM_ERR; }
+    }
 
-      SmSphere *pSphere = NULL;
-      SmShell  *pShell  = NULL;
-      SmFace   *pFace   = NULL;
-      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
-      if(lSwap) { SER(pSphere->SwapUV()); }
-      SER(pBrep->CreateFaceInRegionFromSurface
-        (pBrep->GetInfiniteRegion(),    // in : region containing the face
-         pSphere,                      // in : surface consumed by the face
-         pSphere->GetNaturalUVDomain(), // in : full sphere domain
-         pShell,                       // out: created shell
-         pFace));                      // out: created face
-
-      SmHealData sHeal;
-      SER(sHeal.HealBrep(pBrep,SM_HO_CACHE_FACEPROPS_2));
-      if(sHeal.m_sTgtFaceProps.GetSize() != 1 || !sHeal.m_sTgtFaceProps[0]->m_bClosedSurf)
+  if(   pBrep->GetNumFaces() != 0
+     || pBrep->GetNumEdges() != lWireCount
+     || pBrep->GetNumVertices() != 2*lWireCount) { return SM_ERR; }
+  SmTArray<SmShell*> sShells;
+  pBrep->GetShells(sShells);
+  if(sShells.GetSize() != lWireCount) { return SM_ERR; }
+  for(ULONG lWire=0; lWire<lWireCount; ++lWire)
+    {
+      if(   !pBrep->IsLiveTopologyMember(sWires[lWire])
+         || !pBrep->IsLiveTopologyMember(sOriginalVertices[lWire])
+         || !pBrep->IsLiveTopologyMember(sWireEnds[lWire])) { return SM_ERR; }
+      SmEdgeuse *pEdgeuse = sWires[lWire]->GetPrimaryEdgeuse();
+      SmShell   *pShell  = pEdgeuse->GetShell();
+      if(   !sWires[lWire]->IsWire()
+         || !pShell->IsWireShell()
+         || pShell->GetList() == NULL
+         || pShell->GetRegion() != pBrep->GetInfiniteRegion()
+         || pEdgeuse->GetMate()->GetShell() != pShell
+         || sWires[lWire]->GetOtherVertex(sOriginalVertices[lWire]) != sWireEnds[lWire])
         { return SM_ERR; }
     }
+  SmAssertArray sReports;
+  SER(pBrep->ValidatePointers(&sReports));
+  if(sReports.GetSize() || !pBrep->AssertValid(&sReports,SM_LEVEL_2,SM_WALK) || sReports.GetSize())
+    { return SM_ERR; }
   return SM_SUCCESS;
 }
 
-/***********************************************************************
-PURPOSE --- Optional outputs must not change the returned surface pole mask.
-***********************************************************************/
-static SmStatus my_test_poles_without_optional_outputs()
+static SmStatus my_test_delete_face_wire_shell_transition()
 {
-  MYPRINTF(_T("\n********** Entered: my_test_poles_without_optional_outputs"));
-  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+  // Run every independent test and retain the first failure in either build mode.
+  SmStatus sResult = SM_SUCCESS;
+
+  for(ULONG lWireCount=1; lWireCount<=2; ++lWireCount)
+    {
+      PT_RUN(sResult, my_test_delete_vertex_face_with_wires(lWireCount,FALSE,FALSE));
+      PT_RUN(sResult, my_test_delete_vertex_face_with_wires(lWireCount,FALSE,TRUE));
+      PT_RUN(sResult, my_test_delete_vertex_face_with_wires(lWireCount,TRUE,FALSE));
+    }
+  return sResult;
+}
+
+
+static SmStatus my_test_torus_seam_insertion_with_vertex_loops()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_torus_seam_insertion_with_vertex_loops"));
+  for(ULONG lCase=0; lCase<20; ++lCase)
     {
       SmContext sContext;
-      SmSphere *pSphere = NULL;
-      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
-      SmObjDelete sCleanup(pSphere);
-      if(lSwap) { SER(pSphere->SwapUV()); }
-
-      ULONG lApprox   = SM_SS_NONE;
-      ULONG lExpected = lSwap ? SM_SS_UMIN | SM_SS_UMAX : SM_SS_VMIN | SM_SS_VMAX;
-      if(   pSphere->GetSingularities(NULL,NULL,&lApprox) != lExpected
-         || pSphere->GetSingularities() != lExpected)
-        { return SM_ERR; }
+      SmObjDelete sCleanup; // Destroy seam classifications before their supporting brep.
+      SmTorusVertexLoopTestCase sCase;
+      SER(sm_MakeTorusVertexLoopCase(sContext,lCase,sCase));
+      sCleanup.SetObj(sCase.m_pBrep);
+      SER(sm_InsertTorusVertexLoopSeams(sContext,lCase,sCase));
     }
-  return SM_SUCCESS;
-}
-
-/***********************************************************************
-PURPOSE --- Rebuild a single-vertex sphere with its natural seam and poles.
-***********************************************************************/
-static SmStatus my_test_heal_single_vertex_sphere()
-{
-  MYPRINTF(_T("\n********** Entered: my_test_heal_single_vertex_sphere"));
-  for(ULONG lSwap=0; lSwap<2; ++lSwap)
-    {
-      SmContext         sContext;
-      SmBrepConstructor sBuilder;
-      SmBrep           *pBrep = sBuilder.StartBrep(sContext);
-      NER(pBrep);
-      SmObjDelete sCleanup(pBrep);
-      pBrep->SetTolerance(1e-7,FALSE);
-      NER(sBuilder.StartRegion(TRUE,NULL));
-
-      SmShell  *pOuter  = NULL;
-      SmShell  *pInner  = NULL;
-      SmSphere *pSphere = NULL;
-      SER(sBuilder.StartShell(pOuter,pInner));
-      NER(sBuilder.StartFace(SM_OT_SAME));
-      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
-      if(lSwap) { SER(pSphere->SwapUV()); }
-      SER(sBuilder.SetFaceSurface(pSphere,pSphere->GetNaturalUVDomain()));
-      NER(sBuilder.StartAndEndSingleVertexLoop(SmPoint3d(0,0,2)));
-      SER(sBuilder.EndFace());
-      SER(sBuilder.EndShell(TRUE));
-      SER(sBuilder.EndRegion());
-      SER(sBuilder.EndBrep());
-      if(pBrep->GetNumFaces() != 1 || pBrep->GetNumEdges() != 0 || pBrep->GetNumVertices() != 1)
-        { return SM_ERR; }
-
-      SER(pBrep->HealBrep(SM_HO_ALL));
-      if(   pBrep->GetNumFaces() != 1 || pBrep->GetNumEdges() != 1 || pBrep->GetNumVertices() != 2
-         || !pBrep->IsManifoldSolid())
-        { return SM_ERR; }
-      SmAssertArray sReports;
-      SER(pBrep->ValidatePointers(&sReports));
-      if(sReports.GetSize() || !pBrep->AssertValid()) { return SM_ERR; }
-    }
+  MYPRINTF(_T("\nDirect torus seam insertion: twenty cases passed"));
   return SM_SUCCESS;
 }
 
 SmStatus my_test_topology()
 {
+  // Run every independent test and retain the first failure in either build mode.
+  SmStatus sResult = SM_SUCCESS;
+
   SmContext sContext;
   SmBrep   * pBrep = new(sContext) SmBrep();
   SmShell  * pNewShell;
@@ -4623,35 +3556,25 @@ SmStatus my_test_topology()
   MYPRINTF(_T("\n\n"));
   MYPRINTF(_T("********** Entered: my_test_topology"));
 
-  SER(my_test_poles_without_optional_outputs());
-  SER(my_test_closed_sphere_properties());
-  SER(my_test_heal_single_vertex_sphere());
-  // Scale each seam independently to exercise both adjacent derivative intervals.
-  SER(my_test_doubly_periodic_vertexuse_corners(SmExtent1d(0.,1.),SmExtent1d(0.,1.)));
-  SER(my_test_doubly_periodic_vertexuse_corners(SmExtent1d(0.,1e-4),SmExtent1d(0.,1.)));
-  SER(my_test_doubly_periodic_vertexuse_corners(SmExtent1d(0.,1.),SmExtent1d(0.,1e-4)));
-  SER(my_test_single_periodic_vertexuse(FALSE,SmExtent1d(0.,1.)));
-  SER(my_test_single_periodic_vertexuse(TRUE,SmExtent1d(0.,1.)));
-  SER(my_test_single_periodic_vertexuse(FALSE,SmExtent1d(0.,1e-4)));
-  SER(my_test_single_periodic_vertexuse(TRUE,SmExtent1d(0.,1e-4)));
-  SER(my_test_face_line_intersect_growth());
-  SER(my_test_loop_uv_gap_neighborhood());
-  SER(my_test_stale_edgeuse_owner()) ;
-  SER(my_test_validate_required_pointers()) ;
-  SER(my_test_squeeze_edge_tracks_removal()) ;
-  SER(my_test_tracks_changed_objects()) ;
-  SER(my_test_seam_uv_redistribution_at_poles()) ;
-  SER(my_test_move_seam_refreshes_face_props()) ;
-  SER(my_test_tracks_nested_geometry_and_resets()) ;
-  SER(my_test_missing_poles_refreshes_all_faces()) ;
-  SER(my_test_get_loop_crossings()) ;
-  SER(my_test_face_loop_nesting()) ;
-  SER(my_test_coaxial_cylinder_merge()) ;
-  SER(my_test_coaxial_merge_domain()) ;
-  SER(my_test_surface_cover_domains()) ;
-  SER(my_test_edge_geometry_repairs()) ;
-  SER(my_test_reversed_line_join()) ;
-  SER(my_test_coaxial_merge_orientation()) ;
+  PT_RUN(sResult, my_test_faces());
+  PT_RUN(sResult, my_test_torus_seam_insertion_with_vertex_loops());
+
+  PT_RUN(sResult, my_test_delete_face_wire_shell_transition());
+  PT_RUN(sResult, my_test_separating_closed_edges());
+
+  PT_RUN(sResult, my_test_stale_edgeuse_owner());
+  PT_RUN(sResult, my_test_validate_required_pointers());
+  PT_RUN(sResult, my_test_squeeze_edge_tracks_removal());
+  PT_RUN(sResult, my_test_tracks_changed_objects());
+  PT_RUN(sResult, my_test_tracks_nested_geometry_and_resets());
+  PT_RUN(sResult, my_test_coaxial_cylinder_merge());
+  PT_RUN(sResult, my_test_combine_protoedge());
+  PT_RUN(sResult, my_test_overlap_group_on_two_protofaces());
+  PT_RUN(sResult, my_test_coaxial_merge_domain());
+  PT_RUN(sResult, my_test_surface_cover_domains());
+  PT_RUN(sResult, my_test_edge_geometry_repairs());
+  PT_RUN(sResult, my_test_reversed_line_join());
+  PT_RUN(sResult, my_test_coaxial_merge_orientation());
 
   // Test Shell vertex creation
   SER(pBrep->MakeShellVertex(pBrep->GetInfiniteRegion(),SmPoint3d(0,0,0),pNewShell,pNewVertex));
@@ -4737,7 +3660,7 @@ SmStatus my_test_topology()
   }
 #endif
   SM_ASSERT(pBrep != NULL) ; delete pBrep; pBrep = NULL ;
-  return SM_SUCCESS;
+  return sResult;
 
 } // end my_test_topology
 

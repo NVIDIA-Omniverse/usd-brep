@@ -626,6 +626,7 @@ def _run_usd_schema_discovery_smoke() -> None:
 def _run_in_process_test_smoke(window, app) -> None:
     expected_suites = (
         "topology",
+        "healing",
         "booleans",
         "offset",
         "fillets",
@@ -1324,14 +1325,7 @@ def run_smoke(show: bool, timeout_ms: int) -> None:
                 if len(samples) < 2:
                     raise SmokeFailure(f"--save-views wrote a blank named view: {view_path}")
 
-        part_file = os.path.join(
-            smlib_gui.REPO,
-            "TestFiles",
-            "bz_TestFiles",
-            "Regressions2009",
-            "10.Wilson",
-            "SmallBox.smp",
-        )
+        part_file = os.path.join(smlib_gui.REPO, "TestFiles", "pt_TestFiles", "loft-smlib.smp")
         if os.path.isfile(part_file):
             loaded_part = window._load_file(part_file)
             app.processEvents()

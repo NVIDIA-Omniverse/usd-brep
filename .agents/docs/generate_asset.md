@@ -132,9 +132,9 @@ Three things make this portable:
 
 The snippet below is the core of `tools/scripts/example_generate_asset.py`, trimmed for readability. Prefer copying that file directly — it has the complete CLI, argument parsing, optional screenshot, and the platform/config-aware environment setup.
 
-Run commands from the repository root after completing the [source build](../../README.md#build-it).
+Run commands from the repository root after completing the [source build](../../BUILDING.md#build-it).
 Install `uv`; the commands use the Python 3.12 environment and rendering dependencies
-in [pyproject.toml](../../pyproject.toml), as in the [GUI workflow](../../README.md#run-the-python-gui).
+in [pyproject.toml](../../pyproject.toml), as in the [GUI workflow](../../BUILDING.md#run-the-python-gui).
 For custom scripts, include the [runtime environment boilerplate](#4-runtime-environment-boilerplate).
 
 On Linux, set the native library paths before starting Python. For a release build

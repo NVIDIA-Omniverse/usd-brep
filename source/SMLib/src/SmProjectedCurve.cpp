@@ -217,8 +217,8 @@ SmStatus SmProjectedCurve::MakeOrthoNormal()
   // when ProjVec is nonZero - unitize it
   SmBoolean bProjInit = m_sProjVec.IsInitialized() ;
   SmBoolean bProjZero = m_sProjVec.IsZero() ;
-  if(bProjInit && bProjZero) { m_sProjVec.Unitize() ; }
-  else                       { return( SM_ERR ) ; }
+  if(bProjInit && !bProjZero) { m_sProjVec.Unitize() ; }
+  else                        { return( SM_ERR ) ; }
 
   // for rotations - make the sAuxData vector orthonormal to the ProjVec
   if(m_eProjType == SM_PT_ROTATION)
@@ -226,10 +226,10 @@ SmStatus SmProjectedCurve::MakeOrthoNormal()
       // when xAuxData is nonZero - make orthonormal to ProjVec
       SmBoolean bAuxInit = m_sAuxData.IsInitialized() ;
       SmBoolean bAuxZero = m_sAuxData.IsZero() ;
-      if(bAuxInit && bAuxZero) { m_sProjVec.NormalInPlane(m_sAuxData) ;
-                                 m_sAuxData.Unitize() ;
-                               }
-      else                     { return( SM_ERR ) ; }
+      if(bAuxInit && !bAuxZero) { m_sAuxData = m_sProjVec.NormalInPlane(m_sAuxData) ;
+                                  SER(m_sAuxData.Unitize()) ;
+                                }
+      else                      { return( SM_ERR ) ; }
     } // end ProjType is SM_PT_ROTATION check
 
   // all done

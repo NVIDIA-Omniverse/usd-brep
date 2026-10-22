@@ -3,9 +3,10 @@
 
 /******************************************************************//**
 * FILE NAME --- SmApiUsdHeal.cpp
-* PURPOSE: Heal BrepArray definitions in the current composition's layers.
+* PURPOSE: Heal BrepArray prims on an open stage (SmApiUsdHeal.h) or in a file.
 **********************************************************************/
 
+#include "SmApiUsdHeal.h"
 #include "SmApiUsd.h"
 
 #include "UsdBrepHeaders.h"
@@ -36,6 +37,7 @@
 #    define HEAL_SERIAL_OUTPUT tbb::filter::serial_out_of_order
 #endif
 #include <algorithm>
+#include <optional>
 #include <cstdio>
 #include <filesystem>
 #include <map>
@@ -59,10 +61,9 @@ struct WorkItem
     size_t index = 0; // into the results
     UsdPrim prim;
     UsdStageRefPtr output;
-    std::unique_ptr<UsdBrepData::UsdBrepArrayData> arrays;
-    std::string error;
-    size_t bodies = 0;
+    SmApiUsdHealedBrepArray healed;
 };
+using LayerSpec = std::pair<SdfLayerHandle, SdfPath>;
 // BrepArray geometry and topology span several namespaces: the brep: prefix carries
 // surfaces, curves and points, while the topology tables are authored unprefixed. Bare
 // `extent` is deliberately excluded - it is a UsdGeomBoundable bounding box hint that
@@ -129,7 +130,57 @@ void ValidateMaterialSubsetSites(const UsdPrim& prim, const SdfLayerHandle& owne
     }
 }
 
-void Heal(WorkItem& item)
+// The prim specs that author a prim's BRep geometry, and with withBinding its material:binding.
+std::vector<LayerSpec> GeometrySpecs(const UsdPrim& prim, bool withBinding = false)
+{
+    std::vector<LayerSpec> specs;
+    auto add = [&](const UsdProperty& source)
+    {
+        for (auto property : source.GetPropertyStack())
+        {
+            LayerSpec spec(property->GetLayer(), property->GetPath().GetPrimPath());
+            if (std::find(specs.begin(), specs.end(), spec) == specs.end())
+            {
+                specs.push_back(spec);
+            }
+        }
+    };
+    for (auto attr : prim.GetAttributes())
+    {
+        if (IsBrepGeometryProperty(attr.GetName().GetString()))
+        {
+            add(attr);
+        }
+    }
+    if (auto binding = prim.GetRelationship(TfToken("material:binding")); withBinding && binding)
+    {
+        add(binding);
+    }
+    return specs;
+}
+// Why the geometry cannot be rewritten at its one spec, or empty. Comparing paths catches
+// same-layer internal references.
+std::string SiteProblem(const UsdPrim& prim, const std::vector<LayerSpec>& specs)
+{
+    if (specs.size() > 1)
+    {
+        return "BRep geometry composed across layers or prim specs is unsupported: " + prim.GetPath().GetString();
+    }
+    if (specs.front().second.ContainsPrimVariantSelection())
+    {
+        return "BRep geometry authored inside a variant is unsupported: " + specs.front().second.GetString();
+    }
+    try
+    {
+        ValidateMaterialSubsetSites(prim, specs.front().first, specs.front().second);
+    }
+    catch (const std::exception& error)
+    {
+        return error.what();
+    }
+    return {};
+}
+void Heal(const UsdPrim& prim, SmApiUsdHealedBrepArray& healed)
 {
     try
     {
@@ -137,15 +188,15 @@ void Heal(WorkItem& item)
         // another body is remapped to that body during conversion, but one outside every
         // body matches nothing and would be dropped without trace.
         VtUIntArray faceLoopCount;
-        item.prim.GetAttribute(TfToken("face:loopCount")).Get(&faceLoopCount);
+        prim.GetAttribute(TfToken("face:loopCount")).Get(&faceLoopCount);
         const size_t faceCount = faceLoopCount.size();
-        const size_t brepCount = UsdBrepData::GetUsdBrepArray_BrepCount(item.prim);
-        if (auto binding = item.prim.GetRelationship(TfToken("material:binding")); binding && HasUnpreservedBindingMetadata(binding))
+        const size_t brepCount = UsdBrepData::GetUsdBrepArray_BrepCount(prim);
+        if (auto binding = prim.GetRelationship(TfToken("material:binding")); binding && HasUnpreservedBindingMetadata(binding))
         {
             throw std::runtime_error("material:binding carries metadata the healer cannot preserve: " + binding.GetPath().GetString());
         }
         // Healing changes face indices. Only material subsets have a kernel mapping.
-        for (auto child : item.prim.GetChildren())
+        for (auto child : prim.GetChildren())
         {
             UsdGeomSubset subset(child);
             if (!subset)
@@ -201,8 +252,8 @@ void Heal(WorkItem& item)
         }
         SmContext context;
         OwnedBreps breps;
-        auto status = SMU_BrepConvert::BrepMove_UsdToSMLib(context, UsdGeomGprim(item.prim), breps.values, TRUE);
-        if (status != SM_SUCCESS || breps.values.empty() || breps.values.size() != UsdBrepData::GetUsdBrepArray_BrepCount(item.prim))
+        auto status = SMU_BrepConvert::BrepMove_UsdToSMLib(context, UsdGeomGprim(prim), breps.values, TRUE);
+        if (status != SM_SUCCESS || breps.values.empty() || breps.values.size() != UsdBrepData::GetUsdBrepArray_BrepCount(prim))
         {
             throw std::runtime_error("import/heal failed or omitted bodies, status=" + std::to_string(status));
         }
@@ -214,53 +265,67 @@ void Heal(WorkItem& item)
                 throw std::runtime_error("import/heal failed for body " + std::to_string(body));
             }
         }
-        item.bodies = breps.values.size();
-        item.arrays = std::make_unique<UsdBrepData::UsdBrepArrayData>();
-        item.arrays->m_sPrimPath = item.prim.GetPath();
-        SdfPathVector paths{ item.prim.GetPath() };
-        status = SMU_BrepConvert::BrepAppend_SMLibToUsdBrep(breps.values, *item.arrays, &paths, true, false);
+        auto arrays = std::make_shared<UsdBrepData::UsdBrepArrayData>();
+        arrays->m_sPrimPath = prim.GetPath();
+        SdfPathVector paths{ prim.GetPath() };
+        status = SMU_BrepConvert::BrepAppend_SMLibToUsdBrep(breps.values, *arrays, &paths, true, false);
         if (status != SM_SUCCESS)
         {
             throw std::runtime_error("serialization failed, status=" + std::to_string(status));
         }
-        item.arrays->m_sCADSource = "SMLib";
+        arrays->m_sCADSource = "SMLib";
+        healed.m_lBrepCount = breps.values.size();
+        healed.m_pArrays = std::move(arrays);
     }
     catch (const std::exception& error)
     {
-        item.error = error.what();
+        healed.m_sMessage = error.what();
     }
     catch (...)
     {
-        item.error = "unexpected kernel exception";
+        healed.m_sMessage = "unexpected kernel exception";
     }
 }
-void Write(WorkItem& item, const UsdStageRefPtr& stage)
+void Write(const SmApiUsdHealedBrepArray& healed, const UsdStagePtr& stage)
 {
-    const auto path = item.prim.GetPath();
-    auto spec = SdfCreatePrimInLayer(stage->GetRootLayer(), path);
+    const auto& path = healed.m_sPrimPath;
+    const auto layer = stage->GetRootLayer();
     auto prim = stage->GetPrimAtPath(path);
-    if (!spec || !prim)
+    if (!healed.m_pArrays)
+    {
+        throw UnsupportedScene("BrepArray was not healed: " + path.GetString());
+    }
+    if (!prim || prim.IsInstanceProxy())
+    {
+        throw UnsupportedScene("no prim to write at " + path.GetString() + (prim ? " outside an instance" : ""));
+    }
+    // BrepWriteToUsdStage writes to the root layer, so it must be the edit target too.
+    if (stage->GetEditTarget() != UsdEditTarget(layer))
+    {
+        throw UnsupportedScene("can only write to the root layer as the edit target: " + path.GetString());
+    }
+    // The spec must be the only source of the geometry, binding and subsets: the import read them composed.
+    if (GeometrySpecs(prim, true) != std::vector<LayerSpec>{ { layer, path } })
+    {
+        throw UnsupportedScene("BRep geometry or material:binding of " + path.GetString() +
+                               " is not authored only at its spec in " + layer->GetIdentifier());
+    }
+    ValidateMaterialSubsetSites(prim, layer, path);
+    // SetTargets below authors an explicit list, so reject list edits it would flatten.
+    std::optional<SdfPathVector> binding;
+    if (auto bindingSpec = layer->GetRelationshipAtPath(path.AppendProperty(TfToken("material:binding"))))
+    {
+        if (!bindingSpec->GetTargetPathList().IsExplicit() || !bindingSpec->GetCustomData().empty())
+        {
+            throw UnsupportedScene("material:binding carries list edits or metadata the healer cannot preserve: " +
+                                   path.GetString());
+        }
+        binding = SdfPathVector(bindingSpec->GetTargetPathList().GetExplicitItems());
+    }
+    auto spec = SdfCreatePrimInLayer(layer, path);
+    if (!spec)
     {
         throw std::runtime_error("cannot author output prim");
-    }
-    SdfPathVector originalBinding;
-    if (auto binding = prim.GetRelationship(TfToken("material:binding")))
-    {
-        binding.GetTargets(&originalBinding);
-    }
-    // The binding is restored below with SetTargets, which authors an explicit list. Reject
-    // list-edit opinions it would silently flatten; Heal() has already rejected binding metadata.
-    for (auto property : spec->GetProperties())
-    {
-        if (property->GetName() != "material:binding")
-        {
-            continue;
-        }
-        auto binding = TfDynamic_cast<SdfRelationshipSpecHandle>(property);
-        if (binding && (!binding->GetTargetPathList().IsExplicit() || !binding->GetCustomData().empty()))
-        {
-            throw std::runtime_error("material:binding carries list edits or metadata the healer cannot preserve: " + path.GetString());
-        }
     }
     // Replace geometry arrays and schemas, retaining xforms, display state and custom metadata.
     std::vector<SdfPropertySpecHandle> properties;
@@ -309,13 +374,14 @@ void Write(WorkItem& item, const UsdStageRefPtr& stage)
             throw std::runtime_error("Failed to remove material subset");
         }
     }
-    if (!UsdBrepData::BrepWriteToUsdStage(*item.arrays, prim))
+    if (!UsdBrepData::BrepWriteToUsdStage(*healed.m_pArrays, prim))
     {
         throw std::runtime_error("USD write failed");
     }
-    if (!originalBinding.empty() && !prim.GetRelationship(TfToken("material:binding")).HasAuthoredTargets())
+    // Restore a binding to nothing too: it blocks weaker bindings.
+    if (binding && !prim.GetRelationship(TfToken("material:binding")).HasAuthoredTargets())
     {
-        if (!prim.CreateRelationship(TfToken("material:binding"), /*custom=*/false).SetTargets(originalBinding))
+        if (!prim.CreateRelationship(TfToken("material:binding"), /*custom=*/false).SetTargets(*binding))
         {
             throw std::runtime_error("Failed to restore material binding");
         }
@@ -493,39 +559,13 @@ void HealFile(const std::string& inputPath, const std::string& outputPath, int w
             throw UnsupportedScene("BRep geometry authored inside a variant is unsupported: " + variantSite);
         }
     }
-    // The per-layer guard below cannot see an opinion in a layer that consumes the one
-    // being healed, and a stronger `over` need not reauthor typeName to contribute one.
-    // The composed input stage does see them.
-    for (auto prim : source->Traverse(UsdTraverseInstanceProxies(UsdPrimAllPrimsPredicate)))
+    std::vector<SmApiUsdBrepArraySite> sites;
+    SmApiUsdFindBrepArraySites(source, sites);
+    for (const auto& site : sites)
     {
-        if (prim.GetTypeName() != TfToken("BrepArray"))
+        if (!site.m_sProblem.empty())
         {
-            continue;
-        }
-        SdfLayerHandle owner;
-        SdfPath ownerPath;
-        for (auto attr : prim.GetAttributes())
-        {
-            if (!IsBrepGeometryProperty(attr.GetName().GetString()))
-            {
-                continue;
-            }
-            for (auto property : attr.GetPropertyStack())
-            {
-                if (!owner)
-                {
-                    owner = property->GetLayer();
-                    ownerPath = property->GetPath().GetPrimPath();
-                }
-                else if (property->GetLayer() != owner)
-                {
-                    throw UnsupportedScene("BRep geometry composed across layers is unsupported: " + prim.GetPath().GetString());
-                }
-            }
-        }
-        if (owner)
-        {
-            ValidateMaterialSubsetSites(prim, owner, ownerPath);
+            throw UnsupportedScene(site.m_sProblem);
         }
     }
     std::vector<WorkItem> jobs;
@@ -589,7 +629,7 @@ void HealFile(const std::string& inputPath, const std::string& outputPath, int w
                         HEAL_PARALLEL,
                         [&](WorkItem* item)
                         {
-                            Heal(*item);
+                            SmApiUsdHealBrepArray(item->prim, item->healed);
                             return item;
                         }
                     ) &
@@ -598,27 +638,21 @@ void HealFile(const std::string& inputPath, const std::string& outputPath, int w
                         [&](WorkItem* raw)
                         {
                             std::unique_ptr<WorkItem> item(raw);
-                            if (item->error.empty())
+                            std::string error = item->healed.m_sMessage;
+                            if (error.empty())
                             {
-                                try
-                                {
-                                    Write(*item, item->output);
-                                }
-                                catch (const std::exception& error)
-                                {
-                                    item->error = error.what();
-                                }
+                                SmApiUsdWriteHealedBrepArray(item->healed, item->output, error);
                             }
                             SmApiUsdBrepArrayHealResult& rResult = rResults[item->index];
-                            if (item->error.empty())
+                            if (error.empty())
                             {
                                 rResult.m_sStatus = SM_SUCCESS;
-                                rResult.m_lBrepCount = item->bodies;
+                                rResult.m_lBrepCount = item->healed.m_lBrepCount;
                             }
                             else
                             {
                                 ++failures;
-                                rResult.m_sMessage = item->error;
+                                rResult.m_sMessage = error;
                             }
                         }
                     )
@@ -705,6 +739,71 @@ void HealFile(const std::string& inputPath, const std::string& outputPath, int w
     }
 }
 } // namespace
+
+SmStatus SmApiUsdFindBrepArraySites(const pxr::UsdStagePtr& crStage, std::vector<SmApiUsdBrepArraySite>& rSites)
+{
+    rSites.clear();
+    if (!crStage)
+        return SM_ERR_NULL_POINTER;
+    std::map<LayerSpec, size_t> index;
+    for (auto prim : crStage->Traverse(UsdTraverseInstanceProxies(UsdPrimAllPrimsPredicate)))
+    {
+        if (prim.GetTypeName() != TfToken("BrepArray"))
+            continue;
+        const auto specs = GeometrySpecs(prim);
+        const std::string problem = specs.empty() ? std::string() : SiteProblem(prim, specs);
+        for (const auto& spec : specs)
+        {
+            const auto [found, inserted] = index.emplace(spec, rSites.size());
+            if (inserted)
+                rSites.push_back({ spec.first, spec.second, {}, {} });
+            SmApiUsdBrepArraySite& rSite = rSites[found->second];
+            rSite.m_sPrimPaths.push_back(prim.GetPath());
+            if (rSite.m_sProblem.empty())
+                rSite.m_sProblem = problem;
+        }
+    }
+    return SM_SUCCESS;
+}
+
+SmStatus SmApiUsdHealBrepArray(const pxr::UsdPrim& crBrepArray, SmApiUsdHealedBrepArray& rHealed)
+{
+    rHealed = SmApiUsdHealedBrepArray();
+    rHealed.m_sPrimPath = crBrepArray.GetPath();
+    Heal(crBrepArray, rHealed);
+    return rHealed.m_pArrays ? SM_SUCCESS : SM_ERR;
+}
+
+SmStatus SmApiUsdWriteHealedBrepArray(const SmApiUsdHealedBrepArray& crHealed, const pxr::UsdStagePtr& crStage,
+                                      std::string& rMessage)
+{
+    rMessage.clear();
+    if (!crStage)
+    {
+        rMessage = "null stage";
+        return SM_ERR_NULL_POINTER;
+    }
+    try
+    {
+        Write(crHealed, crStage);
+        return SM_SUCCESS;
+    }
+    catch (const UnsupportedScene& error)
+    {
+        rMessage = error.what();
+        return SM_ERR_INVALID_INPUT;
+    }
+    catch (const std::exception& error)
+    {
+        rMessage = error.what();
+        return SM_ERR;
+    }
+    catch (...)
+    {
+        rMessage = "unexpected exception";
+        return SM_ERR;
+    }
+}
 
 SmStatus SmApiUsdHealFile
 (

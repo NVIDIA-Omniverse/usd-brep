@@ -25,6 +25,8 @@
 #include <limits>
 #include <vector>
 
+#include <NL_Geometry.h>   // gw_CPOINT
+
 //*************************************************************************
 // 
 //*************************************************************************
@@ -610,6 +612,56 @@ SmStatus TestSmLiftUVCurve()
 }
 
 //*************************************************************************
+// Removing a just-inserted knot is exact, so it must succeed on a [0,2e6] range,
+// where N_BasisFindGlobalMax cannot converge and N_CrvRemoveKnot falls back.
+//*************************************************************************
+SmStatus TestSmRemoveOneKnotLargeRange()
+{
+    SmApiCreateContext();
+
+    SmTArray<SmPoint3d> sPts;
+    sPts.Add(SmPoint3d(0.0, 0.0, 0.0));
+    sPts.Add(SmPoint3d(1.0, 2.0, 0.0));
+    sPts.Add(SmPoint3d(3.0, 2.0, 0.0));
+    sPts.Add(SmPoint3d(4.0, 0.0, 0.0));
+    SmTArray<double> knots;
+    knots.Add(0.0);
+    knots.Add(2.0e6);
+    SmTArray<ULONG> multiplicities;
+    multiplicities.Add(4);
+    multiplicities.Add(4);
+
+    SmBSplineCurve* pCurve = NULL;
+    SER(SmApiCreateCanonicalCurve(sPts, knots, multiplicities, NULL, 3, SM_CF_UNSPECIFIED, pCurve));
+    if (!pCurve)
+        return SM_ERR;
+
+    SmPoint3d sBefore[11];
+    SmTArray<double> sNewKnots;
+    sNewKnots.Add(1.0e6);
+    ULONG lRemoved = 0;
+    SmStatus stat = SM_SUCCESS;
+    for (int i = 0; stat == SM_SUCCESS && i <= 10; i++)
+        stat = pCurve->EvaluatePoint(2.0e5 * i, sBefore[i]);
+    if (stat == SM_SUCCESS)
+        stat = pCurve->InsertKnots(sNewKnots);
+    if (stat == SM_SUCCESS)
+        stat = pCurve->RemoveOneKnot(1.0e6, 1, 1.0e-6, lRemoved);
+    if (stat == SM_SUCCESS && lRemoved != 1)
+        stat = SM_ERR;
+    for (int i = 0; stat == SM_SUCCESS && i <= 10; i++)
+    {
+        SmPoint3d sAfter;
+        stat = pCurve->EvaluatePoint(2.0e5 * i, sAfter);
+        if (stat == SM_SUCCESS && sAfter.DistanceBetween(sBefore[i]) > 1.0e-12)
+            stat = SM_ERR;
+    }
+
+    delete pCurve;
+    return stat;
+}
+
+//*************************************************************************
 // 
 //*************************************************************************
 SmStatus TestSmMakeCurvesCompatible()
@@ -650,6 +702,48 @@ SmStatus TestSmOrderCurves()
         return stat;
     if (sRectSegments.GetSize() != 4)
         return SM_ERR;
+
+    return SM_SUCCESS;
+}
+
+
+//*************************************************************************
+// A curve whose knot vector is not clamped, reversed, traces the original
+// backwards.
+//*************************************************************************
+SmStatus TestSmReverseUnclampedCurve()
+{
+    gw_CPOINT sPw[4];
+    for (int i = 0; i < 4; i++)
+    {
+        double w = 1.0 + 0.25 * i;
+        sPw[i].x = i * w;
+        sPw[i].y = (i % 2) * w;
+        sPw[i].z = 0.0;
+        sPw[i].w = w;
+    }
+    double dU[7] = { 0.0, 0.0, 0.0, 1.2, 2.0, 3.0, 4.0 };
+
+    // The curve is defined on [U[p],U[m-p]] = [0,2]; reversed, that is [2,4].
+    // Samples stay off u = 2: evaluating exactly at an unclamped end fails.
+    SmBSplineCurve sCurve(3, 3, 6, 2, sPw, dU);
+    SmExtent1d sIvl = sCurve.GetNaturalInterval();
+
+    SmPoint3d sBefore[11];
+    for (int i = 0; i <= 10; i++)
+        SER(sCurve.EvaluatePoint(0.05 + 0.19 * i, sBefore[i]));
+
+    SmExtent1d sNewIvl;
+    SER(sCurve.ReverseParameterization(sIvl, sNewIvl));
+
+    for (int i = 0; i <= 10; i++)
+    {
+        SmPoint3d sAfter;
+        SER(sCurve.EvaluatePoint(4.0 - (0.05 + 0.19 * i), sAfter));
+        double dDist = fabs(sAfter.x - sBefore[i].x) + fabs(sAfter.y - sBefore[i].y) + fabs(sAfter.z - sBefore[i].z);
+        if (dDist > 1.0e-12)
+            return SM_ERR;
+    }
 
     return SM_SUCCESS;
 }
@@ -1111,11 +1205,19 @@ SmStatus TestSmCurves()
     if( stat != SM_SUCCESS )
         return( stat );
 
+    stat = TestSmRemoveOneKnotLargeRange();
+    if( stat != SM_SUCCESS )
+        return( stat );
+
     stat = TestSmMakeCurvesCompatible();
     if( stat != SM_SUCCESS )
         return( stat );
 
     stat = TestSmOrderCurves();
+    if( stat != SM_SUCCESS )
+        return( stat );
+
+    stat = TestSmReverseUnclampedCurve();
     if( stat != SM_SUCCESS )
         return( stat );
 

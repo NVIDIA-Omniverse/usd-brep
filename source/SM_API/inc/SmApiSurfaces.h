@@ -64,6 +64,10 @@ SMAPI_EXPORT SmApiStatus SmApiCreateExtrude(
     SmSurface*&  rpResult                 ///< [out]: Resulting SmSurface                                         <br>
 );
 
+/// Always uses the kernel's non-translational sweep: the profile is reoriented
+/// along the path rather than only translated, and the result is a B-spline
+/// approximation within a fixed 3D tolerance of 1e-5 model units. Neither the
+/// sweep mode nor the tolerance can be set by the caller.
 SMAPI_EXPORT SmApiStatus SmApiCreateSweep( 
     SmBSplineCurve*  pCurve,               ///< [in ]: Generation curve                                            <br>
     SmBSplineCurve*  pPath,               ///< [in ]: Sweep vector                                                <br>
@@ -76,6 +80,11 @@ SMAPI_EXPORT SmApiStatus SmApiCreateRuledSurface(
     SmSurface*&  rpResult                 ///< [out]: Resulting SmSurface                                         <br>
 );
 
+/// Revolves rCurve into a temporary Brep and returns only the first surface of
+/// that Brep; any other surfaces are deleted with it. The revolve splits the
+/// profile at interior tangent (C1) discontinuities and revolves each piece
+/// separately, so a profile with a kink can give more than one surface. For
+/// such profiles use SmApiCreateRotationalSweep, which returns the whole Brep.
 SMAPI_EXPORT SmApiStatus SmApiCreateSurfaceRevolution( 
     SmBSplineCurve* rCurve,                ///< [in ]: Generation curve                                            <br>
     const SmPoint3d& rOrigin,                    ///< [in ]: Origin of axis of revolution                                <br>

@@ -234,6 +234,7 @@ SmBoolean SmHealData::operator==( const SmHealData &crOther )
   bRtn &= m_sFaceProps_NoVertexPole    == crOther.m_sFaceProps_NoVertexPole    ;
   bRtn &= m_sBadFaceProps_FlatCorner   == crOther.m_sBadFaceProps_FlatCorner   ;
   bRtn &= m_sBadFaceProps_MissingSeam  == crOther.m_sBadFaceProps_MissingSeam  ;
+  bRtn &= m_sBadFaceProps_CrossedPole  == crOther.m_sBadFaceProps_CrossedPole  ;
   bRtn &= m_sBadFaceProps_CrossedSeam  == crOther.m_sBadFaceProps_CrossedSeam  ;
   bRtn &= m_sBadFaceProps_NearMissSeam == crOther.m_sBadFaceProps_NearMissSeam ;
                                                                                                
@@ -596,6 +597,7 @@ void SmHealData::SetupEmptyProbArrays()
     m_sBadFaceProps_FlatCorner.        Setup(SM_HO_CACHE_FACEPROPS_2, &SmFaceProps::m_lBadFlatCorners) ; 
                                                                              
     m_sBadFaceProps_MissingSeam.       Setup(SM_HO_CACHE_FACEPROPS_2, &SmFaceProps::m_bBadMissingSeam) ;   
+    m_sBadFaceProps_CrossedPole.       Setup(SM_HO_CACHE_FACEPROPS_2, &SmFaceProps::m_bBadCrossedPole) ;
     m_sBadFaceProps_CrossedSeam.       Setup(SM_HO_CACHE_FACEPROPS_2, &SmFaceProps::m_bBadCrossedSeam) ;  
     m_sBadFaceProps_NearMissSeam.      Setup(SM_HO_CACHE_FACEPROPS_2, &SmFaceProps::m_bBadNearMissSeam) ; 
 
@@ -696,6 +698,7 @@ void SmHealData::SetupEmptyProbArrays()
     m_sBadFaceProps_FlatCorner.        SetLabels(_T("Surface Flat Corners (Su==Sv at corner) "), _T("Flat Corner Cnt    "), sBuffBad) ;
                                                                                                                         
     m_sBadFaceProps_MissingSeam.       SetLabels(_T("Face on closed srf missing a seam       "), _T("MissingSeam Cnt    "),  sBuffBad) ;
+    m_sBadFaceProps_CrossedPole.       SetLabels(_T("Face boundary crosses a pole            "), _T("CrossedPole Cnt    "),  sBuffBad) ;
     m_sBadFaceProps_CrossedSeam.       SetLabels(_T("Face on closed srf crosses a seam       "), _T("CrossedSeam Cnt    "),  sBuffBad) ;
     m_sBadFaceProps_NearMissSeam.      SetLabels(_T("Face on closed srf comes close to a seam"), _T("NearMissSeam Cnt   "),  sBuffBad) ;
                                                                                                                         
@@ -764,6 +767,7 @@ void SmHealData::SetupEmptyProbArrays()
     m_sBadFaceProps_FlatCorner.        ReSet() ;
                                            
     m_sBadFaceProps_MissingSeam.       ReSet() ;
+    m_sBadFaceProps_CrossedPole.       ReSet() ;
     m_sBadFaceProps_CrossedSeam.       ReSet() ;
     m_sBadFaceProps_NearMissSeam.      ReSet() ;
                                                    
@@ -1035,10 +1039,12 @@ SmBoolean bDebugLog = FALSE ;
   if(rTopologyChanges.IsTracking())
     { return(SM_ERR) ; }
 
-  // pass the call along
-  SER(UpdateTargetLists(rTopologyChanges.GetRmList(), 
-                        rTopologyChanges.GetAddList(), 
-                        eCurrentHealOp)) ;
+  // Completed topology edits and their dependents use the remove/add lists.
+  // ChgList records geometry notifications for diagnostics only.
+  SER(UpdateTargetLists
+    (rTopologyChanges.GetRmList(),  // in : obsolete property identities
+     rTopologyChanges.GetAddList(), // in : live topology needing new properties
+     eCurrentHealOp)) ;             // in : last stage to rebuild
 
 #ifdef SM_DEBUG_CODE
   if(bDebugMe)
@@ -1257,7 +1263,7 @@ SmBoolean bDebugMe = FALSE ;
 #endif // SM_DEBUG_CODE
 
       // run recursive healing on New Tgts
-      HealTgts(eThruHealerOp, FALSE) ; // FALSE = don't rebuild UVTrimCurves - doesn't matter, ThruHealerOp < SM_HO_MAKE_UVTRIMCURVES
+      SmStatus sRefreshStatus = HealTgts(eThruHealerOp, FALSE) ; // FALSE = don't rebuild UVTrimCurves
 
 #ifdef SM_DEBUG_CODE
       if(bDebugLog)
@@ -1274,6 +1280,7 @@ SmBoolean bDebugMe = FALSE ;
         }
 #endif // SM_DEBUG_CODE
       if(m_lRecursionCount > 0) { m_lRecursionCount-- ; }
+      SER(sRefreshStatus) ;
 
 #ifdef SM_DEBUG_CODE
       if(bDebugMe)
@@ -1436,6 +1443,7 @@ SmBoolean bDebugMe = FALSE ;
   m_sFaceProps_NoVertexPole          .Remove(pTgtFaceProps) ;
   m_sBadFaceProps_FlatCorner         .Remove(pTgtFaceProps) ;
   m_sBadFaceProps_MissingSeam        .Remove(pTgtFaceProps) ;
+  m_sBadFaceProps_CrossedPole        .Remove(pTgtFaceProps) ;
   m_sBadFaceProps_CrossedSeam        .Remove(pTgtFaceProps) ;
   m_sBadFaceProps_NearMissSeam       .Remove(pTgtFaceProps) ;
   m_sRanFaceProps_MoveSeam           .Remove(pTgtFaceProps) ;
@@ -1773,33 +1781,33 @@ SmStatus SmHealData::HealTgts
   //           and Heal_4: when Faces have LoopEdges crossing seams - split Edges at Seam
   SmNewMarkAndLock sMarkLock(cpContext) ;
 
-  // Begin Method local MACRO - Lbl not used - just for code readability
+  // Method-local macros use the enum value for diagnostics and completion tracking.
 #ifdef SM_DEBUG_CODE
-#define SM_HEALSTEP_0ARG(lbl, Func, StepNo) if(m_eDoneHealOp < eHealerOp) \
-                                              { if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: Before Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, lbl, _T(#Func)); smos_WriteBuffer(sBuff) ; } \
+#define SM_HEALSTEP_0ARG(Func, StepNo) if(m_eDoneHealOp < eHealerOp) \
+                                              { if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: Before Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, StepNo, _T(#Func)); smos_WriteBuffer(sBuff) ; } \
                                                 SmStatus sMacroStat = Func(m_pBrep, StepNo) ;   \
                                                 if(sMacroStat == SM_SUCCESS) { m_eDoneHealOp = StepNo ; } \
                                                 else { SER(sMacroStat) ; } \
-                                                if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: After  Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, lbl, _T(#Func));  smos_WriteBuffer(sBuff) ; } \
+                                                if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: After  Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, StepNo, _T(#Func));  smos_WriteBuffer(sBuff) ; } \
                                               }
 
-#define SM_HEALSTEP_1ARG(lbl, Func, PtrToBoolArg, StepNo) if(m_eDoneHealOp < eHealerOp)    \
-                                                   { if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: Before Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, lbl, _T(#Func));  smos_WriteBuffer(sBuff) ; } \
+#define SM_HEALSTEP_1ARG(Func, PtrToBoolArg, StepNo) if(m_eDoneHealOp < eHealerOp)    \
+                                                   { if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: Before Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, StepNo, _T(#Func));  smos_WriteBuffer(sBuff) ; } \
                                                      SmStatus sMacroStat = Func(m_pBrep, PtrToBoolArg, StepNo) ; \
                                                      if(sMacroStat == SM_SUCCESS) { m_eDoneHealOp = StepNo ; } \
                                                      else { SER(sMacroStat) ; } \
-                                                     if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: After  Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, lbl, _T(#Func));  smos_WriteBuffer(sBuff) ; } \
+                                                     if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: After  Heal Func call, RecDepth:[%d]::HealStep:[%d], %s() ***"), m_lRecursionCount, StepNo, _T(#Func));  smos_WriteBuffer(sBuff) ; } \
                                                    }
-#define SM_HEALSTEP_BEG_STATE_DUMP(lbl, Func)  if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: Begin  HealState Dump, RecDepth:[%d]::PostStep:[%d], %s() ***\n"), m_lRecursionCount, lbl, _T(#Func) );  smos_WriteBuffer(sBuff) ; }                                                  
-#define SM_HEALSTEP_END_STATE_DUMP(lbl, Func)  if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n\n*** SmHealData::HealTgts: End    HealState Dump, RecDepth:[%d]::PostStep:[%d], %s() ***"), m_lRecursionCount, lbl, _T(#Func) );  smos_WriteBuffer(sBuff) ; }                                                  
+#define SM_HEALSTEP_BEG_STATE_DUMP(StepNo, Func)  if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n*** SmHealData::HealTgts: Begin  HealState Dump, RecDepth:[%d]::PostStep:[%d], %s() ***\n"), m_lRecursionCount, StepNo, _T(#Func) );  smos_WriteBuffer(sBuff) ; }
+#define SM_HEALSTEP_END_STATE_DUMP(StepNo, Func)  if(bReportStepProgress) { smos_sprintf(sBuff, _T("\n\n*** SmHealData::HealTgts: End    HealState Dump, RecDepth:[%d]::PostStep:[%d], %s() ***"), m_lRecursionCount, StepNo, _T(#Func) );  smos_WriteBuffer(sBuff) ; }
 
 #else // no SM_DEBUG_CODE
-#define SM_HEALSTEP_0ARG(lbl, Func, StepNo) if(m_eDoneHealOp < eHealerOp)   \
+#define SM_HEALSTEP_0ARG(Func, StepNo) if(m_eDoneHealOp < eHealerOp)   \
                                               { SmStatus sMacroStat = Func(m_pBrep, StepNo) ;     \
                                                 if(sMacroStat == SM_SUCCESS) { m_eDoneHealOp = StepNo ; } \
                                                 else { SER(sMacroStat) ; } \
                                               }
-#define SM_HEALSTEP_1ARG(lbl, Func, arg, StepNo) if(m_eDoneHealOp < eHealerOp)    \
+#define SM_HEALSTEP_1ARG(Func, arg, StepNo) if(m_eDoneHealOp < eHealerOp)    \
                                                    { SmStatus sMacroStat = Func(m_pBrep, arg, StepNo) ; \
                                                      if(sMacroStat == SM_SUCCESS) { m_eDoneHealOp = StepNo ; } \
                                                      else { SER(sMacroStat) ; } \
@@ -1886,213 +1894,218 @@ TCHAR     sBuff[SM_TBLOCK_SIZE] ;
     }
 #endif // SM_DEBUG_CODE
 
+  // Backpointer repair is unimplemented. Honor its requested boundary without
+  // advancing into property caching. This records progress, not a repair.
+  if(m_eDoneHealOp < eHealerOp && eHealerOp == SM_HO_FIX_BACKPOINTERS)
+    { m_eDoneHealOp = SM_HO_FIX_BACKPOINTERS; }
+
   // Build ObjPropsLists for Vertices, Edges, Faces allowing for EdgesCrossingSeam problems
   //   - runs pEdgeProps[ii]->SetProps()
-  SM_HEALSTEP_1ARG(1, Cache_EdgeProps, &bCache_EdgeProps_FoundNewProbs, SM_HO_CACHE_EDGEPROPS)
+  SM_HEALSTEP_1ARG(Cache_EdgeProps, &bCache_EdgeProps_FoundNewProbs, SM_HO_CACHE_EDGEPROPS)
 #ifdef SM_DEBUG_CODE
-      if(bCache_EdgeProps_FoundNewProbs && (m_eDoneHealOp >= 1))
+      if(bCache_EdgeProps_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_EDGEPROPS))
         {  
-          SM_HEALSTEP_BEG_STATE_DUMP(1, Cache_EdgeProps);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_EDGEPROPS, Cache_EdgeProps);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinVertices detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 1 = Cache_EdgeProps\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_EdgeProps\n"), m_lRecursionCount, SM_HO_CACHE_EDGEPROPS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(1, Cache_EdgeProps);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_EDGEPROPS, Cache_EdgeProps);
         }
 #endif // SM_DEBUG_CODE
                                      
-  SM_HEALSTEP_1ARG(2, Cache_VertexProps, &bCache_VertexProps_FoundNewProbs, SM_HO_CACHE_VERTEXPROPS)
+  SM_HEALSTEP_1ARG(Cache_VertexProps, &bCache_VertexProps_FoundNewProbs, SM_HO_CACHE_VERTEXPROPS)
 #ifdef SM_DEBUG_CODE
-      if(bCache_VertexProps_FoundNewProbs && (m_eDoneHealOp >= 2))
+      if(bCache_VertexProps_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_VERTEXPROPS))
         {  
-          SM_HEALSTEP_BEG_STATE_DUMP(2, Cache_VertexProps);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_VERTEXPROPS, Cache_VertexProps);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinVertices detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 2 = Cache_VertexProps\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_VertexProps\n"), m_lRecursionCount, SM_HO_CACHE_VERTEXPROPS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(2, Cache_VertexProps);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_VERTEXPROPS, Cache_VertexProps);
         }
 #endif // SM_DEBUG_CODE
                 
-  SM_HEALSTEP_1ARG(3, Cache_FaceProps_Gaps, &bCache_FaceProps_FoundNewProbs, SM_HO_CACHE_FACEPROPS_GAPS)
+  SM_HEALSTEP_1ARG(Cache_FaceProps_Gaps, &bCache_FaceProps_FoundNewProbs, SM_HO_CACHE_FACEPROPS_GAPS)
 #ifdef SM_DEBUG_CODE
-      if(bCache_FaceProps_FoundNewProbs && (m_eDoneHealOp >= 3))
+      if(bCache_FaceProps_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_GAPS))
         {  
-          SM_HEALSTEP_BEG_STATE_DUMP(3, Cache_FaceProps_Gaps);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_FACEPROPS_GAPS, Cache_FaceProps_Gaps);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinVertices detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 3 = Cache_FaceProps_Gaps\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_FaceProps_Gaps\n"), m_lRecursionCount, SM_HO_CACHE_FACEPROPS_GAPS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(3, Cache_FaceProps_Gaps);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_FACEPROPS_GAPS, Cache_FaceProps_Gaps);
         }
 #endif // SM_DEBUG_CODE
                 
   // Fix DefZoneTol3d based on a PartSize estimate, and Set ObjTols based on DefZoneTol3d and ObjGapSizes
   //   - a precondition for SmHealData::Fix_MoveSeam()
-  SM_HEALSTEP_0ARG(4, Fix_TolSizes, SM_HO_FIX_TOLSIZES)
+  SM_HEALSTEP_0ARG(Fix_TolSizes, SM_HO_FIX_TOLSIZES)
 #ifdef SM_DEBUG_CODE
-       if(bDebugMe && (m_eDoneHealOp >= 4))
-         { SM_HEALSTEP_BEG_STATE_DUMP(4, Fix_TolSizes); 
-           SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 4 = Fix_TolSizes\n"), m_lRecursionCount) ;
+       if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_TOLSIZES))
+         { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_TOLSIZES, Fix_TolSizes);
+           SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_TolSizes\n"), m_lRecursionCount, SM_HO_FIX_TOLSIZES) ;
            SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
            SM__DRAW_FACES_AND_SURFACES
            sm_GraphicsLoop() ;
-           SM_HEALSTEP_END_STATE_DUMP(4, Fix_TolSizes); 
+           SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_TOLSIZES, Fix_TolSizes);
          }
 #endif // SM_DEBUG_CODE
 
   // Find/Mend CoinVertices - a precondition for Find/Mend Degenerate Edges/Faces
-SM_HEALSTEP_1ARG(5, Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_HO_CACHE_COIN_VERTICES)
+SM_HEALSTEP_1ARG(Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_HO_CACHE_COIN_VERTICES)
 #ifdef SM_DEBUG_CODE
-      if(bCache_CoincVertices_FoundNewProbs && (m_eDoneHealOp >= 5))
+      if(bCache_CoincVertices_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_COIN_VERTICES))
         {  
-          SM_HEALSTEP_BEG_STATE_DUMP(5, Cache_CoinVertices);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_COIN_VERTICES, Cache_CoinVertices);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinVertices detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 5 = Cache_CoinVertices\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_CoinVertices\n"), m_lRecursionCount, SM_HO_CACHE_COIN_VERTICES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(5, Cache_CoinVertices);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_COIN_VERTICES, Cache_CoinVertices);
         }
 #endif // SM_DEBUG_CODE
 
-  SM_HEALSTEP_0ARG(6, Fix_CoinVertices, SM_HO_FIX_COIN_VERTICES)                           
+  SM_HEALSTEP_0ARG(Fix_CoinVertices, SM_HO_FIX_COIN_VERTICES)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 6))
-        { SM_HEALSTEP_BEG_STATE_DUMP(6, Fix_CoinVertices);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 6 = Fix_CoinVertices\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_COIN_VERTICES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_COIN_VERTICES, Fix_CoinVertices);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_CoinVertices\n"), m_lRecursionCount, SM_HO_FIX_COIN_VERTICES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(6, Fix_CoinVertices);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_COIN_VERTICES, Fix_CoinVertices);
         }
 #endif // SM_DEBUG_CODE
                                                                                           
   // Find/Mend DegenFaces - a precondition for Find/Mend Degenerate Edges
-  SM_HEALSTEP_1ARG(7, Cache_DegenFaces, &bCache_DegenFace_FoundNewProbs, SM_HO_CACHE_DEGEN_FACES)
+  SM_HEALSTEP_1ARG(Cache_DegenFaces, &bCache_DegenFace_FoundNewProbs, SM_HO_CACHE_DEGEN_FACES)
 #ifdef SM_DEBUG_CODE
-      if(bCache_DegenFace_FoundNewProbs && (m_eDoneHealOp >= 7))
+      if(bCache_DegenFace_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_DEGEN_FACES))
         { 
-          SM_HEALSTEP_BEG_STATE_DUMP(7, Cache_DegenFaces);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_DEGEN_FACES, Cache_DegenFaces);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_DegenFaces detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 7 = Cache_DegenFaces\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_DegenFaces\n"), m_lRecursionCount, SM_HO_CACHE_DEGEN_FACES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(7, Cache_DegenFaces);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_DEGEN_FACES, Cache_DegenFaces);
         }
 #endif // SM_DEBUG_CODE
 
   // Squeeze degenerate faces 
-  SM_HEALSTEP_0ARG(8, Fix_DegenFaces, SM_HO_FIX_DEGEN_FACES)
+  SM_HEALSTEP_0ARG(Fix_DegenFaces, SM_HO_FIX_DEGEN_FACES)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 8))
-        { SM_HEALSTEP_BEG_STATE_DUMP(8, Fix_DegenFaces);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 8 = Fix_DegenFaces\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_DEGEN_FACES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_DEGEN_FACES, Fix_DegenFaces);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_DegenFaces\n"), m_lRecursionCount, SM_HO_FIX_DEGEN_FACES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(8, Fix_DegenFaces);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_DEGEN_FACES, Fix_DegenFaces);
         }
 #endif // SM_DEBUG_CODE
 
   // squeeze degenerate edges
-  SM_HEALSTEP_0ARG(9, Fix_DegenEdges, SM_HO_FIX_DEGEN_EDGES)
+  SM_HEALSTEP_0ARG(Fix_DegenEdges, SM_HO_FIX_DEGEN_EDGES)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 9))
-        { SM_HEALSTEP_BEG_STATE_DUMP(9, Fix_DegenEdges);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 9 = Fix_DegenEdges\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_DEGEN_EDGES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_DEGEN_EDGES, Fix_DegenEdges);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_DegenEdges\n"), m_lRecursionCount, SM_HO_FIX_DEGEN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(9, Fix_DegenEdges);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_DEGEN_EDGES, Fix_DegenEdges);
         }
 #endif // SM_DEBUG_CODE
 
   // TODO: NotYet Implemented
   // Find/Mend CoinEdges - a precondition for Get EdgeProps             
-  SM_HEALSTEP_1ARG(10, Cache_CoinEdges, &bCache_CoinEdges_FoundNewProbs, SM_HO_CACHE_COIN_EDGES)            
+  SM_HEALSTEP_1ARG(Cache_CoinEdges, &bCache_CoinEdges_FoundNewProbs, SM_HO_CACHE_COIN_EDGES)
 #ifdef SM_DEBUG_CODE
-      if(bCache_CoinEdges_FoundNewProbs && (m_eDoneHealOp >= 10))
+      if(bCache_CoinEdges_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_COIN_EDGES))
         { 
-          SM_HEALSTEP_BEG_STATE_DUMP(10, Cache_CoinEdges);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_COIN_EDGES, Cache_CoinEdges);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinEdges detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 10 = Cache_CoinEdges\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_CoinEdges\n"), m_lRecursionCount, SM_HO_CACHE_COIN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(10, Cache_CoinEdges);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_COIN_EDGES, Cache_CoinEdges);
         }
 #endif // SM_DEBUG_CODE
                                                                         
   // TODO: NotYet Implemented
-  SM_HEALSTEP_0ARG(11, Fix_CoinEdges, SM_HO_FIX_COIN_EDGES)            
+  SM_HEALSTEP_0ARG(Fix_CoinEdges, SM_HO_FIX_COIN_EDGES)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 11))
-        { SM_HEALSTEP_BEG_STATE_DUMP(11, Fix_CoinEdges);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 11 = Fix_CoinEdges\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_COIN_EDGES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_COIN_EDGES, Fix_CoinEdges);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_CoinEdges\n"), m_lRecursionCount, SM_HO_FIX_COIN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(11, Fix_CoinEdges);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_COIN_EDGES, Fix_CoinEdges);
         }
 #endif // SM_DEBUG_CODE
 
   // Cache MissedEdgeXSects
-  SM_HEALSTEP_1ARG(12, Cache_MissedEdgeXSects, &bCache_MissedEdgeXSects_FoundNewProbs, SM_HO_CACHE_MISSED_EDGEXSECTS)
+  SM_HEALSTEP_1ARG(Cache_MissedEdgeXSects, &bCache_MissedEdgeXSects_FoundNewProbs, SM_HO_CACHE_MISSED_EDGEXSECTS)
 #ifdef SM_DEBUG_CODE
-      if(bCache_MissedEdgeXSects_FoundNewProbs && (m_eDoneHealOp >= 12))
+      if(bCache_MissedEdgeXSects_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_MISSED_EDGEXSECTS))
         { 
-          SM_HEALSTEP_BEG_STATE_DUMP(12, Cache_MissedEdgeXSects);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_MISSED_EDGEXSECTS, Cache_MissedEdgeXSects);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_MissedEdgeXSects detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 12 = Cache_MissedEdgeXSects \n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_MissedEdgeXSects \n"), m_lRecursionCount, SM_HO_CACHE_MISSED_EDGEXSECTS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(12, Cache_MissedEdgeXSects);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_MISSED_EDGEXSECTS, Cache_MissedEdgeXSects);
         }
 #endif // SM_DEBUG_CODE
 
   // fix MissedEdgeXSects
-  SM_HEALSTEP_0ARG(13, Fix_MissedEdgeXSects, SM_HO_FIX_MISSED_EDGEXSECTS)            
+  SM_HEALSTEP_0ARG(Fix_MissedEdgeXSects, SM_HO_FIX_MISSED_EDGEXSECTS)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 13))
-        { SM_HEALSTEP_BEG_STATE_DUMP(13, Fix_MissedEdgeXSects);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 13 = Fix_MissedEdgeXSects\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_MISSED_EDGEXSECTS))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_MISSED_EDGEXSECTS, Fix_MissedEdgeXSects);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_MissedEdgeXSects\n"), m_lRecursionCount, SM_HO_FIX_MISSED_EDGEXSECTS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(13, Fix_MissedEdgeXSects);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_MISSED_EDGEXSECTS, Fix_MissedEdgeXSects);
         }
 #endif // SM_DEBUG_CODE
 
   // Fix UncontainedEdges
-  SM_HEALSTEP_0ARG(14, Fix_UncontainedEdges,     SM_HO_FIX_UNCONTAINED_EDGES)
+  SM_HEALSTEP_0ARG(Fix_UncontainedEdges,     SM_HO_FIX_UNCONTAINED_EDGES)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 14))
-        { SM_HEALSTEP_BEG_STATE_DUMP(14, Fix_UncontainedEdges);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 14 = Fix_UncontainedEdges\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_UNCONTAINED_EDGES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_UNCONTAINED_EDGES, Fix_UncontainedEdges);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_UncontainedEdges\n"), m_lRecursionCount, SM_HO_FIX_UNCONTAINED_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(14, Fix_UncontainedEdges);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_UNCONTAINED_EDGES, Fix_UncontainedEdges);
         }
 #endif // SM_DEBUG_CODE
 
@@ -2120,76 +2133,76 @@ SM_HEALSTEP_1ARG(5, Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_
 
   // TODO: NotYet Implemented
   // Fix Gap problems - can edit shapes - reruns GetProps methods as needed                  
-  SM_HEALSTEP_0ARG(15, Fix_BadGaps, SM_HO_FIX_BADGAPS)                     
+  SM_HEALSTEP_0ARG(Fix_BadGaps, SM_HO_FIX_BADGAPS)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 15))
-        { SM_HEALSTEP_BEG_STATE_DUMP(15, Fix_BadGaps);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 15 = Fix_BadGaps\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_BADGAPS))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_BADGAPS, Fix_BadGaps);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_BadGaps\n"), m_lRecursionCount, SM_HO_FIX_BADGAPS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(15, Fix_BadGaps);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_BADGAPS, Fix_BadGaps);
         }
 #endif // SM_DEBUG_CODE
                                                                               
   // Build FaceProps before Splitting SeamCrossing edges
   //   - runs SmFaceProps::SetProps_Stage2()
-  SM_HEALSTEP_1ARG(16, Cache_FaceProps_Stage2, &bCache_FaceProps_Stage2_FoundNewProbs, SM_HO_CACHE_FACEPROPS_2)
+  SM_HEALSTEP_1ARG(Cache_FaceProps_Stage2, &bCache_FaceProps_Stage2_FoundNewProbs, SM_HO_CACHE_FACEPROPS_2)
 #ifdef SM_DEBUG_CODE
-      if(bCache_FaceProps_Stage2_FoundNewProbs && (m_eDoneHealOp >= 16))
+      if(bCache_FaceProps_Stage2_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_2))
         {  
-          SM_HEALSTEP_BEG_STATE_DUMP(16, Cache_FaceProps_Stage2);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_FACEPROPS_2, Cache_FaceProps_Stage2);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_FaceProps_Stage2 detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 16 = Cache_FaceProps_Stage2\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_FaceProps_Stage2\n"), m_lRecursionCount, SM_HO_CACHE_FACEPROPS_2) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(16, Cache_FaceProps_Stage2);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_FACEPROPS_2, Cache_FaceProps_Stage2);
         }
 #endif // SM_DEBUG_CODE
 
   // Try Fixing SeamProblem Faces with MoveSeam(). 
   //   - If possible out of the Face, otherwise to minimize SliverFaces and NearSeam FaceBoundaries.
   //   - a precondition for SmHealData::Fix_SplitEdgesAtSeam()  
-  SM_HEALSTEP_1ARG(17, Fix_MoveSeam, sMarkLock, SM_HO_FIX_MOVESEAM)
+  SM_HEALSTEP_1ARG(Fix_MoveSeam, sMarkLock, SM_HO_FIX_MOVESEAM)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 17))
-        { SM_HEALSTEP_BEG_STATE_DUMP(17, Fix_MoveSeam);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 17 = Fix_MoveSeam\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_MOVESEAM))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_MOVESEAM, Fix_MoveSeam);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_MoveSeam\n"), m_lRecursionCount, SM_HO_FIX_MOVESEAM) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(17, Fix_MoveSeam);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_MOVESEAM, Fix_MoveSeam);
         }
 #endif // SM_DEBUG_CODE
 
   // Fix Edges Crossing Seams 
   //   - Split Edges at SeamCrossingPoints creating new ChildEdges and Vertices
   //   - a precondition for SmHealData::Cache_FaceProps_Stage3() 
-  SM_HEALSTEP_1ARG(18, Fix_SplitEdgesAtSeam, sMarkLock, SM_HO_FIX_SPLITEDGE_ATSEAM)
+  SM_HEALSTEP_1ARG(Fix_SplitEdgesAtSeam, sMarkLock, SM_HO_FIX_SPLITEDGE_ATSEAM)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 18))
-        { SM_HEALSTEP_BEG_STATE_DUMP(18, Fix_SplitEdgesAtSeam);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 18 = Fix_SplitEdgesAtSeam\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_SPLITEDGE_ATSEAM))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_SPLITEDGE_ATSEAM, Fix_SplitEdgesAtSeam);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_SplitEdgesAtSeam\n"), m_lRecursionCount, SM_HO_FIX_SPLITEDGE_ATSEAM) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(18, Fix_SplitEdgesAtSeam);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_SPLITEDGE_ATSEAM, Fix_SplitEdgesAtSeam);
         }
 #endif // SM_DEBUG_CODE
   
   // Fix BadSheets (Can Split Regions)
-  SM_HEALSTEP_1ARG(19, Fix_BadSheets, sMarkLock, SM_HO_FIX_BADSHEETS)
+  SM_HEALSTEP_1ARG(Fix_BadSheets, sMarkLock, SM_HO_FIX_BADSHEETS)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 19))
-        { SM_HEALSTEP_BEG_STATE_DUMP(19, Fix_BadSheets);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 19 = Fix_BadSheets\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_BADSHEETS))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_BADSHEETS, Fix_BadSheets);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_BadSheets\n"), m_lRecursionCount, SM_HO_FIX_BADSHEETS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(19, Fix_BadSheets);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_BADSHEETS, Fix_BadSheets);
         }
 #endif // SM_DEBUG_CODE
 
@@ -2201,33 +2214,33 @@ SM_HEALSTEP_1ARG(5, Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_
 
   // Build FaceProps after splitting SeamCrossing Edges
   //   - Builds LoopProps and finds Loop problems
-  SM_HEALSTEP_1ARG(20, Cache_FaceProps_Stage3, &bCache_FaceProps_Stage3_FoundNewProbs, SM_HO_CACHE_FACEPROPS_3)
+  SM_HEALSTEP_1ARG(Cache_FaceProps_Stage3, &bCache_FaceProps_Stage3_FoundNewProbs, SM_HO_CACHE_FACEPROPS_3)
 #ifdef SM_DEBUG_CODE
-      if(bCache_FaceProps_Stage3_FoundNewProbs && (m_eDoneHealOp >= 20))
+      if(bCache_FaceProps_Stage3_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_3))
         { 
-          SM_HEALSTEP_BEG_STATE_DUMP(20, Cache_FaceProps_Stage3);
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_FACEPROPS_3, Cache_FaceProps_Stage3);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_FaceProps_Stage3 detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 20 = Cache_FaceProps_Stage3\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_FaceProps_Stage3\n"), m_lRecursionCount, SM_HO_CACHE_FACEPROPS_3) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
               SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
               SM__DRAW_FACES_AND_SURFACES
               sm_GraphicsLoop() ;
             }
-          SM_HEALSTEP_END_STATE_DUMP(20, Cache_FaceProps_Stage3);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_FACEPROPS_3, Cache_FaceProps_Stage3);
         }
 #endif // SM_DEBUG_CODE
 
   // Fix SeamCrossing Faces 
   //   - Split Faces at Seam (makes new SplitFace_ChildFaces and SeamEdges)
-  SM_HEALSTEP_0ARG(21, Fix_SplitFaceAtSeams, SM_HO_FIX_SPLITFACE_ATSEAMS)
+  SM_HEALSTEP_0ARG(Fix_SplitFaceAtSeams, SM_HO_FIX_SPLITFACE_ATSEAMS)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 21))
-        { SM_HEALSTEP_BEG_STATE_DUMP(21, Fix_SplitFaceAtSeams);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 21 = Fix_SplitFaceAtSeams\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_SPLITFACE_ATSEAMS))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_SPLITFACE_ATSEAMS, Fix_SplitFaceAtSeams);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_SplitFaceAtSeams\n"), m_lRecursionCount, SM_HO_FIX_SPLITFACE_ATSEAMS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(21, Fix_SplitFaceAtSeams);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_SPLITFACE_ATSEAMS, Fix_SplitFaceAtSeams);
         }
 #endif // SM_DEBUG_CODE
 
@@ -2237,42 +2250,46 @@ SM_HEALSTEP_1ARG(5, Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_
 
 // Keep Fix_BadLoops disabled: classification and repair of broken loops are not reliable.
 // Direct helper regressions do not establish that the full stage is safe to enable.
-//   SM_HEALSTEP_1ARG(22, Fix_BadLoops, sMarkLock, SM_HO_FIX_BADLOOPS)
+  // Honor this requested boundary without running the disabled repair or
+  // advancing into trim generation. This records progress, not a loop fix.
+  if(m_eDoneHealOp < eHealerOp && eHealerOp == SM_HO_FIX_BADLOOPS)
+    { m_eDoneHealOp = SM_HO_FIX_BADLOOPS; }
+//   SM_HEALSTEP_1ARG(Fix_BadLoops, sMarkLock, SM_HO_FIX_BADLOOPS)
 //   #ifdef SM_DEBUG_CODE
-//         if(bDebugMe && (m_eDoneHealOp >= 22))
-//           { SM_HEALSTEP_BEG_STATE_DUMP(22, Fix_BadLoops);
-//             SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 22 = Fix_BadLoops\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+//         if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_BADLOOPS))
+//           { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_BADLOOPS, Fix_BadLoops);
+//             SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_BadLoops\n"), m_lRecursionCount, SM_HO_FIX_BADLOOPS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
 //             SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
 //             SM__DRAW_FACES_AND_SURFACES
 //             sm_GraphicsLoop() ;
-//             SM_HEALSTEP_END_STATE_DUMP(22, Fix_BadLoops);
+//             SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_BADLOOPS, Fix_BadLoops);
 //           }
 //   #endif // SM_DEBUG_CODE
 
   // when asked - CreateUVTrimCurves
-  SM_HEALSTEP_1ARG(23, Make_UVTrimCurves, bMakeUVTrimCurves, SM_HO_MAKE_UVTRIMCURVES)
+  SM_HEALSTEP_1ARG(Make_UVTrimCurves, bMakeUVTrimCurves, SM_HO_MAKE_UVTRIMCURVES)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 23))
-        { SM_HEALSTEP_BEG_STATE_DUMP(23, Make_UVTrimCurves);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - 23 = Make_UVTrimCurves\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_MAKE_UVTRIMCURVES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_MAKE_UVTRIMCURVES, Make_UVTrimCurves);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Make_UVTrimCurves\n"), m_lRecursionCount, SM_HO_MAKE_UVTRIMCURVES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(23, Make_UVTrimCurves);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_MAKE_UVTRIMCURVES, Make_UVTrimCurves);
         }
 #endif // SM_DEBUG_CODE
 
   // Find and Set Infinite/Solid Region
-  SM_HEALSTEP_0ARG(24, Fix_InfiniteRegion, SM_HO_FIX_INFINITE_REGIONS)
+  SM_HEALSTEP_0ARG(Fix_InfiniteRegion, SM_HO_FIX_INFINITE_REGIONS)
 #ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= 24))
-        { SM_HEALSTEP_BEG_STATE_DUMP(24, Fix_InfiniteRegion);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] DONE with heal steps\n After Heal Step - 24 = Fix_InfiniteRegion\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_INFINITE_REGIONS))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_INFINITE_REGIONS, Fix_InfiniteRegion);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] DONE with heal steps\n After Heal Step - %d = Fix_InfiniteRegion\n"), m_lRecursionCount, SM_HO_FIX_INFINITE_REGIONS) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
           SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
           SM__DRAW_FACES_AND_SURFACES
           sm_GraphicsLoop() ;
           SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] DONE with heal steps\n"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; 
-          SM_HEALSTEP_END_STATE_DUMP(24, Fix_InfiniteRegion);
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_INFINITE_REGIONS, Fix_InfiniteRegion);
         }
 #endif // SM_DEBUG_CODE
 
@@ -3440,8 +3457,8 @@ PURPOSE: HealBrep helper function: Replace Degen Faces with Edges and Vertices
 NOTES: 1. Remove Degenerate Faces and Edges in order
          a. Remove Degenerate Faces first because that might remove edges and vertices
          b. Remove Degenerate Edges second because that might remove vertices
-       2. Special case STEP closed surfaces (eg. tori) - they import with no seams and 
-          1 Outer VertexLoop.  Rebuild the face with Seams and an 1 Outer EdgeLoop.
+       2. Whole closed surfaces with only vertex loops are not degenerate.
+          IsDegenerate excludes them; missing seams are inserted in place later.
 FIXES: problems in SmHealData::
                     m_sBadFaceProps_DegenFaces
 ***********************************************************************/
@@ -3492,8 +3509,8 @@ SmStatus SmHealData::Fix_DegenFaces
                                               TRUE) ;  // in : TRUE = start topo change tracking now in SmObject::Notify() by
                                                        //             setting pContext->m_pSysNotifyCallBack = &m_sTopologyChangeCallback
                                                        //      FALSE= don't
-      SmTArray<SmEdge *> sFaceEdges ;
-      SmTArray<SmLoop *> sFaceLoops;
+      SmTArray<SmEdge *>   sFaceEdges;
+      SmTArray<SmVertex *> sFaceVertices;
 
       // Heal or squeeze each degen face
       for(ii=0;ii<lNumDegenFaces;ii++)
@@ -3519,156 +3536,34 @@ SmStatus SmHealData::Fix_DegenFaces
           if(m_pBrep != NULL && !m_pBrep->IsLiveTopologyMember(pThisFace))
             { continue ; }
 
-          // loop locals
-          pThisFace->GetEdges( sFaceEdges );
-          pThisFace->GetLoops( sFaceLoops );
+          SmTArray<SmEdge *>   sNewEdges, sDeletedEdges;
+          SmTArray<SmVertex *> sDeletedVertices;
+          pThisFace->GetEdges(sFaceEdges);
+          pThisFace->GetVertices(sFaceVertices);
 
-          // Special case: STEP import of Torus as degen face. Closed surfaces (e.g. torus) are imported by STEP with a vertex as OuterLoop
-          // Fix: Add seam Edge(s) and Vertex as necessary.
-          if(   sFaceLoops.GetSize() == 1                                            //     Face has 1 Loop
-             && sFaceLoops[0]->GetLoopuse()->GetLoopuseType() == SmVertexuse_TYPE)   // and loop is a VertexLoop
-            { 
-              SmXSectTol3d sXSectTol3d      = SmTol::GetXSectTol3d( pThisFace, pThisFace );
-              SmSurface  * pSurface         = pThisFace->GetSurface();
-              SmExtent2d   sNaturalUVDomain = pSurface->GetNaturalUVDomain();
+          // Squeeze every degenerate boundary, including vertex-only loops.
+          SE(pBrep->SqueezeFace
+            (pThisFace,           // in : target face
+             NULL,               // in : use the Brep stitching tolerance
+             &sDeletedVertices,   // out: deleted vertices (stale pointers)
+             &sNewEdges,          // out: new edges
+             &sDeletedEdges));    // out: deleted edges (stale pointers)
+          sFaceEdges.AppendUnique(sNewEdges);
+          sFaceEdges.RemoveElements(sDeletedEdges,sFaceEdges);
+          sFaceVertices.RemoveElements(sDeletedVertices,sFaceVertices);
 
-              // Closed pThisFace->Surface classification: m_bClosedU, m_bClosedV 
-              SmBoolean bClosedU = pSurface->IsClosed( sNaturalUVDomain, SM_SP_U, &sXSectTol3d.val );
-              SmBoolean bClosedV = pSurface->IsClosed( sNaturalUVDomain, SM_SP_V, &sXSectTol3d.val );
-
-              // Singularity classification: m_lPoles
-              ULONG lSingularities = pSurface->GetSingularities();
-
-              // If the surface is closed, rebuild it correctly
-              if ( ( bClosedU && bClosedV )   // torus
-                   || ( bClosedV && ( lSingularities & SM_SS_UMIN ) && ( lSingularities & SM_SS_UMAX ) )   // sphere
-                   || ( bClosedU && ( lSingularities & SM_SS_VMIN ) && ( lSingularities & SM_SS_VMAX ) ) ) // sphere
-                {
-                  // Locals
-                  ULONG       lIndx = 0 ;
-                  SmSurface * pNewSurface ;
-                  SmVertex  * pNewVertex = NULL ;
-                  SmFace    * pNewFace ;
-                  SmShell   * pNewShell ;
-                  SmRegion  * pOldRegion = pThisFace->GetUpwardFaceuse()->GetShell()->GetRegion() ;
-                  SmVertex  * pOldVertex = sFaceLoops[0]->GetLoopuse()->GetVertexuse()->GetVertex() ;
-                  SmTArray<SmTopology *> sDelObjs ;
-
-                  // if possible promote the surface to an analytic
-                  pSurface->CopyAndAddAnalytics( *pBrep->GetContext(), pNewSurface) ;
-
-                  // Remove the improperly created face from the brep
-                  pBrep->DeleteFace(pThisFace,    // in : target face
-                                    TRUE,         // in : TRUE = delete connected edges and vertices not connected to anything else
-                                    TRUE,         // in : TRUE = combine regions/shells as appropriate
-                                    &sDelObjs,    // out: list of all stale edge and vertex ptrs that were deleted
-                                    pOldRegion) ; // in : Opt Region kept when bDoRegionNesting = TRUE
-
-                  // note: if pOldVertex becomes a shell vertex it gets deleted in DeleteFace()
-                  //       if pOldVertex remains a EdgeVertex it did not get deleted - 
-                  //                     expect it to be coincident with one of the new Vertices built by CreateFaceInRegionFromSurface()
-
-                  // Create a new Face with proper topology - this face will have one or two new edges and two new vertices
-                  SE( pBrep->CreateFaceInRegionFromSurface(pOldRegion,                         
-                                                           pNewSurface,                        
-                                                           pNewSurface->GetNaturalUVDomain(),
-                                                           pNewShell,
-                                                           pNewFace) );
-
-                  // When NewFace is created - save it
-                  m_sNewFaces_FromFixDegenFaces.Add(pNewFace) ;
-
-                  // when pOldVertex still exists - glue it to the coincident new vertex
-                  if(FALSE == sDelObjs.FindElement(pOldVertex, lIndx))
-                    {
-                      SmTArray<SmVertex*> sTempNewVertices ;
-                      pNewFace->GetVertices( sTempNewVertices) ;
-                  
-                      // Search for a new vertex with same location as pOldVertex - pThisFace has only 1 vertex
-                      for(jj=0;jj<sTempNewVertices.GetSize();jj++)
-                        {
-                          SmVertex     *pThisVertex = sTempNewVertices[jj];
-                          SmXSectTol3d sXSectTol = SmTol::GetXSectTol3d( pThisVertex, pOldVertex );
-
-                          // look for coincidence
-                          if ( ( pThisVertex->GetPoint() - pOldVertex->GetPoint() ).Length() < sXSectTol )
-                            {
-                              // found one - remember it - glue it
-                              pNewVertex = pThisVertex;
-                              SE( pBrep->GlueVertices( pNewVertex, pOldVertex ) );
-                              break;
-                            }
-                        } // end search over all new vertices
-
-                      // check state: always expect one of the new vertices to be coincident with the pOldVertex
-                      SM_ASSERT_MSG(pNewVertex != NULL,
-                                    _T("SmHealData::FixDegenFaces broken assumption - needs code change: surviving vertex was assumed to be coincident to new vertices - or deleted")) ;
-
-                    } // end pOldVertex existence check
-
-                } // end pThisFace is a closed branch - build new closed-surface face branch
-              else // pThisFace is not a closed face (torus or Sphere) - case: a single degen sheet with one LoopVertex
-                {
-                  SmTArray<SmTopology*> sDeletedTopology;
-                  SE( pBrep->DeleteFace( pThisFace, TRUE, FALSE, &sDeletedTopology ) ); // TRUE = delete connected edges and vertices
-                                                                                        // FALSE = don't combine regions/shells as appropriate
-
-                  // This Face has only one piece of topology. Record if the Vertex was deleted
-                  SM_ASSERT( sDeletedTopology.GetSize() <= 1 );
-
-                } // end pThisFace is not a closed Face branch
-            } // End Face has 1 OuterLoop==VertexLoop branch (special STEP case)
-          else // Face is not a special STEP case with just 1 outer LoopVertex branch - squeeze it 
+          // Remove wire edges left by squeezing, then their isolated vertices.
+          for(jj=0; jj<sFaceEdges.GetSize(); ++jj)
             {
-              SmTArray<SmEdge *> sTempNEdges, sTempDEdges ;
-
-              // Remove a face from the topology graph leaving one or more vertices and edges behind. 
-              SE( pBrep->SqueezeFace( pThisFace, NULL, NULL, &sTempNEdges, &sTempDEdges ) );
-              sFaceEdges.AppendUnique(sTempNEdges) ;
-
-              // begin scope for deleting wire edges made by squeezing DegenFaces. (wire edges == non-manifold)
-                {
-                  // remove sTempDEdges from sFaceEdges array
-                  sFaceEdges.RemoveElements( sTempDEdges, sFaceEdges) ;
-                  ULONG lNumEdges = sFaceEdges.GetSize();
-                  SmBoolean bRemovedDuplicates = FALSE;
-                  for(jj=0;jj<lNumEdges;jj++)
-                    {
-                      // when Edge is wire - delete it - delete any vertices that become shell vertices 
-                      if ( sFaceEdges[jj]->IsWire() )
-                        {
-                          // Grab the vertices
-                          SmVertex *pVertex1 = sFaceEdges[jj]->GetVertex();
-                          SmVertex *pVertex2 = sFaceEdges[jj]->GetOtherVertex( pVertex1 );
-
-                          // Delete the edge
-                          pBrep->DeleteEdge( sFaceEdges[jj]) ;
-
-                          // Delete any vertices that are now shell vertices
-
-                          // when Edge was closed and singleVertex is a ShellVertex
-                          if(pVertex1 == pVertex2 && pVertex1->IsShellVertex() )
-                            { pBrep->DeleteVertex( pVertex1) ;  // end single ShellVertex branch    
-                            } 
-                          else // Open Edge
-                            {
-                              if(pVertex1->IsShellVertex()) { pBrep->DeleteVertex( pVertex1) ; } // Vertex1 Is now a Shell - delete it
-                              if(pVertex2->IsShellVertex()) { pBrep->DeleteVertex( pVertex2) ; } // Vertex2 is now a Shell - delete it
-                            } // End deleting OpenEdge Vertices made into ShellVertices when Edge was deleted branch
-
-                          // If there are wires, there may be duplicates in sFaceEdges. Remove them so we don't delete a stale edge pointer
-                          // This can happen when connected degenerate faces are squeezed
-                          // for valid faces this branch should never run - if we have a bad face with nested loops it might come up
-                          if( !bRemovedDuplicates)
-                            {
-                              sFaceEdges.RemoveDuplicates();
-                              lNumEdges = sFaceEdges.GetSize();
-                              bRemovedDuplicates = TRUE;
-                            }
-                        } // end if this edge is a wire check
-                    } // end iter every FaceEdge looking to delete original edges that became wires
-                } // end scope for deleting wire edges made by squeezing DegenFaces. (wire edges == non-manifold)
-            } // end squeeze DegenFace branch
+              if(sFaceEdges[jj]->IsWire())
+                { SE(pBrep->DeleteEdge(sFaceEdges[jj])); }
+            }
+          for(jj=0; jj<sFaceVertices.GetSize(); ++jj)
+            {
+              // Keep vertices that still belong to another face or wire.
+              if(sFaceVertices[jj]->IsShellVertex())
+                { SE(pBrep->DeleteVertex(sFaceVertices[jj])); }
+            }
         } // End iter and squeezing every DegenFace
         
       // close topology change tracking
@@ -4176,6 +4071,10 @@ if(bDebugMe)
       if(pThisFaceProps->m_bBadMissingSeam != 0)
         { m_sBadFaceProps_MissingSeam.Add(pThisFaceProps, pThisFaceProps->m_bBadMissingSeam) ; *pbNewProbs = TRUE ; }
 
+      // Crossed Pole List
+      if(pThisFaceProps->m_bBadCrossedPole)
+        { m_sBadFaceProps_CrossedPole.Add(pThisFaceProps, TRUE) ; *pbNewProbs = TRUE ; }
+
       // Crossed Seam List
       if(pThisFaceProps->m_bBadCrossedSeam != 0)
         { m_sBadFaceProps_CrossedSeam.Add(pThisFaceProps, pThisFaceProps->m_bBadCrossedSeam) ; *pbNewProbs = TRUE ; }
@@ -4446,6 +4345,87 @@ SmStatus SmHealData::Fix_SplitEdgesAtSeam
   SmHealerOpType     eThisHealerOp)   // NotUsed: in : This function's Step Number within the healer step sequence
 { 
   SM_REF1(eThisHealerOp) ;
+
+  // Face marks survive property replacement; record results after the final refresh.
+  rMarkLock.NewMark() ;
+
+  // Consume Stage 2 pole crossings before using the cached seam classifications.
+  // Refresh after each split: an edge can cross multiple poles or bound several
+  // faces, and the original edge survives with a shorter parameter interval.
+  // Keep failures outside FaceProps: another successful edit can replace those
+  // properties and reappend the same unresolved candidate to the problem list.
+  struct SmFailedPoleSplit
+    {
+      SmFace *m_pFace ;
+      SmEdge *m_pEdge ;
+      double  m_dParameter ;
+    } ;
+  SmTArray<SmFailedPoleSplit> sFailedPoleSplits ;
+  for(;;)
+    {
+      SmFaceProps *pFaceProps = NULL ;
+      for(ULONG lFace=0; lFace<m_sBadFaceProps_CrossedPole.GetSize(); ++lFace)
+        {
+          SmFaceProps *pCandidate = m_sBadFaceProps_CrossedPole[lFace] ;
+          if(!pCandidate->m_bBadCrossedPole) { continue ; }
+          SmBoolean bFailed = FALSE ;
+          for(ULONG lFailed=0; lFailed<sFailedPoleSplits.GetSize(); ++lFailed)
+            {
+              const SmFailedPoleSplit &crFailed = sFailedPoleSplits[lFailed] ;
+              if(   crFailed.m_pFace == pCandidate->m_pFace
+                 && crFailed.m_pEdge == pCandidate->m_pCrossedPoleEdge
+                 && SmTol::AreSameParam(crFailed.m_dParameter, pCandidate->m_dCrossedPoleParameter))
+                { bFailed = TRUE ; break ; }
+            }
+          if(!bFailed) { pFaceProps = pCandidate ; break ; }
+        }
+      if(pFaceProps == NULL) { break ; }
+
+      SmEdge     *pEdge      = pFaceProps->m_pCrossedPoleEdge ;
+      double      dParameter = pFaceProps->m_dCrossedPoleParameter ;
+      SmExtent1d  sInterval  = pEdge->GetInterval() ;
+      ULONG       lFaceIndex = pBrep->GetTopologyIndex(pFaceProps->m_pFace) ;
+      ULONG       lEdgeIndex = pBrep->GetTopologyIndex(pEdge) ;
+      SmEdge     *pFirst     = NULL, *pSecond = NULL ;
+      SmVertex   *pVertex    = NULL ;
+      pFaceProps->m_pFace->Mark(rMarkLock.GetMarkType()) ;
+      SmTrackTopologyChanges sChanges(pBrep, TRUE) ;
+      SmStatus sStatus = pBrep->MakeVertexSplitEdge
+        (pEdge,       // in : boundary edge crossing the pole
+         dParameter,  // in : cached interior pole parameter
+         pFirst,      // out: first split edge
+         pSecond,     // out: second split edge
+         pVertex) ;   // out: vertex at the split, or the rejected endpoint
+      sChanges.StopTracking() ;
+      if(   sStatus != SM_SUCCESS && pFirst == NULL && pSecond == NULL
+         && pVertex != NULL
+         && (pVertex == pEdge->GetStartVertex() || pVertex == pEdge->GetEndVertex()))
+        {
+          TCHAR sMessage[SM_TBLOCK_SIZE] ;
+          smos_sprintf
+            (sMessage,              // out: diagnostic text
+             _T("Pole-crossing classification disagrees with MakeVertexSplitEdge: "
+                "face %lu, edge %lu, parameter %.17g, interval [%.17g, %.17g], "
+                "endpoint tolerance %.17g. Split rejected near an endpoint; "
+                "investigate pole detection and endpoint tolerance."), // in : message format
+             lFaceIndex,            // in : owning face index
+             lEdgeIndex,            // in : boundary edge index
+             dParameter,            // in : cached pole parameter
+             sInterval.GetMin(),    // in : edge interval start
+             sInterval.GetMax(),    // in : edge interval end
+             pVertex->GetTolerance().val) ; // in : rejected endpoint tolerance
+          SE_MSG(sStatus, sMessage) ;
+          SmFailedPoleSplit sFailed = { pFaceProps->m_pFace, pEdge, dParameter } ;
+          sFailedPoleSplits.Add(sFailed) ;
+          continue ; // Another face can have a valid crossing on this same edge.
+        }
+      // Only endpoint rejection is known to leave the edge unsplit. Other errors
+      // can follow interval/curve edits, so do not continue with stale properties.
+      SER(sStatus) ;
+      SER(UpdateTargetLists(sChanges, SM_HO_FIX_MOVESEAM)) ;
+      // UpdateTargetLists deletes old properties. Reacquire the next candidate.
+    }
+
 #ifdef SM_DEBUG_CODE
     SmTArray<SmFaceProps*>& rFaceProps = m_sTgtFaceProps;
 
@@ -4483,9 +4463,6 @@ SmBoolean bDebugThisFaceIndx = FALSE ;
                                               TRUE) ;  // in : TRUE = start topo change tracking now in SmObject::Notify() by
                                                        //             setting pContext->m_pSysNotifyCallBack = &m_sTopologyChangeCallback
                                                        //      FALSE= don't
-      // init mark
-      rMarkLock.NewMark() ; // increment the mark value - very cheap
-
       // for every Face with Edges that cross MissingSeams - Split the Edges at MissingSeam
       for(ULONG ii=m_sBadFaceProps_CrossedSeam.GetSize();ii>0;ii--)
         {
@@ -4593,6 +4570,7 @@ SmBoolean bDebugThisFaceIndx = FALSE ;
              || pThisFaceProps->m_eBadCrossedSeam == SM_SP_BOTH)
             {
               // Split Edges crossing the U seam by merging the CrvClassificationU Interval EndPoints that cross the face
+              pThisFace->Mark(rMarkLock.GetMarkType()) ;
               sMergeResultU = pThisFaceProps->m_pCrvClassU->MergeIntervals
                        (&sThisNewFaces,             // out : list of new faces, NULL to ignore.                    
                                                     //       When an existing face is split into 2                 
@@ -4633,9 +4611,6 @@ static ULONG lSplitEdgeCnt = 0 ;
               m_sNewEdges_FromSplitEdgesAtSeams.Append(sThisNewEdgesFromSplits) ;
               m_sNewVertices_FromSplitEdgesAtSeams.Append(sThis_sNewVerticesOnSeams) ;
 
-              // track the number of SplitEdge events
-              m_sRanFaceProps_SplitEdgesAtSeam.Add(pThisFaceProps, SM_TRY_RAN) ;
-
             } // end Edges cross Seam_U check
 
           // Split Edges at Seam_V by merging Vertices only
@@ -4643,6 +4618,7 @@ static ULONG lSplitEdgeCnt = 0 ;
              || pThisFaceProps->m_eBadCrossedSeam == SM_SP_BOTH)
             {
               // Split Edges crossing the V seam by merging the CrvClassificationV Interval EndPoints that cross the face
+              pThisFace->Mark(rMarkLock.GetMarkType()) ;
               sMergeResultV = pThisFaceProps->m_pCrvClassV->MergeIntervals
                        (&sThisNewFaces,           // out : list of new faces, NULL to ignore.                    
                                                   //       When an existing face is split into 2                 
@@ -4658,9 +4634,6 @@ static ULONG lSplitEdgeCnt = 0 ;
               m_sNewEdges_FromSplitEdgesAtSeams.Append(sThisNewEdgesFromSplits) ;
               m_sNewVertices_FromSplitEdgesAtSeams.Append(sThis_sNewVerticesOnSeams) ;
 
-              // track the faces run though Fix_SplitEdgesAtSeams()
-              m_sRanFaceProps_SplitEdgesAtSeam.Add(pThisFaceProps, SM_TRY_RAN) ;
-
             } // end Edges cross Seam_V check
               
           // when successful - remember the change: set rFaceProps[lIndx].m_eBadCrossedSeam to SM_SP_NEITHER
@@ -4669,13 +4642,6 @@ static ULONG lSplitEdgeCnt = 0 ;
               // changes were made - don't rerun the predicate (CrvClasses are already updated) just update the flag
               pThisFaceProps->m_eBadCrossedSeam = SM_SP_NEITHER ;
 
-              // remember that this face has gone through SplitEdgeAtSeam and whether that fixed the face or not
-              pThisFaceProps->m_eBeenThroughSplitEdgesAtSeam =  (   pThisFaceProps->m_bBadMissingSeam  == FALSE
-                                                                 && pThisFaceProps->m_bBadCrossedSeam  == FALSE
-                                                                 && pThisFaceProps->m_bBadNearMissSeam == FALSE)
-                                                               ? SM_TRY_FIXED
-                                                               : SM_TRY_NOFIX ;
-      
               // gwc removed next lines: NearMiss probs will be fixed in future Fix_BadGaps() which refines Geom to tighter NearMiss into Exact connections
               // something for m_eBadNearMissSeam flag
               // GWC_NEEDS_WORK NEED_SOMETHING_FOR_NEAR_MISS_SEAM_VALUE_HERE ;
@@ -4713,9 +4679,24 @@ static ULONG lSplitEdgeCnt = 0 ;
       sTopologyChanges.StopTracking() ;
 
       // Update Tgt and prob arrays from the sTopologyChanges's Rm and Add lists
-      SER(UpdateTargetLists(sTopologyChanges, SM_HO_FIX_SPLITEDGE_ATSEAM)) ;
+      // Stop before this stage even when called directly after later healing.
+      // Reentering it here would retry failed pole splits with a fresh skip list.
+      SER(UpdateTargetLists(sTopologyChanges, SM_HO_FIX_MOVESEAM)) ;
 
     } // end Faces exist with LoopEdges that cross seams check
+
+  // Reacquire current properties, as in Fix_MoveSeam. One result per attempted face
+  // includes pole failures even when that face's seam crossings were repaired.
+  for(ULONG lFace=0; lFace<m_sTgtFaceProps.GetSize(); ++lFace)
+    {
+      SmFaceProps *pFaceProps = m_sTgtFaceProps[lFace] ;
+      if(!pFaceProps->m_pFace->IsMarked(rMarkLock.GetMarkType())) { continue ; }
+      m_sRanFaceProps_SplitEdgesAtSeam.Remove(pFaceProps) ;
+      m_sRanFaceProps_SplitEdgesAtSeam.Add
+        (pFaceProps, // in : current properties of an attempted face
+         (pFaceProps->m_bBadCrossedPole || pFaceProps->m_bBadCrossedSeam)
+           ? SM_TRY_NOFIX : SM_TRY_FIXED) ; // in : remaining crossing determines the outcome
+    }
 
   // all done
   return(SM_SUCCESS) ;
@@ -5047,6 +5028,12 @@ SmBoolean bDebugMe = FALSE ;
       SmFaceProps * pThisFaceProps = rFaceProps[ii-1] ;
  //    pThisFaceProps->SetContext(cpContext) ;        // not needed - set in SmHealData::Cache_FaceProps_Gaps()
         
+      // Vertex loops alone cannot form a loop tree. Keep this face active for
+      // seam insertion; its completed edge boundary can then be classified.
+      if(   pThisFaceProps->m_bBadMissingSeam == TRUE
+         && pThisFaceProps->m_pFace->IsClosedSurfaceWithVertexLoops(pThisFaceProps))
+        { continue; }
+
       // when needed - compute FaceProps After Fix_SplitEdgesAtSeam() - SM_PROPSTAGE_3
       if(FALSE == pThisFaceProps->HasProps(SM_PROPSTAGE_3, pThisFaceProps->m_pFace))          
         { 
@@ -5443,8 +5430,8 @@ SmBoolean bDebugThisFaceIndx = FALSE ;
           SM_ASSERT_MSG(sTopologyChanges.IsInRmList(pThisFace) == TRUE, _T("SmHealData::Fix_SplitFaceAtSeams bad assumption: ChangeTracker RmList does not contain split Face - needs debug")) ;
 
           // accumulate outputs
-          if(sThisNewFaces.GetSize() > 0) { m_sRanFaceProps_SplitEdgesAtSeam.IncOrigProbCount() ; }
-          else                            { m_sRanFaceProps_SplitEdgesAtSeam.Add(pThisFaceProps, SM_TRY_NOFIX) ; }
+          if(sThisNewFaces.GetSize() > 0) { m_sRanFaceProps_SplitFaceAtSeam.IncOrigProbCount() ; }
+          else                            { m_sRanFaceProps_SplitFaceAtSeam.Add(pThisFaceProps, SM_TRY_NOFIX) ; }
 
         } // end iter every Face with MissingSeam
 
@@ -6713,24 +6700,14 @@ SmBoolean bDebugMe = FALSE ;
   // case: 2 regions - 1 Void InfiniteRegion, 1 solid Region
   else if(pInfiniteRegion->GetNext()->GetNext() == pInfiniteRegion ) // has exactly two regions
     {
+      // Plausible void flags do not establish which region is geometrically infinite.
+      SER(pBrep->FindAndSetInfiniteRegion()) ;
+
+      // Refresh region pointers after classification, then set Void/Solid data.
+      pInfiniteRegion        = pBrep->GetInfiniteRegion() ;
       SmRegion * pNextRegion = (SmRegion *)pInfiniteRegion->GetNext() ;
-
-      // only check obviously broken Regions 
-      if(   pInfiniteRegion->IsVoid() != TRUE
-         || pNextRegion->IsVoid()     != FALSE)
-        { 
-          // use ray casting to find and set the InfiniteRegion
-          pBrep->FindAndSetInfiniteRegion() ;
-
-          // refresh Region ptrs
-          pInfiniteRegion = pBrep->GetInfiniteRegion() ;
-          pNextRegion     = (SmRegion *)pInfiniteRegion->GetNext() ;
-
-          // Set region Void/Solid data
-          pInfiniteRegion->SetIsVoid(TRUE) ;
-          pNextRegion->SetIsVoid(FALSE) ;
-
-        } // end obviously broken region check
+      pInfiniteRegion->SetIsVoid(TRUE) ;
+      pNextRegion->SetIsVoid(FALSE) ;
     } // end case exactly 2 regions
 
   else // case: more than 2 regions
@@ -7029,6 +7006,7 @@ void SmHealData::Dump
                                                        lProbCnt += m_sFaceProps_NoVertexPole   .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_FlatCorner  .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_MissingSeam .Dump(m_eDoneHealOp) ;
+                                                       lProbCnt += m_sBadFaceProps_CrossedPole .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_CrossedSeam .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_NearMissSeam.Dump(m_eDoneHealOp) ;
                                                      }  
@@ -7244,6 +7222,7 @@ void SmHealData::DumpFaceListsContaining
   SM_INLIST(m_sFaceProps_NoVertexPole         ) ;
   SM_INLIST(m_sBadFaceProps_FlatCorner        ) ;
   SM_INLIST(m_sBadFaceProps_MissingSeam       ) ;
+  SM_INLIST(m_sBadFaceProps_CrossedPole       ) ;
   SM_INLIST(m_sBadFaceProps_CrossedSeam       ) ;
   SM_INLIST(m_sBadFaceProps_NearMissSeam      ) ;
   SM_INLIST(m_sRanFaceProps_MoveSeam          ) ;
@@ -7473,6 +7452,7 @@ void SmHealData::DumpArraysContaining
                                                      SM_DUMP_AND_COUNT(m_sFaceProps_NoVertexPole   , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_FlatCorner  , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_MissingSeam , pTgtFaceProps) ;
+                                                     SM_DUMP_AND_COUNT(m_sBadFaceProps_CrossedPole , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_CrossedSeam , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_NearMissSeam, pTgtFaceProps) ;
 

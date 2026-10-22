@@ -73,15 +73,16 @@ void DumpCrvDirOnFaceType
 {
   TCHAR sBuff[64] ;
   if(pOptLabel) { smos_WriteBuffer(pOptLabel) ; } 
-  smos_snprintf(sBuff, 64, _T("[%s]"),   eCrvDirOnFace == SM_CD_UNINIT         ? _T("UNINIT")         
-                                       : eCrvDirOnFace == SM_CD_NONE           ? _T("NONE")           
-                                       : eCrvDirOnFace == SM_CD_IN             ? _T("IN")             
-                                       : eCrvDirOnFace == SM_CD_ON             ? _T("ON")             
-                                       : eCrvDirOnFace == SM_CD_OUT            ? _T("OUT")            
-                                       : eCrvDirOnFace == SM_CD_LAMINA         ? _T("LAMINA")         
-                                       : eCrvDirOnFace == SM_CD_SEAM           ? _T("SEAM")           
-                                       : eCrvDirOnFace == SM_CD_POLE           ? _T("POLE")           
-                                       : eCrvDirOnFace == SM_CD_POLE_NO_VERTEX ? _T("POLE_NO_VERTEX") 
+  smos_snprintf(sBuff, 64, _T("[%s]"),   eCrvDirOnFace == SM_CD_UNINIT          ? _T("UNINIT")         
+                                       : eCrvDirOnFace == SM_CD_NONE            ? _T("NONE")           
+                                       : eCrvDirOnFace == SM_CD_IN              ? _T("IN")             
+                                       : eCrvDirOnFace == SM_CD_ON              ? _T("ON")             
+                                       : eCrvDirOnFace == SM_CD_OUT             ? _T("OUT")            
+                                       : eCrvDirOnFace == SM_CD_LAMINA          ? _T("LAMINA")         
+                                       : eCrvDirOnFace == SM_CD_SEAM_NO_EDGEUSE ? _T("SEAM_NO_EDGEUSE")
+                                       : eCrvDirOnFace == SM_CD_SEAM            ? _T("SEAM")           
+                                       : eCrvDirOnFace == SM_CD_POLE            ? _T("POLE")           
+                                       : eCrvDirOnFace == SM_CD_POLE_NO_VERTEX  ? _T("POLE_NO_VERTEX") 
                                        :                                         _T("UnexpectedType")) ;  
   smos_WriteBuffer(sBuff) ;
 } // end DumpCrvDirOnFaceType

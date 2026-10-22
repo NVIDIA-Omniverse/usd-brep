@@ -695,6 +695,40 @@ SmStatus SmFilletExecutive::SetFilletParameters
 } // end SetFilletParameters ( edge numbers, possibly different parameters on each edge )
 
 /*******************************************************************//**
+PURPOSE: Check that every edge in rEdgePtrs is a live edge of pBrep.
+
+NOTES: Otherwise a foreign edge's own Brep is modified before the fillet
+    fails. IsLiveTopologyMember never dereferences the edge, so null and
+    stale handles are safe.
+***********************************************************************/
+SmStatus SmFilletExecutive::CheckEdgesAreInBrep
+ (SmBrep                    * pBrep,      // in :
+  const SmTArray< SmEdge* > & rEdgePtrs)  // in :
+{
+  if ( pBrep == NULL )
+    {
+      GetFilletErrorInfo()->NoteError( SM_FILERR_INVALID_INPUT, _T("SetFilletParameters: Null target Brep.\n") );
+      return SM_ERR_INVALID_INPUT;
+    }
+
+  TCHAR sBuff[SM_TBLOCK_SIZE];
+  for ( ULONG ie = 0; ie < rEdgePtrs.GetSize(); ie++ )
+    {
+      SmEdge* pEdge = rEdgePtrs[ie];
+      if ( ! pBrep->IsLiveTopologyMember( pEdge ) )
+        {
+          smos_sprintf( sBuff, _T("Edge[ %2lu ] == %p: not an edge of the target Brep\n"), ie, pEdge );
+          GetFilletErrorInfo()->NoteError( SM_FILERR_INVALID_INPUT, sBuff );
+          return SM_ERR_INVALID_INPUT;
+        }
+    }
+
+  return SM_SUCCESS;
+
+}  // end SmFilletExecutive::CheckEdgesAreInBrep
+
+
+/*******************************************************************//**
 PURPOSE: High-level call to set up filleting parameters,
     using edge pointers, with the same parameters on each edge.
 
@@ -734,6 +768,9 @@ SmStatus SmFilletExecutive::SetFilletParameters
 
   ULONG lNumFilletedEdges = rEdgePtrs.GetSize();
   if ( lNumFilletedEdges < 1 ) { return SM_SUCCESS; }
+
+  SmStatus eStatus = CheckEdgesAreInBrep( pBrep, rEdgePtrs );
+  if ( eStatus != SM_SUCCESS ) { return eStatus; }
 
   if ( eRadiusType == SM_FS_VARIABLE_RADIUS && pOptVarRadLaw == NULL )
     {
@@ -896,6 +933,9 @@ SmStatus SmFilletExecutive::SetFilletParameters
 
   ULONG lNumFilletedEdges = rEdgePtrs.GetSize();
   if ( lNumFilletedEdges < 1 ) { return SM_SUCCESS; }
+
+  SmStatus eStatus = CheckEdgesAreInBrep( pBrep, rEdgePtrs );
+  if ( eStatus != SM_SUCCESS ) { return eStatus; }
 
   SmBoolean bSingleXSectType   =    (rXSectTypes.GetSize() == 1)                   ? TRUE
                                  :  (rXSectTypes.GetSize() == lNumFilletedEdges)   ? FALSE

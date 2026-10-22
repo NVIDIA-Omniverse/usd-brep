@@ -9,6 +9,7 @@
 
 #include <nurbs.h>
 #include <NL_Globals.h>
+#include <NLI_Math.h>
 
 /* are the curve end points allowed to move?  */
 static NL_FLAG ST_findStep(NL_CURVE* crv, NL_REAL BetaMat[4][4], NL_FLAG fixEndPts, NL_INDEX numDataPoints, NL_POINT xPts[],
@@ -2436,7 +2437,7 @@ NL_FLAG N_CrvReverse( NL_CURVE *curP, NL_CURVE *curQ, NL_STACKS *SQ )
 
     NL_DEGREE p;
 
-    NL_REAL *UP = NULL, *UQ = NULL, c, a;
+    NL_REAL *UP = NULL, *UQ = NULL;
 
     NL_CPOINT *Pw = NULL, *Qw = NULL;
 
@@ -2456,19 +2457,6 @@ NL_FLAG N_CrvReverse( NL_CURVE *curP, NL_CURVE *curQ, NL_STACKS *SQ )
         N_CrvGetCPtsAndKnots( curQ, &Qw, &UQ );
     }
 
-    /* Prepare for reversal */
-
-    c = UP[0] + UP[m];
-
-    if( curP NEQ curQ )
-    {
-        for ( i = 0; i <= p; i++ )
-        {
-            UQ[i] = UP[i];
-            UQ[n + i + 1] = UP[n + i + 1];
-        }
-    }
-
     /* Reverse curve */
 
     if( curP EQ curQ )
@@ -2480,14 +2468,7 @@ NL_FLAG N_CrvReverse( NL_CURVE *curP, NL_CURVE *curQ, NL_STACKS *SQ )
             N_SwapCPts( &Pw[i], &Pw[n - i] );
         }
 
-        k = m / 2 - p;
-
-        for ( i = 1; i <= k; i++ )
-        {
-            a = UP[m - p - i];
-            UP[m - p - i] = c - UP[p + i];
-            UP[p + i] = c - a;
-        }
+        NI_ReverseKnots( UP, m, UP );
     }
     else
     {
@@ -2496,12 +2477,7 @@ NL_FLAG N_CrvReverse( NL_CURVE *curP, NL_CURVE *curQ, NL_STACKS *SQ )
             N_CopyCPt( Pw[n - i], &Qw[i] );
         }
 
-        k = m - 2 * p - 1;
-
-        for ( i = 1; i <= k; i++ )
-        {
-            UQ[m - p - i] = c - UP[p + i];
-        }
+        NI_ReverseKnots( UP, m, UQ );
     }
 
     /* End NURBS and Exit */

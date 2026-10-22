@@ -136,12 +136,6 @@ files.include = [
     "source/HYDRA_USD_BREP/**",
     "tests/HYDRA_USD_BREP_test/**",
 ]
-files.exclude = [
-    # Keep GitHub-excluded internal notes outside legal-header maintenance.
-    "source/OCCT_BREP_IMPORT/occt_brep_import_plan.md",
-    "source/OCCT_BREP_IMPORT/occt_brep_import_status.md",
-    "source/OCCT_BREP_EXPORT/occt_brep_export_status.md",
-]
 
 [repo_format.python]
 # Re-enable legal-blurb maintenance for the scoped Python dirs (overrides the tool-level default above).
@@ -154,12 +148,6 @@ files.include = [
     "source/USD_BREP_UTILS/**",
     "source/HYDRA_USD_BREP/**",
     "tests/HYDRA_USD_BREP_test/**",
-]
-files.exclude = [
-    # Keep GitHub-excluded internal notes outside legal-header maintenance.
-    "source/OCCT_BREP_IMPORT/occt_brep_import_plan.md",
-    "source/OCCT_BREP_IMPORT/occt_brep_import_status.md",
-    "source/OCCT_BREP_EXPORT/occt_brep_export_status.md",
 ]
 
 # Black's version is pinned transitively, not here: repo_format (pinned in
@@ -352,6 +340,7 @@ sphinx_exclude_patterns = [
     "proposals",
     # Root markdown that is not part of the rendered docs
     "AGENTS.md",
+    "BUILDING.md",
     "CHANGELOG.md",
     "CITATION.md",
     "CLAUDE.md",
@@ -418,7 +407,9 @@ library_paths = [
     "${root}/_build/target-deps/usd/${config}/lib",
     "${root}/_build/target-deps/usd/${config}/bin",
 ]
+extensions_extra = ["brep_mesh"]
 python_paths = [
+    "${root}/docs/viewer",
     "${root}/_build/${platform}/${config}",
     "${root}/_build/target-deps/usd/${config}/lib/python",
 ]

@@ -209,6 +209,8 @@ SMAPI_EXPORT SmApiStatus SmApiStitch(
 
 /// rCurvesToSweep are copied, not consumed: the caller keeps ownership and the
 /// curves are unchanged. The caller owns the new rpResult.
+/// The result is built in a new SmBrep with the default tolerance; there is no
+/// parameter to set it.
 SMAPI_EXPORT SmApiStatus SmApiCreateLinearSweep( 
     const SmTArray<SmCurve*>& rCurvesToSweep,  ///< [in ]: Curves to sweep                                           <br>
     const SmVector3d& rSweepDir,               ///< [in ]: Sweep direction                                           <br>

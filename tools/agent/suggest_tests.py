@@ -202,9 +202,10 @@ PROG_TEST_SUITE_RULES = (
     (("sweep",), ("sweeps",)),
     (("primitive", "cone", "cylinder", "sphere", "torus"), ("primitives",)),
     (("tess", "poly", "raytracer", "grid"), ("tessellation",)),
+    (("heal",), ("healing",)),
     (
-        ("trim", "topolog", "brep", "face", "edge", "vertex", "loop", "heal"),
-        ("topology", "trimmed-surfaces", "brep-import"),
+        ("trim", "topolog", "brep", "face", "edge", "vertex", "loop"),
+        ("topology", "healing", "trimmed-surfaces", "brep-import"),
     ),
     (("surfaceintersector", "ssi"), ("ssi-analytic", "ssi-advanced")),
     (("curve", "cci"), ("cci-advanced",)),

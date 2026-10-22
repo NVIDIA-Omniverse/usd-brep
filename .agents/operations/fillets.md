@@ -67,7 +67,7 @@ Apply a fillet to selected edges with control over cross-section type and contin
 | `thumbweight` | float | `1.0` | Controls blend shape (1.0 = default). **Keyword-only.** |
 
 **Design notes:**
-- Get edges from `brep.edges()`. You can select a subset.
+- Get edges from `brep.edges()`. You can select a subset. Edges of another BRep are rejected with `SM_ERR_INVALID_INPUT` before either BRep is modified.
 - Cross-section types:
   - `0` (LINEAR) = linear cross-section with the selected radius solver; this does not by itself select the constant-distance chamfer solver used by `chamfer_fillet`
   - `1` (CIRCULAR) = circular fillet (standard smooth round)
@@ -108,6 +108,7 @@ sm.variable_radius_fillet(box, edges, start_radius=0.5, end_radius=2.0)
 ### Radius Selection
 - **Rule of thumb:** radius should be ≤ 1/3 of the smallest adjacent face dimension. Larger radii risk overlap between adjacent fillets.
 - For a 10×10×10 box, `radius=3.0` is a reasonable maximum. At `radius=5.0`, adjacent fillets will collide.
+- **Minimum:** `circular_fillet`, `chamfer_fillet`, `fillet_edges`, `fillet_edges_per_edge`, `variable_radius_fillet` and `set_bevel_corners` reject a radius below 8× the BRep tolerance (8e-5 by default) with `SM_ERR_INVALID_INPUT`, leaving the BRep unchanged.
 - Start small and increase. It's easier to recover from a small fillet than debug a failed large one.
 
 ### Cross-Section Type

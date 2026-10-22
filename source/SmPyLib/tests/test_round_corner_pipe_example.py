@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 import unittest
 
-import _omni_solid as sm
+import usd_brep as sm
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]

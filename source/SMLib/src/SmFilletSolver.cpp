@@ -1374,7 +1374,7 @@ static SmBoolean sm_TestAnalyticSurface
 {
   // return TRUE when surface type is Plane or Cone
   if (   pSurface->GetType() == SmPlane_TYPE
-      || pSurface->GetType() == SmCone_TYPE)
+      || pSurface->IsKindOf(SmCone_TYPE))
     {
       return TRUE;
     }

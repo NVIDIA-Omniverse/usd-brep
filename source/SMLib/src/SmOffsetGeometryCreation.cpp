@@ -2257,8 +2257,18 @@ static ULONG lDebugCount = 0 ;
     }
 #endif // SM_DEBUG_CODE
 
+  // A tangent edge between an offset face and a shell face can't be closed by extension: bridge it below.
+  SmTArray<SmFace*> sShellFaces;
+  cpOffsetExecutive->GetShellFaces(sShellFaces);
+  ULONG lFound;
+  SmBoolean bShellTangentGap =
+         cpOtherOriginalEdgeuse != NULL && cpOffsetEdgeuse != NULL && cpOtherOffsetEdgeuse != NULL
+      && sShellFaces.FindElement(cpOriginalEdgeuse->GetFace(),lFound) != sShellFaces.FindElement(cpOtherOriginalEdgeuse->GetFace(),lFound)
+      && cpOriginalEdgeuse->IsTangentSector(cpOffsetExecutive->GetTangencyTolDegrees())
+      && HaveTangentGaps(10,cpOffsetEdgeuse,cpOtherOffsetEdgeuse);
+
   // If we are extending convex edges, extend both offset surfaces to hit each other.
-  if (cpOffsetExecutive->GetExtendConvexEdges()) 
+  if (cpOffsetExecutive->GetExtendConvexEdges() && !bShellTangentGap) 
     {
       SmBoolean bLamina = cpOriginalEdgeuse->GetEdge()->IsLamina();
 
@@ -2302,7 +2312,8 @@ static ULONG lDebugCount = 0 ;
     } // end when extending convex edges
 
   // Make sure sector being offset is convex otherwise just skip it
-  if(   cpOriginalEdgeuse->GetRadial() == cpOtherOriginalEdgeuse 
+  if(   !bShellTangentGap
+     && cpOriginalEdgeuse->GetRadial() == cpOtherOriginalEdgeuse 
      && !cpOriginalEdgeuse->IsConvexRadialSector(10)) 
     {
       if(   cpOriginalEdgeuse->IsTangentSector(3) 
@@ -2324,13 +2335,11 @@ static ULONG lDebugCount = 0 ;
 
   SmFace *pOrigFace = cpOriginalEdgeuse->GetFace();
   SmFace *pOtherOrigFace = cpOtherOriginalEdgeuse->GetFace();
-  SmTArray<SmFace*> sShellFaces;
-  cpOffsetExecutive->GetShellFaces(sShellFaces);
 
   // when Orig or OtherOrig face is a ShellFace (not offset - just copied)
   // and  we are insetting
-  ULONG lFound;
-  if(   (   sShellFaces.FindElement(pOrigFace,lFound) 
+  if(   !bShellTangentGap
+     && (   sShellFaces.FindElement(pOrigFace,lFound) 
          || sShellFaces.FindElement(pOtherOrigFace,lFound)) 
      && cpOffsetExecutive->GetInset() == TRUE) 
     {

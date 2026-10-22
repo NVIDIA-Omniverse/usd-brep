@@ -4913,6 +4913,9 @@ USAGE NOTES ---
 ***********************************************************************/
 PT_EXPORT SmStatus my_unit_test_suite() 
 {
+  // Run every independent test and retain the first failure in either build mode.
+  SmStatus sResult = SM_SUCCESS;
+
 
 #ifdef SMJAVA
 static int cbiJavaOnly=TRUE;
@@ -4929,141 +4932,143 @@ if ( cbiJavaOnly )
   // SmCurve_test file tests
   {
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Analytic Curves\n"));
-    my_test_analytic_curves() ;
+    PT_RUN(sResult, my_test_analytic_curves());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmTArray\n"));
-    my_test_array();
+    PT_RUN(sResult, my_test_array());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmMap\n"));
-    my_test_map();
+    PT_RUN(sResult, my_test_map());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmObject \n"));
-    my_test_object();
+    PT_RUN(sResult, my_test_object());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmVector2d \n"));
-    my_test_vector2d();
+    PT_RUN(sResult, my_test_vector2d());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmVector3d \n"));
-    my_test_vector3d();
+    PT_RUN(sResult, my_test_vector3d());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmMatrix\n"));
-    my_test_matrix();
+    PT_RUN(sResult, my_test_matrix());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmAxis2Placement \n"));
-    my_test_axis2placement();
+    PT_RUN(sResult, my_test_axis2placement());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmExtent1d\n"));
-    my_test_extent1d();
+    PT_RUN(sResult, my_test_extent1d());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmExtent2d\n"));
-    my_test_extent2d();
+    PT_RUN(sResult, my_test_extent2d());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmExtent3d\n"));
-    my_test_extent3d();
+    PT_RUN(sResult, my_test_extent3d());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmPseudoBox\n"));
-    my_test_pseudobox();
+    PT_RUN(sResult, my_test_pseudobox());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - SmSolutionArray\n"));
-    SER(my_test_solution());
+    PT_RUN(sResult, my_test_solution());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Basic creation\n"));
-    my_test_creation();
+    PT_RUN(sResult, my_test_creation());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - B-Spline Curve Methods\n"));
-    my_test_bsplinecurve();
+    PT_RUN(sResult, my_test_bsplinecurve());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - B-Spline Curve NLib Methods\n"));
-    my_test_bsplinecurve_nlib();
+    PT_RUN(sResult, my_test_bsplinecurve_nlib());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - B-Spline Surface NLib Methods\n"));
-    my_test_bsplinesurface_nlib();
+    PT_RUN(sResult, my_test_bsplinesurface_nlib());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Intersect Analytics\n"));
-    my_test_cci_analy() ;
+    PT_RUN(sResult, my_test_cci_analy());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Intersect Nurb\n"));
-    my_test_cci_nurb();
+    PT_RUN(sResult, my_test_cci_nurb());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Intersect Tolerance\n"));
-    my_test_cci_tol();
+    PT_RUN(sResult, my_test_cci_tol());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Intersect Tangency\n"));
-    my_test_cci_tangent();
+    PT_RUN(sResult, my_test_cci_tangent());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Intersect Coincidence \n"));
-    my_test_cci_coincidence();
+    PT_RUN(sResult, my_test_cci_coincidence());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve Self Intersection\n"));
-    my_test_cci_self();
+    PT_RUN(sResult, my_test_cci_self());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Projected Intersection\n"));
     // GWC: this is one test of a circle/line projected xSect where the projDir == LineTangent.  I don't think the sol is correct.
-    my_test_cci_projection();
+    PT_RUN(sResult, my_test_cci_projection());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Solve Nurb\n"));
-    my_test_cc_nurb();
+    PT_RUN(sResult, my_test_cc_nurb());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Solve Analytic\n"));
-    my_test_cc_analy();
+    PT_RUN(sResult, my_test_cc_analy());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Methods\n"));
-    my_test_methods() ;
+    PT_RUN(sResult, my_test_methods());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Point Nurb\n"));
-    my_test_cp_nurb();
+    PT_RUN(sResult, my_test_cp_nurb());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Point Analytic\n"));
-    my_test_cp_analy();
+    PT_RUN(sResult, my_test_cp_analy());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Test Time\n"));
-    my_test_time();      
+    PT_RUN(sResult, my_test_time());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Test Polynomials\n"));
-    my_test_polynomial();
+    PT_RUN(sResult, my_test_polynomial());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve Properties\n"));
-    my_test_curve_properties();
+    PT_RUN(sResult, my_test_curve_properties());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Angle Minimize\n"));
-    my_test_crv_angle_min();    
+    PT_RUN(sResult, my_test_crv_angle_min());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Directed Maximize\n"));
-    my_test_crv_directed_max();    
+    PT_RUN(sResult, my_test_crv_directed_max());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Directed Minimize\n"));
-    my_test_crv_directed_min();    
+    PT_RUN(sResult, my_test_crv_directed_min());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Projected Maximize\n"));
-    my_test_crv_projected_max(); 
+    PT_RUN(sResult, my_test_crv_projected_max());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Projected Minimize\n"));
-    my_test_crv_projected_min();    
+    PT_RUN(sResult, my_test_crv_projected_min());
        
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Projected Tangency\n"));
-    my_test_crv_projected_tangency();    
+    PT_RUN(sResult, my_test_crv_projected_tangency());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Signed Angle Minimize\n"));
-    my_test_crv_signed_angle_min();        
+    PT_RUN(sResult, my_test_crv_signed_angle_min());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Signed Directed Minimize\n"));
-    my_test_crv_signed_directed_min();      
+    PT_RUN(sResult, my_test_crv_signed_directed_min());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Signed Pivot Minimize\n"));
-    my_test_signed_pivot_min();
+    PT_RUN(sResult, my_test_signed_pivot_min());
 
   } // end SmCurve_test file tests scope
 
   // smsurf_test file tests
   {
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Analytic Surfaces\n"));
-    my_test_analytic_surfaces() ;
+    PT_RUN(sResult, my_test_analytic_surfaces());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - BSpline Surfaces\n"));
-    my_test_bsplinesurface() ;
+    PT_RUN(sResult, my_test_bsplinesurface());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Surface Intersect Analytic\n"));
-    my_test_csi_analy();
+    PT_RUN(sResult, my_test_csi_analy());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Surface Intersect Nurb\n"));
-    my_test_csi_nurb();
+    PT_RUN(sResult, my_test_csi_nurb());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Surface Intersect Tolerance\n"));
-    my_test_csi_tol();
+    PT_RUN(sResult, my_test_csi_tol());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Surface Intersect Tangency\n"));
-    my_test_csi_tangency();
+    PT_RUN(sResult, my_test_csi_tangency());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Surface Intersect Coincidence\n"));
-    my_test_csi_coincidence();
+    PT_RUN(sResult, my_test_csi_coincidence());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Surface Solve Nurb\n"));
-    my_test_cs_nurb();
+    PT_RUN(sResult, my_test_cs_nurb());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Drop Curve onto Surface\n"));
-    SER(my_test_drop_curve());
+    PT_RUN(sResult, my_test_drop_curve());
+    MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - BSpline Surface Component Constructor\n"));
+    PT_RUN(sResult, my_test_bspline_surface_component_ctor());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface/Surface Solve Nurb\n"));
-    my_test_ss_nurb();
+    PT_RUN(sResult, my_test_ss_nurb());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface Methods\n"));
-    my_test_surf_methods() ;
+    PT_RUN(sResult, my_test_surf_methods());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface/Point Solve Nurb\n"));
-    my_test_sp_nurb();
+    PT_RUN(sResult, my_test_sp_nurb());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface/Point Solve Analytic\n"));
-    my_test_sp_analy();
+    PT_RUN(sResult, my_test_sp_analy());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface Suite\n"));
-    my_test_surface_suite() ;
+    PT_RUN(sResult, my_test_surface_suite());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface Sectioning\n"));
-    my_test_section();
+    PT_RUN(sResult, my_test_section());
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Test Projection\n"));
-    my_test_projection() ;
+    PT_RUN(sResult, my_test_projection());
 
   } // end smsurf_test file tests scope
 
   // all done
-  return(SM_SUCCESS) ;
+  return sResult;
 
 } // end my_unit_test_suite

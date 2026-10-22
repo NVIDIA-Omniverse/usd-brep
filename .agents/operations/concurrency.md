@@ -11,7 +11,7 @@
 
 - **The concurrency unit is the process.** Run one worker process per concurrent job. Do **not** call `SmApi*` / `_omni_solid` operations concurrently from multiple threads in one process. A shared-memory WASM worker counts as a thread (see [WASM workers](#wasm-workers)).
   - **Exception:** `SmApiUsdTessellateBrepArray` builds its Breps in a context private to the call and never uses the default context, so it may be called from several threads at once. Do not modify the stage while calls are running.
-  - **Exception:** `SmApiUsdHealFile` heals each BrepArray in its own context the same way, on worker threads of its own (`threads`); it never uses the default context.
+  - **Exception:** `SmApiUsdHealFile` heals each BrepArray in its own context the same way, on worker threads of its own (`threads`); it never uses the default context. `SmApiUsdHealBrepArray` may also be called from several threads while the stage is not modified.
 - **Operations run single-threaded** in the shipped build; scale throughput with more worker processes, not threads.
 - **Keep one long-lived default `SmContext` per worker** across the edit loop. In the shipped build, caches belong to objects; keeping the context alive alone does not preserve caches when those objects are replaced.
 - **Create the context once at startup** (`SmApiCreateContext()`), before spawning threads.

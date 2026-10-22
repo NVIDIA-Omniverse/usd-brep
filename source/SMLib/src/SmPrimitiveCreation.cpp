@@ -639,6 +639,70 @@ SmBoolean bDebugMe = FALSE ;
 } // end SmPrimitiveCreation::CreateCylindricalBox
 
 /*******************************************************************//**
+PURPOSE: Makes a solid in pRegion from a bounded cone or cylinder surface and
+         planar caps at its ends.
+
+NOTES: The Brep takes ownership of pConeSrf, which is deleted on failure.
+***********************************************************************/
+static SmStatus sm_CreateConicSolid
+ (SmRegion * pRegion,      // in : region to contain the solid
+  SmCone   * pConeSrf,     // in : bounded SmCone or SmCylinder
+  double     dBaseRadius,  // in : radius of base
+  double     dTopRadius)   // in : radius of top
+{
+  SmBrep* pBrep = pRegion->GetBrep();
+  const SmContext* cpContext = pBrep->GetContext();
+  SmObjDelete sConeCleanup(pConeSrf);   // free the surface if face creation fails
+
+  SmFace* newFace = NULL;
+  SER(pBrep->CreateFaceFromSurface( (SmSurface*)pConeSrf, pConeSrf->GetNaturalUVDomain(), newFace ));
+  sConeCleanup.Clear();                 // brep now owns the surface
+
+  // Build Caps
+  SmExtent2d sDomain = pConeSrf->GetNaturalUVDomain();
+
+  double dBrepTol = pBrep->GetTolerance();
+
+  // make base face
+  SmFace* pBaseFace = NULL;
+  if( dBaseRadius > dBrepTol ) 
+    {
+      // only make the edge curve for a cap that is built
+      SmBSplineCurve* pBaseEdge = NULL;
+      SER(pConeSrf->CreateIsoParametricCurve(*cpContext, SM_SP_V, sDomain.GetMin().y, 0.0, pBaseEdge));
+      SmTArray <SmCurve*> pCurves;
+      pCurves.Add(pBaseEdge);    
+      SER(pBrep->CreatePlanarFaceWith3DCurves(pRegion,     // in : region to contain newFace - not checked
+                                                       //      NULL for infinite region.
+                                          pCurves,     // in : array of planar curves to bound newFace - curves used by NewEdges
+                                          dBrepTol,    // in : 3d Distance for planarity checks
+                                          pBaseFace )); // out: new face
+    }
+
+  // make top face
+  SmFace* pTopFace = NULL;
+  if( dTopRadius > dBrepTol ) 
+    {
+      SmBSplineCurve* pTopEdge = NULL;
+      SER(pConeSrf->CreateIsoParametricCurve(*cpContext, SM_SP_V, sDomain.GetMax().y, 0.0, pTopEdge));
+      SmTArray <SmCurve*> pCurves;
+      pCurves.Add(pTopEdge);     
+      SER(pBrep->CreatePlanarFaceWith3DCurves(pRegion,    // in : region to contain newFace - not checked
+                                                      //      NULL for infinite region.
+                                          pCurves,    // in : array of planar curves to bound newFace - curves used by NewEdges
+                                          dBrepTol,   // in : 3d Distance for planarity checks
+                                          pTopFace )); // out: new face
+    }
+
+  // if any caps then stitch faces together to form solid
+  if( pBaseFace || pTopFace ) {
+      SER(pBrep->StitchAndOrient());
+  }
+
+  return( SM_SUCCESS );
+} // end sm_CreateConicSolid
+
+/*******************************************************************//**
 PURPOSE: Creates a conic solid in the given region of the Brep.
             
 NOTES: See SmPrimitiveCreation::CreateCone
@@ -661,63 +725,46 @@ SmStatus SmPrimitiveCreation::CreateCone
   SmCone* pConeSrf = NULL;
   SER(SmCone::CreateCanonical( *cpContext, rRefFrame, dBaseRadius, dTopRadius, dHeight, pConeSrf ));
   NER(pConeSrf);
-  SmObjDelete sConeCleanup(pConeSrf);   // free the surface if face creation fails
 
-  SmFace* newFace = NULL;
-  SER(pBrep->CreateFaceFromSurface( (SmSurface*)pConeSrf, pConeSrf->GetNaturalUVDomain(), newFace ));
-  sConeCleanup.Clear();                 // brep now owns the surface
+  return sm_CreateConicSolid(m_pRegion, pConeSrf, dBaseRadius, dTopRadius);
+} // end SmPrimitiveCreation::CreateCone
 
-  // Build Caps
-  SmExtent2d sDomain = pConeSrf->GetNaturalUVDomain();
+/*******************************************************************//**
+PURPOSE: Creates a solid cylinder in the given region of the Brep.
 
-  SmBSplineCurve* pBaseEdge = NULL;
-  SER(pConeSrf->CreateIsoParametricCurve(*cpContext, 
-                                     SM_SP_V, 
-                                     sDomain.GetMin().y, 
-                                     0.0, 
-                                     pBaseEdge ));
-  SmBSplineCurve* pTopEdge = NULL;
-  SER(pConeSrf->CreateIsoParametricCurve(*cpContext, 
-                                      SM_SP_V, 
-                                      sDomain.GetMax().y, 
-                                      0.0, 
-                                      pTopEdge ));
- 
-  double dBrepTol = pBrep->GetTolerance();
+NOTES: The base is centred on the frame origin and the axis is its Z axis.
+***********************************************************************/
+SmStatus SmPrimitiveCreation::CreateCylinder
+ (double                   dHeight,        // in : height of result
+  double                   dRadius,        // in : radius of result
+  const SmAxis2Placement & rRefFrame)      // in : position and orientation of result
+{
+  // empty entity maps - m_vMapToSame, m_vMapToHigher, m_vMapFromSame, and m_vMapFromLower
+  InitEntityMaps();
 
-  // make base face
-  SmFace* pBaseFace = NULL;
-  if( dBaseRadius > dBrepTol ) 
-    {
-      SmTArray <SmCurve*> pCurves;
-      pCurves.Add(pBaseEdge);    
-      SER(pBrep->CreatePlanarFaceWith3DCurves(m_pRegion,   // in : region to contain newFace - not checked
-                                                       //      NULL for infinite region.
-                                          pCurves,     // in : array of planar curves to bound newFace - curves used by NewEdges
-                                          dBrepTol,    // in : 3d Distance for planarity checks
-                                          pBaseFace )); // out: new face
-    }
-
-  // make top face
-  SmFace* pTopFace = NULL;
-  if( dTopRadius > dBrepTol ) 
-    {
-      SmTArray <SmCurve*> pCurves;
-      pCurves.Add(pTopEdge);     
-      SER(pBrep->CreatePlanarFaceWith3DCurves(m_pRegion,  // in : region to contain newFace - not checked
-                                                      //      NULL for infinite region.
-                                          pCurves,    // in : array of planar curves to bound newFace - curves used by NewEdges
-                                          dBrepTol,   // in : 3d Distance for planarity checks
-                                          pTopFace )); // out: new face
-    }
-
-  // if any caps then stitch faces together to form solid
-  if( pBaseFace || pTopFace ) {
-      SER(pBrep->StitchAndOrient());
+  if (dHeight < SM_EFF_ZERO) {
+      SER(SM_ERR);
   }
 
+  SmBrep* pBrep = m_pRegion->GetBrep();
+  pBrep->m_bEditingEnabled = TRUE;
+
+  // CreateCanonical makes an infinite cylinder; bound it to v in [0, dHeight]
+  SmCylinder* pCylinder = NULL;
+  SER(SmCylinder::CreateCanonical( *pBrep->GetContext(), rRefFrame, dRadius, pCylinder ));
+  NER(pCylinder);
+  SmExtent2d sDomain;
+  sDomain.SetMinMax(0.0, 0.0, 360.0, dHeight);
+  if (pCylinder->AdjustSTEPUVDomain(sDomain) != SM_SUCCESS) {
+      delete pCylinder;
+      SER(SM_ERR);
+  }
+
+  SER(sm_CreateConicSolid(m_pRegion, pCylinder, dRadius, dRadius));
+
+  pBrep->m_bEditingEnabled = FALSE;
   return( SM_SUCCESS );
-} // end SmPrimitiveCreation::CreateCone
+} // end SmPrimitiveCreation::CreateCylinder
 
 /*******************************************************************//**
 PURPOSE: Creates a conic solid in the given region of the Brep.
@@ -1157,7 +1204,6 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
     SmBrep* pBrep = m_pRegion->GetBrep();
     const SmContext* pContext = pBrep->GetContext();
     double dTol = pBrep->GetTolerance();
-    SmExtent2d sAnalDomain(0.0, 0.0, 1.0, dSweepDist);
     SmSurface* pExtSurface = NULL;
 
     SmTemporaryChangeValue<SmBoolean> sDoingBool(SM_CONST_CAST(SmContext*, pContext)->GetDoingBooleanRef(), TRUE);
@@ -1193,6 +1239,17 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
     // and clearing it if we make end caps.
 
     SmObjsDelete<SmCurve*> sCleanInputCurves(&cr3DCurves);
+
+    // Every surface and the end cap use this unit direction and a positive
+    // length, so they meet. A negative distance sweeps against crSweepVec.
+    SmVector3d sSweepDir(crSweepVec);
+    SER(sSweepDir.Unitize());
+    if (dSweepDist < 0.0)
+    {
+        sSweepDir *= -1.0;
+        dSweepDist = -dSweepDist;
+    }
+    SmExtent2d sAnalDomain(0.0, 0.0, 1.0, dSweepDist);
 
 
 #ifdef SM_DEBUG_CODE
@@ -1269,9 +1326,9 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             // SMLib requires that SmPlanes be a rectangle
             // Therefore, we check for an orthogonal sweep vector
             // Use the same criterion that is used in the SmPlane constructor:
-            if (smos_Fabs(sLineVector.Dot(crSweepVec)) < SM_EFF_ZERO)
+            if (smos_Fabs(sLineVector.Dot(sSweepDir)) < SM_EFF_ZERO)
             {
-                SmPlane* pPlane = new (*pContext) SmPlane(startPt, sLineVector, crSweepVec, sScale, sDomain);
+                SmPlane* pPlane = new (*pContext) SmPlane(startPt, sLineVector, sSweepDir, sScale, sDomain);
                 if (pPlane != NULL)
                 {
                     pExtSurface = (SmSurface*)pPlane;
@@ -1288,10 +1345,13 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             if (dSweepAngleDeg < 360.0 + dTol && dSweepAngleDeg > 360.0 - dTol)
             {
                 SmVector3d zAxis = sFrame.GetZAxis();
-                if (zAxis.IsParallelTo(crSweepVec, 0.5))
+                // A right cylinder only fits if the cap, translated along
+                // sSweepDir, is within tolerance of its far edge.
+                double dCapOffset = dSweepDist * (zAxis * sSweepDir).Length();
+                if (dCapOffset <= dTol)
                 {
                     // If parallel, we still must check if it is opposite
-                    if (crSweepVec.Dot(zAxis) < 0.0)
+                    if (sSweepDir.Dot(zAxis) < 0.0)
                     {
                         sFrame.RotateAboutAxisAtPoint(180 * NL_PI / 180, sFrame.GetOrigin(), sFrame.GetXAxis());
                     }
@@ -1322,7 +1382,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
             SmBSplineCurve* pBSplCopy = SM_CAST_PTR(SmBSplineCurve, pCrvCopy);
             NER(pBSplCopy);
 
-            eStat = SmSurfOfExtrusion::CreateCanonical(*pContext, pBSplCopy, crSweepVec, pSrfExt);
+            eStat = SmSurfOfExtrusion::CreateCanonical(*pContext, pBSplCopy, sSweepDir, pSrfExt);
 
             if (pSrfExt != NULL && eStat == SM_SUCCESS)
             {
@@ -1410,9 +1470,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep(SmTArray<SmCurve*>& cr3DCurves, 
         // does it make sense to simply copy and translate the first cap?
 
         // build sweep transform into an SmAxis2Placement object
-        SmVector3d sExtrudeVector(crSweepVec.x, crSweepVec.y, crSweepVec.z);
-        sExtrudeVector.Unitize();
-        sExtrudeVector = sExtrudeVector * dSweepDist;
+        SmVector3d sExtrudeVector = sSweepDir * dSweepDist;
         SmAxis2Placement sTranslate(SmVector3d(0, 0, 0), SmVector3d(1, 0, 0), SmVector3d(0, 1, 0));
         sTranslate.Translate(sExtrudeVector);
         SmTArray<SmCurve*> sEndCurves;
@@ -1788,14 +1846,14 @@ NOTES:
 
    Curve endpoints must have exactly one match (within tolerance of Brep).
 
-   If bCapEnds is set, repetitions need to be 1 (not implemented otherwise).
+   If bCapEnds is set, repetitions must be at least 1; the first and last profiles are capped.
 
    If the Curves do not form closed loops, the capping will fail.
 ***********************************************************************/
 SmStatus SmPrimitiveCreation::CreateLinearSweep
  (SmTArray < SmCurve*> & cr3DCurves,      // in : Must be coplanar - (consumed)
-  const SmVector3d     & crSweepVec,      // in : The sweep vector
-  double                 dSweepDist,      // in : Sweep = SweepDist * SweepVec
+  const SmVector3d     & crSweepVec,      // in : The sweep direction (non-zero; magnitude ignored)
+  double                 dSweepDist,      // in : Sweep = SweepDist * unit(SweepVec)
   ULONG                  nRepetitions,    // in : Number of end to end sweeps
   SmBoolean              bCapEnds,        // in : TRUE = build end caps 
   SmBoolean              bTestContinuity) // in : TRUE = split input curves at C1 discontinuties
@@ -1805,7 +1863,7 @@ SmStatus SmPrimitiveCreation::CreateLinearSweep
   InitEntityMaps();
 
   // See condition in usage notes:
-  if (bCapEnds && nRepetitions != 1) 
+  if (bCapEnds && nRepetitions == 0) 
     { SER(SM_ERR); }
   
   // local context, brep, region, and tolerance values
@@ -1926,13 +1984,8 @@ SmBoolean bDebugMe = FALSE ;
   if ( dSweepDist == 0.0 )
     { return SM_SUCCESS; }
   
-  // make sure sEdges is set for the planar closed-loop case
-  if ( aFaces.GetSize() != 0 )
-    {
-      SmFace *pBaseFace = aFaces[0];
-      pBaseFace->GetEdges(sEdges); 
-    }
-  else // input curves are not coplanar closed-loop case
+  // without planar faces there is nothing to cap
+  if ( aFaces.GetSize() == 0 )
     {
       bCapEnds = FALSE;
     }
@@ -1952,52 +2005,53 @@ SmBoolean bDebugMe = FALSE ;
     }
 #endif // SM_DEBUG_CODE
   
+  // Each step is dSweepDist along the unit direction; a zero vector is rejected.
+  SmVector3d sSweepDir(crSweepVec);
+  SER(sSweepDir.Unitize());
+
   // sweep locals
-  SmTranslationalSweepGeometry sTSG  ( dSweepDist * crSweepVec, dTol ) ;
+  SmTranslationalSweepGeometry sTSG  ( dSweepDist * sSweepDir, dTol ) ;
   SmTopologySweep              sSweep( sTSG ) ;
 
   sSweep.SetTagging( m_lTagID > 0, m_lTagID ) ; 
   sSweep.SetRepetitions( nRepetitions );
   
-  // when asked and it's possible - build end cap faces
+  // when asked and it's possible - build the end cap: the profile moved by every step
   if ( bCapEnds )
     {
-      sSweep.SetDoStitching( FALSE );
+      SmAxis2Placement sStep;
+      SER( sTSG.GetSweepTransform( sStep ) );
+      SmTArray < SmCurve*> sEndCurves;
+      for ( ULONG ii = 0; ii < cr3DCurves.GetSize(); ii++ )
+        {
+          SmCurve *pEndCurve = NULL;
+          SER( cr3DCurves[ii]->Copy( *pContext, pEndCurve ) );
+          for ( ULONG jj = 0; jj < nRepetitions; jj++ )
+            { pEndCurve->Transform( sStep ); }
+          sEndCurves.Add( pEndCurve );
+        }
+      SmTArray < SmFace*> sEndFaces;
+      SER( pBrep->CreatePlanarFacesWith3DCurves( m_pRegion, sEndCurves, dTol, sEndFaces ) );
+      sSweep.SetDoStitching( TRUE ); // stitch the sides to the caps
+    }
 
-      SER( sSweep.DoSweep( pBrep, 
-                           m_pRegion,
-                          &aFaces,     // in : sweep these faces into solids
-                           NULL, 
-                           NULL, 
-                           NULL, 
-                           NULL, 
-                           NULL ));   // note: increments unlocked mark value
+  SER( sSweep.DoSweep( pBrep, 
+                       m_pRegion,
+                       NULL, 
+                      &sEdges,    // in : sweep these edges into faces
+                       NULL, 
+                       NULL, 
+                       NULL, 
+                       NULL));    // note: increments unlocked mark value
 
-      // Do stitch here to speed things up.
-      SmSweepStitchCallback sStitchCallback( &sSweep );
-      SmStitch sStitch( sStitchCallback, dTol, TRUE, FALSE );
-      sStitch.m_bFastEdgeCompare        = TRUE;
-      sStitch.m_bSplitEdgesWithVertices = FALSE;
-      sStitch.m_bMakingManifoldSolid    = FALSE; // RCLxx TRUE commented out
-      sStitch.m_bDoRegionNesting        = TRUE;
-      //        sStitch.m_bSqueezeSmallEdges = TRUE;
-      double dMaxVGap, dMaxEGap;
-      ULONG lNumStitched, lNumLamina;
-      SER( sStitch.DoStitching( pBrep, NULL, NULL, lNumStitched, lNumLamina, dMaxVGap, dMaxEGap ));
-
-    } // end add end caps branch
-  else // sweep wire edges
-    {  
-      SER( sSweep.DoSweep( pBrep, 
-                           m_pRegion,
-                           NULL, 
-                          &sEdges,    // in : sweep these edges into faces
-                           NULL, 
-                           NULL, 
-                           NULL, 
-                           NULL));    // note: increments unlocked mark value
-
-
+  if ( bCapEnds )
+    {
+      // both caps have the profile's orientation
+      SmBoolean bMaybeNotClosedSolid = FALSE;
+      SER( pBrep->OrientTrimmedSurfaces( TRUE, bMaybeNotClosedSolid, FALSE ));
+    }
+  else
+    {
       // unrelated clean up - we didn't use the tmp faces in aFaces (if any - delete them)
       for(ULONG ii=0; ii < aFaces.GetSize(); ii++)
         {
@@ -2005,13 +2059,8 @@ SmBoolean bDebugMe = FALSE ;
           // TRUE:  Do region nesting: combine regions/shells as appropriate.
           pBrep->DeleteFace( aFaces[ii], FALSE, TRUE );
         }
-    } // end sweep wire edges branch
+    }
   
-  // Another alternative for bCapEnds with repeated sweep might be 
-  // the following:
-  // A cap is created only for the base face and for the last face
-  // Not implemented though, only if requested (quite a few lines of code)
-
   CopyEntityMaps( &sSweep );
   
   pBrep->m_bEditingEnabled = FALSE;
@@ -2105,7 +2154,7 @@ NOTES: If the vertices/edges of the sweep happen to coincide
 ***********************************************************************/
 SmStatus SmPrimitiveCreation::CreateLinearSweep
  (SmTArray<SmFace *> & rFaces,        // in : faces to sweep
-  const SmVector3d   & crSweepVec,    // in : The sweep vector
+  const SmVector3d   & crSweepVec,    // in : The sweep direction (non-zero; magnitude ignored)
   double               dSweepDist,    // in : The sweep distance
   ULONG                nRepetitions,  // in : Number of end to end sweeps
   SmBoolean            bCapEnds)      // in : Cap ends if true
@@ -2151,8 +2200,12 @@ SmBoolean bDebugMe = FALSE ;
     }
 #endif // USE_NEW_ANALYTICS
 
+  // Each step is dSweepDist along the unit direction; a zero vector is rejected.
+  SmVector3d sSweepDir(crSweepVec);
+  SER(sSweepDir.Unitize());
+
   // sweep locals
-  SmTranslationalSweepGeometry sTSG  ( dSweepDist * crSweepVec, dTol );
+  SmTranslationalSweepGeometry sTSG  ( dSweepDist * sSweepDir, dTol );
   SmTopologySweep              sSweep( sTSG );
   
   sSweep.SetTagging( m_lTagID > 0, m_lTagID );

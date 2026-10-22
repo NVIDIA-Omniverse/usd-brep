@@ -29,7 +29,10 @@
 #include <SmAssertArray.h>
 
 #include <atomic>
+#include <algorithm>
+#include <cmath>
 #include <unordered_set>
+#include <vector>
 #include <iterator>
 
 #ifdef SM_USE_TBB
@@ -4115,6 +4118,46 @@ SmStatus SmTess::RemoveTopologicalVertex(SmPolyVertex *pVertexToRemove)
 
 } // end SmTess::RemoveTopologicalVertex
 
+// A loop's PolyEdge start points and their box.
+struct SmLoopPoints
+{
+  std::vector<SmPoint3d> m_sPoints;
+  SmExtent3d             m_sBox;
+};
+
+/*******************************************************************//**
+PURPOSE: pLoop->ContainsPolyLoop() using precomputed points.
+
+NOTES: Repeats ContainsPoint()'s size and box checks without rewalking pLoop.
+***********************************************************************/
+static SmStatus sm_ContainsPolyLoop
+  (const SmPolyLoop      * pLoop,     // in : containing loop candidate
+   const SmLoopPoints    & crLoop,    // in : pLoop's points
+   const SmLoopPoints    & crTest,    // in : test loop's points
+   double                  dTol,      // in : as for ContainsPolyLoop()
+   SmPolyContainmentType & reInside)  // out: as for ContainsPolyLoop()
+{
+  reInside = SM_PCT_UNKNOWN;
+  if (crLoop.m_sPoints.size() <= 2)
+    { return SM_SUCCESS; }
+
+  for (const SmPoint3d & crPoint : crTest.m_sPoints)
+    {
+      SmExtent3d sPointBox(crPoint);
+      sPointBox.ExpandAbsolute(dTol * 10.0);
+      if (sPointBox.AreDisjoint(crLoop.m_sBox))
+        {
+          reInside = SM_PCT_OUTSIDE;
+          return SM_SUCCESS;
+        }
+      SER(pLoop->ContainsPoint(crPoint, reInside, dTol));
+      if (reInside == SM_PCT_INSIDE || reInside == SM_PCT_OUTSIDE)
+        { return SM_SUCCESS; }
+    }
+  return SM_SUCCESS;
+
+} // end sm_ContainsPolyLoop
+
 /*******************************************************************//**
 PURPOSE: Check Polygon Loop nesting.
 
@@ -4136,6 +4179,23 @@ SmStatus SmTess::CheckPolygonNesting
   // no work - no loops
   if (sPolyLoops.GetSize() == 0)
     { return SM_SUCCESS; }
+
+  // Gather loop points once; the first split ends this call.
+  std::vector<SmLoopPoints> sLoopPoints(sPolyLoops.GetSize());
+  if (sPolyLoops.GetSize() > 1)
+    {
+      SM_PTR_ARRAY(sEdges, SmPolyEdge, 256) ; // SmTArray<SmPolyEdge*>
+      for (ii=0; ii<sPolyLoops.GetSize(); ii++)
+        {
+          sPolyLoops[ii]->GetPolyEdges(sEdges);
+          for (jj=0; jj<sEdges.GetSize(); jj++)
+            {
+              SmPoint3d sPoint = sEdges[jj]->GetStartPoint();
+              sLoopPoints[ii].m_sBox.AddPoint3d(sPoint);
+              sLoopPoints[ii].m_sPoints.push_back(sPoint);
+            }
+        }
+    }
 
   // Grab a point of each inner loop and test for it to be
   // inside of outer loop and outside of all inner loops.
@@ -4163,7 +4223,8 @@ SmStatus SmTess::CheckPolygonNesting
 
           //
           SmPolyContainmentType ePCType;
-          SER( sPolyLoops[jj]->ContainsPolyLoop( pLoop, ePCType, pPolygon->GetTolerance() ));
+          SER( sm_ContainsPolyLoop( sPolyLoops[jj], sLoopPoints[jj], sLoopPoints[ii],
+                                    pPolygon->GetTolerance(), ePCType ));
           SmBoolean bInside =   ePCType == SM_PCT_INSIDE
                              || ePCType == SM_PCT_ON_BOUNDARY;
 
@@ -8517,6 +8578,314 @@ void sm_DumpScoreHistory
 } // end sm_DumpScoreHistory
 
 /*******************************************************************//**
+PURPOSE: Append the 3D extent of each PolyEdge in crPolyEdges that is not
+         yet in rBoxes. NULL PolyEdges get an empty extent.
+***********************************************************************/
+static void sm_AddPolyEdgeBoxes
+  (const SmTArray<SmPolyEdge*> & crPolyEdges, // in : PolyEdges
+   SmTArray<SmExtent3d>        & rBoxes)      // i/o: 3D extent of each PolyEdge, same order
+{
+  for (ULONG ii = rBoxes.GetSize(); ii < crPolyEdges.GetSize(); ii++)
+    {
+      SmPolyEdge * pPolyEdge = crPolyEdges[ii];
+      SmExtent3d   sBox;
+      if (pPolyEdge != NULL)
+        {
+          sBox = SmExtent3d(pPolyEdge->GetStartPoint());
+          sBox.AddPoint3d(pPolyEdge->GetCCWPolyEdge()->GetStartPoint());
+        }
+      rBoxes.Add(sBox);
+    }
+} // end sm_AddPolyEdgeBoxes
+
+/*******************************************************************//**
+PURPOSE: The start points of a PolyFace's PolyEdges in an x-y grid, so the
+         PolyEdges near a point can be found without visiting them all.
+
+NOTES: Distances are 3D, computed as in FindClosestPointToLoop(). A cell is
+       skipped only when its x-y distance, never more than the 3D distance,
+       is too large. Non-finite points, and all points when the cell size is
+       unusable, go in a list that every query checks.
+***********************************************************************/
+class SmPolyEdgeGrid
+{
+public:
+  struct Entry
+  {
+    SmPoint3d    m_sPoint;  // the PolyEdge's start point
+    SmPolyEdge * m_pEdge;
+  };
+
+  // replace the contents with all PolyEdges of pPolyFace
+  void Build(const SmPolyFace * pPolyFace)
+  {
+    m_sCells.clear(); m_sOutside.clear(); m_sEdges.clear();
+    SmTArray<SmPolyEdge*> sPolyEdges;
+    pPolyFace->GetPolyEdges(sPolyEdges);
+    double dMinX = SM_BIG_DOUBLE, dMinY = SM_BIG_DOUBLE, dMaxX = -SM_BIG_DOUBLE, dMaxY = -SM_BIG_DOUBLE;
+    for (ULONG ii = 0; ii < sPolyEdges.GetSize(); ii++)
+      {
+        SmPoint3d sPt = sPolyEdges[ii]->GetStartPoint();
+        if (!IsFinite(sPt)) { continue; }
+        dMinX = smos_Min(dMinX, sPt.x); dMaxX = smos_Max(dMaxX, sPt.x);
+        dMinY = smos_Min(dMinY, sPt.y); dMaxY = smos_Max(dMaxY, sPt.y);
+      }
+    // square cells holding about four points each
+    double dWidth  = (dMaxX > dMinX) ? dMaxX - dMinX : 1.0;
+    double dHeight = (dMaxY > dMinY) ? dMaxY - dMinY : 1.0;
+    double dCells  = smos_Max(1.0, sPolyEdges.GetSize() / 4.0);
+    double dSize   = smos_Sqrt(dWidth * dHeight / dCells);
+    m_lNumX = (long)smos_Min(4096.0, smos_Max(1.0, smos_Ceil(dWidth  / dSize)));
+    m_lNumY = (long)smos_Min(4096.0, smos_Max(1.0, smos_Ceil(dHeight / dSize)));
+    m_dX0 = dMinX; m_dY0 = dMinY;
+    m_dCellW = dWidth / m_lNumX; m_dCellH = dHeight / m_lNumY;
+    // denormal or overflowing extents give unusable cells
+    m_bCells = (m_dCellW > 0.0 && m_dCellH > 0.0 && std::isfinite(m_dCellW) && std::isfinite(m_dCellH)) ? TRUE : FALSE;
+    m_sCells.assign((size_t)(m_lNumX * m_lNumY), std::vector<Entry>());
+    for (ULONG ii = 0; ii < sPolyEdges.GetSize(); ii++)
+      { Add(sPolyEdges[ii]); }
+  }
+
+  // add pPolyEdge unless it is already in the grid
+  void Add(SmPolyEdge * pPolyEdge)
+  {
+    if (!m_sEdges.insert(pPolyEdge).second) { return; }
+    Entry sEntry = { pPolyEdge->GetStartPoint(), pPolyEdge };
+    long ix, iy;
+    if (IsFinite(sEntry.m_sPoint) && GetCell(sEntry.m_sPoint, ix, iy))
+      { m_sCells[(size_t)(iy * m_lNumX + ix)].push_back(sEntry); }
+    else
+      { m_sOutside.push_back(sEntry); }
+  }
+
+  ULONG GetSize() const { return (ULONG)m_sEdges.size(); }
+
+  // TRUE when lower bound dLow is larger than dDistSq by more than rounding
+  static SmBoolean IsBeyond(double dLow, double dDistSq)
+    { return dLow * (1.0 - 1.0e-9) > dDistSq; }
+
+  // Smallest squared distance from crCenter to a start point of a PolyEdge not in pPolyLoop.
+  // Returns FALSE when there is none.
+  SmBoolean GetNearestDistanceSquared(const SmPoint3d & crCenter, const SmPolyLoop * pPolyLoop, double & rdDistSq) const
+  {
+    SmBoolean bFound = FALSE;
+    rdDistSq = SM_BIG_DOUBLE;
+    for (const Entry & crEntry : m_sOutside)
+      { Visit(crEntry, crCenter, pPolyLoop, rdDistSq, bFound); }
+    if (!m_bCells || !IsFinite(crCenter)) { return bFound; }
+    // visit square rings of cells around crCenter's cell, nearest first
+    long cx = ClampX(crCenter.x), cy = ClampY(crCenter.y);
+    long lMaxRing = smos_Max(m_lNumX, m_lNumY);
+    for (long r = 0; r <= lMaxRing; r++)
+      {
+        // every cell in a later ring is at least as far as some cell in this one
+        double dRingLow = SM_BIG_DOUBLE;
+        // Step only through the ring's cells inside the grid, so a long, thin grid does not step
+        // through cells outside it. When both ends of the middle rows are outside, only the top
+        // and bottom rows are left.
+        SmBoolean bEndsInGrid = (cx - r >= 0 || cx + r < m_lNumX) ? TRUE : FALSE;
+        long iyStep = bEndsInGrid ? 1 : 2 * r;
+        long iyEnd  = bEndsInGrid ? smos_Min(cy + r, m_lNumY - 1) : cy + r;
+        for (long iy = bEndsInGrid ? smos_Max(cy - r, 0L) : cy - r; iy <= iyEnd; iy += iyStep)
+          {
+            if (iy < 0 || iy >= m_lNumY) { continue; }
+            // the top and bottom rows of the ring are full; other rows have just the two ends
+            SmBoolean bFullRow = (iy == cy - r || iy == cy + r) ? TRUE : FALSE;
+            long lStep = bFullRow ? 1 : 2 * r;
+            long ixEnd = bFullRow ? smos_Min(cx + r, m_lNumX - 1) : cx + r;
+            for (long ix = bFullRow ? smos_Max(cx - r, 0L) : cx - r; ix <= ixEnd; ix += lStep)
+              {
+                if (ix < 0 || ix >= m_lNumX) { continue; }
+                double dLow = CellLowerBound(crCenter, ix, iy);
+                dRingLow = smos_Min(dRingLow, dLow);
+                if (bFound && IsBeyond(dLow, rdDistSq)) { continue; }
+                for (const Entry & crEntry : m_sCells[(size_t)(iy * m_lNumX + ix)])
+                  { Visit(crEntry, crCenter, pPolyLoop, rdDistSq, bFound); }
+              }
+          }
+        if (bFound && IsBeyond(dRingLow, rdDistSq)) { break; }
+      }
+    return bFound;
+  }
+
+  // The entries of PolyEdges not in pPolyLoop whose start point is within squared distance dMaxDistSq of crCenter
+  void GetWithin(const SmPoint3d & crCenter, double dMaxDistSq, const SmPolyLoop * pPolyLoop, std::vector<Entry> & rEntries) const
+  {
+    rEntries.clear();
+    for (const Entry & crEntry : m_sOutside)
+      { AddIfWithin(crEntry, crCenter, dMaxDistSq, pPolyLoop, rEntries); }
+    if (!m_bCells || !IsFinite(crCenter)) { return; }
+    // a slightly larger radius only adds cells to look at
+    double dRadius = smos_Sqrt(dMaxDistSq) * (1.0 + 1.0e-9) + 1.0e-300;
+    long ix0 = ClampX(crCenter.x - dRadius), ix1 = ClampX(crCenter.x + dRadius);
+    long iy0 = ClampY(crCenter.y - dRadius), iy1 = ClampY(crCenter.y + dRadius);
+    for (long iy = iy0; iy <= iy1; iy++)
+      for (long ix = ix0; ix <= ix1; ix++)
+        {
+          if (IsBeyond(CellLowerBound(crCenter, ix, iy), dMaxDistSq)) { continue; }
+          for (const Entry & crEntry : m_sCells[(size_t)(iy * m_lNumX + ix)])
+            { AddIfWithin(crEntry, crCenter, dMaxDistSq, pPolyLoop, rEntries); }
+        }
+  }
+
+private:
+  static SmBoolean IsFinite(const SmPoint3d & crPt)
+    { return std::isfinite(crPt.x) && std::isfinite(crPt.y) && std::isfinite(crPt.z); }
+
+  // cell index of v along one axis, not clamped to the grid
+  static double CellIndex(double v, double dOrigin, double dCellSize)
+    { return smos_Floor((v - dOrigin) / dCellSize); }
+
+  long ClampX(double x) const
+    { return (long)smos_Min((double)(m_lNumX - 1), smos_Max(0.0, CellIndex(x, m_dX0, m_dCellW))); }
+  long ClampY(double y) const
+    { return (long)smos_Min((double)(m_lNumY - 1), smos_Max(0.0, CellIndex(y, m_dY0, m_dCellH))); }
+
+  // the cell holding crPt; FALSE when crPt goes in m_sOutside
+  SmBoolean GetCell(const SmPoint3d & crPt, long & rix, long & riy) const
+  {
+    if (!m_bCells) { return FALSE; }
+    double dx = CellIndex(crPt.x, m_dX0, m_dCellW), dy = CellIndex(crPt.y, m_dY0, m_dCellH);
+    if (dx < 0.0 || dy < 0.0 || dx >= (double)m_lNumX || dy >= (double)m_lNumY) { return FALSE; }
+    // the point must also lie inside the cell's rectangle, or CellLowerBound() would not be a lower bound
+    rix = (long)dx; riy = (long)dy;
+    double dCellX0 = m_dX0 + rix * m_dCellW, dCellY0 = m_dY0 + riy * m_dCellH;
+    return (crPt.x >= dCellX0 && crPt.x <= dCellX0 + m_dCellW && crPt.y >= dCellY0 && crPt.y <= dCellY0 + m_dCellH) ? TRUE : FALSE;
+  }
+
+  // squared x-y distance from crPt to the rectangle of cell (ix, iy)
+  double CellLowerBound(const SmPoint3d & crPt, long ix, long iy) const
+  {
+    double dCellX0 = m_dX0 + ix * m_dCellW, dCellY0 = m_dY0 + iy * m_dCellH;
+    double dx = (crPt.x < dCellX0) ? dCellX0 - crPt.x : (crPt.x > dCellX0 + m_dCellW) ? crPt.x - (dCellX0 + m_dCellW) : 0.0;
+    double dy = (crPt.y < dCellY0) ? dCellY0 - crPt.y : (crPt.y > dCellY0 + m_dCellH) ? crPt.y - (dCellY0 + m_dCellH) : 0.0;
+    return dx * dx + dy * dy;
+  }
+
+  static void Visit(const Entry & crEntry, const SmPoint3d & crCenter, const SmPolyLoop * pPolyLoop, double & rdBest, SmBoolean & rbFound)
+  {
+    double dDistSq = crCenter.DistanceBetweenSquared(crEntry.m_sPoint);
+    if (dDistSq < rdBest && crEntry.m_pEdge->GetPolyLoop() != pPolyLoop) { rdBest = dDistSq; rbFound = TRUE; }
+  }
+
+  static void AddIfWithin(const Entry & crEntry, const SmPoint3d & crCenter, double dMaxDistSq, const SmPolyLoop * pPolyLoop, std::vector<Entry> & rEntries)
+  {
+    if (crCenter.DistanceBetweenSquared(crEntry.m_sPoint) <= dMaxDistSq && crEntry.m_pEdge->GetPolyLoop() != pPolyLoop)
+      { rEntries.push_back(crEntry); }
+  }
+
+  SmBoolean m_bCells = TRUE;
+  long   m_lNumX = 1, m_lNumY = 1;
+  double m_dX0 = 0.0, m_dY0 = 0.0, m_dCellW = 1.0, m_dCellH = 1.0;
+  std::vector<std::vector<Entry>> m_sCells;
+  std::vector<Entry>              m_sOutside;
+  std::unordered_set<SmPolyEdge*> m_sEdges;
+};
+
+/*******************************************************************//**
+PURPOSE: Find the vertex pair FindClosestPointToLoop() would use to connect
+         pPolyLoop to the rest of pPolyFace, using crGrid instead of visiting
+         every PolyEdge of the face.
+
+NOTES: Returns FALSE, and the caller then runs FindClosestPointToLoop(),
+       unless the pair is certain to be the same. FindClosestPointToLoop()
+       breaks ties by PolyEdge order, which the grid does not keep, so a tie
+       returns FALSE; so do a pair FindClosestPointToLoop() would skip and a
+       pair whose segment crosses an edge. The PolyEdges returned still need
+       SmPolyFace::FindLoopConnectionSectors().
+***********************************************************************/
+static SmBoolean sm_FindLoopConnectionByGrid
+  (const SmPolyFace           * pPolyFace,          // in : PolyFace being triangulated
+   SmPolyLoop                 * pPolyLoop,          // in : inner loop to connect
+   const SmPolyEdgeGrid       & crGrid,             // in : start points of all PolyEdges of pPolyFace
+   SmTArray<SmPolyEdge*>      * pNonDegenPolyEdges, // in : as passed to FindClosestPointToLoop()
+   const SmTArray<SmExtent3d> * pNonDegenEdgeBoxes, // in : as passed to FindClosestPointToLoop()
+   SmPolyEdge                *& rpPolyLoopEdge,     // out: PolyEdge of pPolyLoop at the pair's loop vertex
+   SmPolyEdge                *& rpOtherPolyEdge)    // out: PolyEdge at the pair's other vertex
+{
+  rpPolyLoopEdge = rpOtherPolyEdge = NULL;
+
+  // the loop's box and bounding sphere, as in FindClosestPointToLoop()
+  SM_PTR_ARRAY(sPolyLoopEdges, SmPolyEdge, 256); // SmTArray<SmPolyEdge *>
+  pPolyLoop->GetPolyEdges(sPolyLoopEdges);
+  SmExtent3d sLoopBBox;
+  for (ULONG ii = 0; ii < sPolyLoopEdges.GetSize(); ii++)
+    {
+      SmPoint3d sStartPoint = sPolyLoopEdges[ii]->GetStartPoint();
+      sLoopBBox.AddPoint3d(sStartPoint);
+    }
+  if (sPolyLoopEdges.GetSize() == 1)
+    { sLoopBBox.ExpandRelative(0.0001); }
+  SmPoint3d sLoopSphCenter;
+  double    dLoopSphRadius;
+  sLoopBBox.ComputeSphereBound(sLoopSphCenter, dLoopSphRadius);
+
+  // the close PolyEdges, chosen as in FindClosestPointToLoop()
+  double dMinDist;
+  if (!crGrid.GetNearestDistanceSquared(sLoopSphCenter, pPolyLoop, dMinDist))
+    { return FALSE; }
+  std::vector<SmPolyEdgeGrid::Entry> sClose;
+  crGrid.GetWithin(sLoopSphCenter, dMinDist + 4.0 * dLoopSphRadius * dLoopSphRadius, pPolyLoop, sClose);
+
+  // sort them by distance to the loop's box, a lower bound on their distance to any loop vertex,
+  // so the search below can stop early
+  std::vector<std::pair<double, size_t>> sByBoxDist(sClose.size());
+  for (size_t jj = 0; jj < sClose.size(); jj++)
+    {
+      SmExtent3d sVBBox(sClose[jj].m_sPoint, sClose[jj].m_sPoint);
+      sByBoxDist[jj] = std::make_pair(sLoopBBox.MinimumDistanceSquared(sVBBox), jj);
+    }
+  std::sort(sByBoxDist.begin(), sByBoxDist.end());
+
+  // the closest pair, and how many close PolyEdges are at that distance from the first loop vertex
+  // to reach it; FindClosestPointToLoop() takes the first of those in its own order, so there must be one
+  double       dMinDistSq       = SM_BIG_DOUBLE;
+  ULONG        lNumAtMin        = 0;
+  SmPolyEdge * pMinPolyLoopEdge = NULL;
+  size_t       lMinClose        = 0;
+  for (ULONG ii = 0; ii < sPolyLoopEdges.GetSize(); ii++)
+    {
+      SmPoint3d sPLE_Pnt = sPolyLoopEdges[ii]->GetStartPoint();
+      for (size_t kk = 0; kk < sByBoxDist.size() && !SmPolyEdgeGrid::IsBeyond(sByBoxDist[kk].first, dMinDistSq); kk++)
+        {
+          double dDistSq = sClose[sByBoxDist[kk].second].m_sPoint.DistanceBetweenSquared(sPLE_Pnt);
+          if (dDistSq < dMinDistSq)
+            { dMinDistSq = dDistSq; lNumAtMin = 0; pMinPolyLoopEdge = NULL; }
+          else if (!(dDistSq >= dMinDistSq))
+            { return FALSE; } // NaN
+          if (dDistSq == dMinDistSq && (pMinPolyLoopEdge == NULL || pMinPolyLoopEdge == sPolyLoopEdges[ii]))
+            {
+              lNumAtMin++;
+              pMinPolyLoopEdge = sPolyLoopEdges[ii];
+              lMinClose        = sByBoxDist[kk].second;
+            }
+        }
+    }
+  if (lNumAtMin != 1)
+    { return FALSE; }
+
+  // FindClosestPointToLoop() skips a close PolyEdge whose box distance is more than the smallest distance
+  SmExtent3d sVBBox(sClose[lMinClose].m_sPoint, sClose[lMinClose].m_sPoint);
+  if (!(sLoopBBox.MinimumDistanceSquared(sVBBox) <= dMinDistSq))
+    { return FALSE; }
+
+  // the segment between the pair must not cross an edge
+  SM_PTR_ARRAY(sXSectPolyEdges, SmPolyEdge, 32); // SmTArray<SmPolyEdge *>
+  SM_OBJ_ARRAY(sXSectPoints,    SmPoint3d,  32); // SmTArray<SmPoint3d>
+  if (   pPolyFace->IntersectSegment(pMinPolyLoopEdge->GetStartPoint(),
+                                     sClose[lMinClose].m_pEdge->GetStartPoint(),
+                                     pPolyFace->GetTolerance() / 1000.0, sXSectPoints, sXSectPolyEdges, NULL,
+                                     pNonDegenPolyEdges, pNonDegenEdgeBoxes) != SM_SUCCESS
+      || sXSectPolyEdges.GetSize() != 0)
+    { return FALSE; }
+
+  rpPolyLoopEdge  = pMinPolyLoopEdge;
+  rpOtherPolyEdge = sClose[lMinClose].m_pEdge;
+  return TRUE;
+
+} // end sm_FindLoopConnectionByGrid
+
+/*******************************************************************//**
 PURPOSE: Triangulate a general pPolyFace polygon by inserting a sequence
   of new PolyEdges into the PolyFace->PolyBrep until the original
   PolyFace polygon is split into a set of triangular PolyFace polygons.
@@ -8633,8 +9002,21 @@ SmStatus SmTess::TriangulateSingleFace
       SmPolyLoop * pNewPolyLoop  = NULL ;
       SmPolyFace * pNewPolyFace  = NULL ;
 
+      // 3D extent of each sNonDegenPolyEdges edge. Connecting loops only adds edges,
+      // so existing extents stay valid.
       SmTArray<SmPolyEdge*> sNonDegenPolyEdges;
+      SmTArray<SmExtent3d>  sNonDegenEdgeBoxes;
       pPolyFace->GetNonDegeneratePolyEdges(sNonDegenPolyEdges);
+      sm_AddPolyEdgeBoxes(sNonDegenPolyEdges, sNonDegenEdgeBoxes);
+
+      // with many loops, find each connection through a grid of PolyEdge start points
+      constexpr ULONG lMinLoopsForGrid = 16;
+      const SmBoolean bUseGrid = (sPolyLoops.GetSize() >= lMinLoopsForGrid) ? TRUE : FALSE;
+      SmPolyEdgeGrid  sEdgeGrid;
+      SM_PTR_ARRAY(sConnectedVertices, SmPolyVertex, 16); // SmTArray<SmPolyVertex *>
+      SM_PTR_ARRAY(sVertexPolyEdges,   SmPolyEdge,   16); // SmTArray<SmPolyEdge *>
+      if (bUseGrid)
+        { sEdgeGrid.Build(pPolyFace); }
 
       // while pPolyFace has inner loops
       while ( sPolyLoops.GetSize() > 1 )
@@ -8644,8 +9026,10 @@ SmStatus SmTess::TriangulateSingleFace
           SmPolyLoop * pInnerLoop = NULL;
           ULONG        lMinEdges  = SM_BIG_ULONG;
           ULONG lNumLoops = sPolyLoops.GetSize();
+          ULONG lNumFaceEdges = sPolyLoops[0]->GetSize();
           for ( ii=1; ii<lNumLoops; ii++ )
             {
+              lNumFaceEdges += sPolyLoops[ii]->GetSize();
               if (sPolyLoops[ii]->GetSize() < lMinEdges)
                 {
                   pInnerLoop = sPolyLoops[ii];
@@ -8653,10 +9037,20 @@ SmStatus SmTess::TriangulateSingleFace
                 }
             } // end iter PolyLoops finding smallest loop
 
+          // rebuild the grid when it no longer holds exactly the face's PolyEdges
+          if ( bUseGrid && sEdgeGrid.GetSize() != lNumFaceEdges )
+            { sEdgeGrid.Build(pPolyFace); }
+
           // find PolyFace->OtherPolyLoopEdge with start-pt closest to any input pPolyLoop->PolyEdges
           SmPolyEdge * pPolyLoopEdge = NULL ;
           SmPolyEdge * pPolyFaceEdge = NULL;
-          SmStatus eStat = pPolyFace->FindClosestPointToLoop(pInnerLoop, // in : PolyLoop to check
+          SmStatus eStat;
+          if ( bUseGrid
+               && sm_FindLoopConnectionByGrid(pPolyFace, pInnerLoop, sEdgeGrid, &sNonDegenPolyEdges, &sNonDegenEdgeBoxes,
+                                              pPolyLoopEdge, pPolyFaceEdge) )
+            { eStat = pPolyFace->FindLoopConnectionSectors(pPolyLoopEdge, pPolyFaceEdge); }
+          else
+            eStat = pPolyFace->FindClosestPointToLoop(pInnerLoop, // in : PolyLoop to check
                                                              NULL, // in : NotNull = Find closest point to just this
                                                                    // PolyLoopEdge,
                                                                    //      NULL    = Find closest point to any
@@ -8665,7 +9059,8 @@ SmStatus SmTess::TriangulateSingleFace
                                                                             // NeighborLoopEdge
                                                              pPolyFaceEdge, // out: NeighborLoop->PolyEdge with start-pt
                                                                             // closest to PolyLoopEdge
-                                                             &sNonDegenPolyEdges);
+                                                             &sNonDegenPolyEdges,
+                                                             &sNonDegenEdgeBoxes);
 
           if ( eStat != SM_SUCCESS ) // [B434]
           {
@@ -8678,6 +9073,8 @@ SmStatus SmTess::TriangulateSingleFace
                   if (sPolyLoops.GetSize() > 1) 
                   {
                       pPolyFace->GetNonDegeneratePolyEdges(sNonDegenPolyEdges);
+                      sNonDegenEdgeBoxes.ReSet();
+                      sm_AddPolyEdgeBoxes(sNonDegenPolyEdges, sNonDegenEdgeBoxes);
                   }
                 }
               else
@@ -8708,6 +9105,11 @@ SmStatus SmTess::TriangulateSingleFace
 
           if(pPolyFaceEdge->GetStartPolyVertex()->IsSingleVertexLoop())
             { sSingleVertices.Add(pPolyFaceEdge->GetStartPolyVertex()) ; }
+
+          // the new PolyEdges will start at these two vertices or at subdivision vertices
+          sConnectedVertices.ReSet();
+          sConnectedVertices.Add(pPolyLoopEdge->GetStartPolyVertex());
+          sConnectedVertices.Add(pPolyFaceEdge->GetStartPolyVertex());
 
           // Now connect the loops with a manifold PolyEdge pair between their closest vertices.
           SER( pPolyFace->GetPolyBrep()->MakeEdgeInFace
@@ -8748,11 +9150,25 @@ SmStatus SmTess::TriangulateSingleFace
                                           TRUE,
                                           sNewPolyEdgesFromSubdivision));
               sNonDegenPolyEdges.Append(sNewPolyEdgesFromSubdivision);
+              for ( ii=0; ii<sNewPolyEdgesFromSubdivision.GetSize(); ii++ )
+                { sConnectedVertices.Add(sNewPolyEdgesFromSubdivision[ii]->GetStartPolyVertex()); }
           }
           else
           {
               sNonDegenPolyEdges.Add(pNewPolyEdge);
           }
+          sm_AddPolyEdgeBoxes(sNonDegenPolyEdges, sNonDegenEdgeBoxes);
+
+          // add the new PolyEdges to the grid
+          if ( bUseGrid )
+            {
+              for ( ii=0; ii<sConnectedVertices.GetSize(); ii++ )
+                {
+                  sConnectedVertices[ii]->GetPolyEdgesOfFace(pPolyFace, sVertexPolyEdges);
+                  for ( ULONG kk=0; kk<sVertexPolyEdges.GetSize(); kk++ )
+                    { sEdgeGrid.Add(sVertexPolyEdges[kk]); }
+                }
+            }
 
         } // end while pPolyFace has inner loops
 
@@ -9241,6 +9657,11 @@ label_TryAgain:
       {
           SmBoolean bRescored = FALSE;
 
+          // When the best corner's score was stored from an earlier iteration and no corner has been
+          // rescored before it in this scan, its triangle is checked again for inside vertices.
+          // Only the final best corner's result is used, so that check is done once, after the scan.
+          SmBoolean bCheckBestInsideVertex = FALSE;
+
           // for every PolyEdge->StartPt - score neighbor PolyVertex pairs to find next SplitPolyEdge optimal EndPts
           for (ii = 0; ii < lNumEdges; ii++)
           {
@@ -9516,47 +9937,35 @@ label_TryAgain:
                                             //  + 1000 * lNumSplitsToBeLinear
                   lBestScoreEdge = ii;
                   dBestChordDist = sChordDist[ii];
-                  if (!bRescored)
-                  {
-                      pVCW_Edge = sPolyFaceEdges[((ii + lNumEdges) - 1) % lNumEdges];
-                      pVCCW_Edge = sPolyFaceEdges[(ii + 1) % lNumEdges];
-
-                      SER(pPolyFace->FindInsideVertices(
-                          pV0Edge, // in : V0 of Tri[P0=V0->StartPt, P1=V1->StartPt,
-                                   // P2=V2->StartPt]
-                          pVCCW_Edge, // in : V1 of Tri[P0=V0->StartPt, P1=V1->StartPt,
-                                      // P2=V2->StartPt]
-                          pVCW_Edge, // in : V2 of Tri[P0=V0->StartPt, P1=V1->StartPt,
-                                     // P2=V2->StartPt]
-                          rpVertexTree, // in : vertex spatial tree, can narrow search if
-                                        // present
-                          sInsidePolyVerts, // out: PolyEdges with inside StartPts in
-                                            // Tri[P0,P1,P2]
-                          pVertexClosestToV0VCCW, // out: PolyEdge  with inside StartPt
-                                                  // closest to PEdge[P0,P1], NULL for none
-                          /* GWC needs work */ sInsidePolyVerts_3d, // out: PolyEdges with
-                                                                    // inside StartPts
-                                                                    // Tri[pOrigSurf(P0,P1,P2)]
-                          /* GWC needs work */ pVertexClosestToV0VCCW_3d, // out: PolyEdge
-                                                                          // with inside
-                                                                          // StartPt closest
-                                                                          // to
-                                                                          // PEdge[pOrigSurf(P0,P1)],
-                                                                          // NULL for none
-                          sScoreParameters[lActParameters].bInsideVertsIn3d, // in : TRUE=Do
-                                                                             // 3D tests, load
-                                                                             // xx_3d outputs,
-                                                                             // FALSE=Skip 3D
-                                                                             // tests
-                          rMarkLock.GetMarkType())); // in : checks without incrementing
-                                                     // eMarkType Value
-
-                      
-                  }
+                  bCheckBestInsideVertex = !bRescored;
                   pInsideVertexEdge = pVertexClosestToV0VCCW ? pVertexClosestToV0VCCW : pVertexClosestToV0VCCW_3d;
               }
           } // end iter ii, every PolyEdge->StartPt - scoring neighbor PolyVertex pairs to find next SplitPolyEdge
             // optimal EndPts
+
+          // check the best corner's triangle for inside vertices, when its score was stored (see above)
+          if (bCheckBestInsideVertex)
+          {
+              SmPolyEdge* pBestV0Edge   = sPolyFaceEdges[lBestScoreEdge];
+              SmPolyEdge* pBestVCW_Edge  = sPolyFaceEdges[((lBestScoreEdge + lNumEdges) - 1) % lNumEdges];
+              SmPolyEdge* pBestVCCW_Edge = sPolyFaceEdges[(lBestScoreEdge + 1) % lNumEdges];
+              SmPolyEdge* pBestClosest    = NULL;
+              SmPolyEdge* pBestClosest_3d = NULL;
+
+              SER(pPolyFace->FindInsideVertices(
+                  pBestV0Edge,     // in : V0 of Tri[P0=V0->StartPt, P1=V1->StartPt, P2=V2->StartPt]
+                  pBestVCCW_Edge,  // in : V1 of Tri[P0=V0->StartPt, P1=V1->StartPt, P2=V2->StartPt]
+                  pBestVCW_Edge,   // in : V2 of Tri[P0=V0->StartPt, P1=V1->StartPt, P2=V2->StartPt]
+                  rpVertexTree,    // in : vertex spatial tree, can narrow search if present
+                  sInsidePolyVerts,    // out: PolyEdges with inside StartPts in Tri[P0,P1,P2]
+                  pBestClosest,        // out: PolyEdge  with inside StartPt closest to PEdge[P0,P1], NULL for none
+                  sInsidePolyVerts_3d, // out: PolyEdges with inside StartPts Tri[pOrigSurf(P0,P1,P2)]
+                  pBestClosest_3d,     // out: PolyEdge  with inside StartPt closest to PEdge[pOrigSurf(P0,P1)], NULL for none
+                  sScoreParameters[lActParameters].bInsideVertsIn3d, // in : TRUE=Do 3D tests, FALSE=Skip 3D tests
+                  rMarkLock.GetMarkType()));                          // in : checks without incrementing eMarkType Value
+
+              pInsideVertexEdge = pBestClosest ? pBestClosest : pBestClosest_3d;
+          }
       
           // score == (bInsideVertices) ? BAD_SCORE
           //           :  ((!IsConvex2D || !IsConvex3D) ? BAD_SCORE : 0)

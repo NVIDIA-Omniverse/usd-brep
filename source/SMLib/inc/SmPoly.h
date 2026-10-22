@@ -1257,9 +1257,18 @@ public:
                                                           ///<      : NULL    = Find closest point to any PolyLoopEdge                <br>
     SmPolyEdge *& rpLoopEdge,                             ///< [out]: PolyLoopEdge closest to NeighborLoopEdge                        <br>
     SmPolyEdge *& rpOtherLoopEdge,                        ///< [out]: NeighborLoop->PolyEdge with start-pt closest to PolyLoopEdge    <br>
-    SmTArray<SmPolyEdge*> * pOptNonDegenPolyEdges = NULL  ///< [in] : Optional array of nondegenerate PolyEdges from this face.       <br>
+    SmTArray<SmPolyEdge*> * pOptNonDegenPolyEdges = NULL, ///< [in] : Optional array of nondegenerate PolyEdges from this face.       <br>
+                                                          ///<      : NULL to ignore. Default is NULL.                                <br>
+    const SmTArray<SmExtent3d> * pOptNonDegenEdgeBoxes = NULL ///< [in] : Optional 3D extent of each pOptNonDegenPolyEdges edge.   <br>
                                                           ///<      : NULL to ignore. Default is NULL.                                <br>
   ) const; 
+
+  // last step of FindClosestPointToLoop: pick the PolyEdges at the closest vertex pair whose sectors contain the connection
+  SmStatus  FindLoopConnectionSectors
+  (
+    SmPolyEdge *& rpLoopEdge,                             ///< [i/o]: PolyEdge starting at the loop vertex                          <br>
+    SmPolyEdge *& rpOtherLoopEdge                         ///< [i/o]: PolyEdge starting at the other vertex                         <br>
+  ) const;
 
   // get PolyFace vertices in Tri[P0,P1,P2]
   SmStatus FindVerticesInTriangle
@@ -1326,7 +1335,10 @@ public:
     SmTArray<SmPoint3d>   & rIntersections,           ///< [out]: array of all intersection points                   <br>
     SmTArray<SmPolyEdge*> & rIntersectionEdges,       ///< [out]: associated edge for each intersection              <br>
     SmTree                * pOptEdgeTree = NULL,      ///< [in] : optional edge tree to cull intersection candidates <br>
-    SmTArray<SmPolyEdge*> * pOptEdgesToCheck = NULL   ///< [in] : optional array to specify intersection candidates. <br>
+    SmTArray<SmPolyEdge*> * pOptEdgesToCheck = NULL,  ///< [in] : optional array to specify intersection candidates. <br>
+                                                      ///<      : NULL to ignore. Default is NULL                    <br>
+    const SmTArray<SmExtent3d> * pOptEdgeBoxes = NULL ///< [in] : optional 3D extent of each pOptEdgesToCheck edge,   <br>
+                                                      ///<        used to skip far edges quickly.                    <br>
                                                       ///<      : NULL to ignore. Default is NULL                    <br>
   ) const;
 

@@ -138,6 +138,27 @@ class TestUsdBrepHeal(unittest.TestCase):
                 actual[tuple(subset.GetIndicesAttr().Get())] = [str(t) for t in targets]
         self.assertEqual(actual, original)
 
+    def test_vertex_gap_is_healed(self):
+        # Move a corner of the first body 1e-4 off its edges, past the body's tolerance. Healing widens that body's
+        # tolerance to cover the gap and leaves the other body's alone.
+        stage, layer = self.prepare_cube_copy()
+        brep = stage.GetPrimAtPath("/World/brepArray")
+        positions = brep.GetAttribute("brep:vertexPoint:point:position")
+        points = list(positions.Get())
+        points[0] = points[0] + (0, 0, 1e-4)
+        self.assertTrue(positions.Set(points))
+        before = list(brep.GetAttribute("brep:intersectTol3d").Get())
+        self.assertLess(before[0], 1e-4)
+        path = self.work / "gap.usda"
+        self.assertTrue(layer.Export(str(path)))
+        output = self.work / "gap-healed.usda"
+        result = self.run_heal(path, output)
+        self.assertEqual(result.returncode, 0, result.message)
+        healed = Usd.Stage.Open(str(output))
+        after = list(healed.GetPrimAtPath("/World/brepArray").GetAttribute("brep:intersectTol3d").Get())
+        self.assertGreaterEqual(after[0], 1e-4)
+        self.assertEqual(after[1], before[1])
+
     def prepare_cube_copy(self):
         stage = Usd.Stage.Open(str(self.cube))
         layer = Sdf.Layer.CreateAnonymous()
@@ -389,6 +410,24 @@ class TestUsdBrepHeal(unittest.TestCase):
         # An empty-target relationship reads back as a binding to nothing.
         self.assertFalse(prim.GetRelationship("material:binding").HasAuthoredTargets())
 
+    def test_explicit_unbinding_is_kept(self):
+        # A binding to nothing blocks any weaker binding, so it must stay authored.
+        stage, layer = self.prepare_cube_copy()
+        array = stage.GetPrimAtPath("/World/brepArray")
+        for child in list(array.GetChildren()):
+            self.assertTrue(stage.RemovePrim(child.GetPath()))
+        self.assertTrue(array.CreateRelationship("material:binding").SetTargets([]))
+        path = self.work / "unbinding.usda"
+        self.assertTrue(layer.Export(str(path)))
+        output = self.work / "unbinding-healed.usda"
+        result = self.run_heal(path, output)
+        self.assertEqual(result.returncode, 0, result.message)
+        healed = Sdf.Layer.FindOrOpen(str(output))
+        binding = healed.GetRelationshipAtPath("/World/brepArray.material:binding")
+        self.assertIsNotNone(binding)
+        self.assertTrue(binding.targetPathList.isExplicit)
+        self.assertEqual(list(binding.targetPathList.explicitItems), [])
+
     def test_face_material_subset_stays_within_its_body(self):
         stage = Usd.Stage.Open(str(self.cube))
         layer = Sdf.Layer.CreateAnonymous()
@@ -556,6 +595,21 @@ class TestUsdBrepHeal(unittest.TestCase):
         result = self.run_heal(self.work / "topo_strong.usda", output)
         self.assertNotEqual(result.returncode, 0, result.message)
         self.assertIn("composed across layers", result.message)
+        self.assertFalse(output.exists())
+
+    def test_same_layer_internal_reference_override_is_rejected(self):
+        # An internal reference that overrides the geometry it references, in the same layer.
+        stage, layer = self.prepare_cube_copy()
+        stage.DefinePrim("/A", "Xform").GetReferences().AddInternalReference("/World")
+        over = stage.OverridePrim("/A/brepArray")
+        loops = over.GetAttribute("face:loopCount").Get()
+        self.assertTrue(over.CreateAttribute("face:loopCount", Sdf.ValueTypeNames.UIntArray).Set(loops))
+        path = self.work / "same_layer.usda"
+        self.assertTrue(layer.Export(str(path)))
+        output = self.work / "same-layer-healed.usda"
+        result = self.run_heal(path, output)
+        self.assertNotEqual(result.returncode, 0, result.message)
+        self.assertIn("composed across layers or prim specs", result.message)
         self.assertFalse(output.exists())
 
     def test_out_of_range_subset_index_is_rejected(self):

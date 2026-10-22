@@ -11,8 +11,8 @@ pip install usd-brep
 import usd_brep
 
 sphere = usd_brep.primitives.create_sphere((0.0, 0.0, 0.0), 1.0)
-box = usd_brep.primitives.create_box((-0.5, -0.5, -0.5), 1.0, 1.0, 1.0)
-cut = usd_brep.booleans.subtract(sphere, box)
+box = usd_brep.primitives.create_box((0.0, 0.0, 0.0), 1.0, 1.0, 1.0)
+cut = usd_brep.booleans.boolean_difference(sphere, box)  # a sphere missing one octant
 
 usd_brep.usd.export_brep(cut, "cut.usda")
 (brep,) = usd_brep.usd.import_breps("cut.usda")

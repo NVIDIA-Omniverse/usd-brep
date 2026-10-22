@@ -17,6 +17,12 @@
 #include <SmCurve.h>
 #include <SmPoly.h>
 #include <SmEdge.h>
+#include <SmEdgeuse.h>
+#include <SmVertex.h>
+#include <SmBSplineCurve.h>
+#include <SmBSplineSurface.h>
+#include <SmPrimitiveCreation.h>
+#include <algorithm>
 #include <limits>
 #include <memory>
 
@@ -241,6 +247,8 @@ static SmBoolean sm_MassApproxEqual(double dA, double dB, double dAbsTol)
 
 // Compare the selected path with the legacy full integration, including the
 // non-default orientation/thickness cases used by kernel mass-property callers.
+// A subset takes different steps, so it matches to the requested accuracy;
+// selecting everything matches exactly.
 static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean bCheckThickFace)
 {
     SmExtent3d sBox;
@@ -265,6 +273,10 @@ static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean 
     for (double dThickness : aThicknesses)
     {
         if (dThickness > 0.0 && !bCheckThickFace) continue;
+        const auto fTol = [&](double dFull, double dScale = 1.0)
+        {
+            return 10.0 * dAccuracy * smos_Max(dScale, std::fabs(dFull));
+        };
         double dFullArea = 0.0, dFullVolume = 0.0;
         SmTArray<SmVector3d> sFullMoments;
         const SmStatus fullStat = pFace->ComputePreciseProperties(eOrientation, dAccuracy, sOrigin,
@@ -275,6 +287,9 @@ static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean 
                 int(eOrientation), dAccuracy, dThickness, int(fullStat));
             return fullStat;
         }
+        // Moments can be small sums of large terms: scale by area or volume times size^power.
+        const double dA = std::fabs(dFullArea) * dSize, dV = std::fabs(dFullVolume) * dSize;
+        const double aMomentScale[] = { dA, dA * dSize, dA * dSize, dA * dSize, dV, dV * dSize, dV * dSize, dV * dSize };
 
         for (ULONG lFlags = 1; lFlags <= SM_PPF_ALL; ++lFlags)
         {
@@ -312,7 +327,7 @@ static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean 
                 {
                     if (aActual[ii] != 0.0) return SM_ERR;
                 }
-                else if (!sm_MassApproxEqual(aActual[ii], aFull[ii], 1.0e-12 * smos_Max(1.0, std::fabs(aFull[ii])))
+                else if (!sm_MassApproxEqual(aActual[ii], aFull[ii], fTol(aFull[ii]))
                     || (lFlags == SM_PPF_ALL && aActual[ii] != aFull[ii]))
                 {
                     std::printf("Selected total mismatch: flags=%lu total=%lu\n", lFlags, ii);
@@ -330,7 +345,7 @@ static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean 
                         if (aActualMoment[jj] != 0.0) return SM_ERR;
                     }
                     else if (!sm_MassApproxEqual(aActualMoment[jj], aFullMoment[jj],
-                        1.0e-12 * smos_Max(1.0, std::fabs(aFullMoment[jj])))
+                        fTol(aFullMoment[jj], aMomentScale[ii]))
                         || (lFlags == SM_PPF_ALL && aActualMoment[jj] != aFullMoment[jj]))
                     {
                         std::printf("Selected moment mismatch: flags=%lu moment=%lu component=%lu\n", lFlags, ii, jj);
@@ -347,8 +362,8 @@ static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean 
             SmPoint3d sCentroid;
             SER(SmApiFaceComputeCentroid(pFace, dAccuracy, dArea, sCentroid));
             const SmPoint3d sExpected = sOrigin + sFullMoments[0] / dFullArea;
-            if (!sm_MassApproxEqual(dArea, std::fabs(dFullArea), 1.0e-12 * std::fabs(dFullArea))
-                || sCentroid.DistanceBetween(sExpected) > 1.0e-8)
+            if (!sm_MassApproxEqual(dArea, std::fabs(dFullArea), fTol(dFullArea))
+                || sCentroid.DistanceBetween(sExpected) > 10.0 * dAccuracy * dSize)
                 return SM_ERR;
         }
     }
@@ -478,6 +493,114 @@ SmStatus TestSmPrecisePropertySelection()
         }
     }
     return SM_SUCCESS;
+}
+
+// Mass properties of a sphere about distant origins converge and match the exact values.
+static SmStatus TestSmMassPropertiesFarOrigin()
+{
+    const double dRadius = 2.0, dDensity = 2.0;
+    SmBrep* pCreated = NULL;
+    const SmStatus createStat = SmApiCreateSphere(SmVector3d(0.0, 0.0, 0.0), dRadius, pCreated);
+    std::unique_ptr<SmBrep> pSphere(pCreated);
+    SER(createStat);
+    if (!pSphere) return SM_ERR;
+
+    const double dVolume = 4.0 / 3.0 * SM_PI * dRadius * dRadius * dRadius;
+    const double dMass = dDensity * dVolume;
+    const double dCentroidalMoment = 0.4 * dMass * dRadius * dRadius;
+    const struct { double dAccuracy; SmPoint3d sOrigin; } aCases[] = {
+        { 1.0e-7, SmPoint3d(5.0, -10.0, 15.0) },
+        { 1.0e-3, SmPoint3d(100.0, -200.0, 300.0) },
+    };
+    for (const auto& c : aCases)
+    {
+        double dArea = 0.0, dVol = 0.0, dM = 0.0;
+        SmPoint3d sCentroid;
+        SmVector3d sMoments, sProducts;
+        SER(SmApiBrepComputeMassProperties(pSphere.get(), c.dAccuracy, dDensity, c.sOrigin,
+            dArea, dVol, dM, sCentroid, sMoments, sProducts));
+        // Parallel-axis values; the centroid is (0,0,0).
+        const SmPoint3d& o = c.sOrigin;
+        const double dR2 = o.x * o.x + o.y * o.y + o.z * o.z;
+        const double aMoments[] = { dCentroidalMoment + dMass * (dR2 - o.x * o.x),
+                                    dCentroidalMoment + dMass * (dR2 - o.y * o.y),
+                                    dCentroidalMoment + dMass * (dR2 - o.z * o.z) };
+        const double aProducts[] = { dMass * o.y * o.z, dMass * o.z * o.x, dMass * o.x * o.y };
+        const double dTol = 10.0 * c.dAccuracy;
+        SmBoolean bOk = sm_MassApproxEqual(dVol, dVolume, dTol * dVolume)
+            && sm_MassApproxEqual(dM, dMass, dTol * dMass)
+            && sCentroid.DistanceBetween(SmPoint3d(0.0, 0.0, 0.0)) <= dTol * dRadius;
+        for (ULONG ii = 0; ii < 3; ++ii)
+        {
+            bOk = bOk && sm_MassApproxEqual(sMoments[ii], aMoments[ii], dTol * aMoments[ii])
+                && sm_MassApproxEqual(sProducts[ii], aProducts[ii], dTol * dMass * dR2);
+        }
+        if (!bOk)
+        {
+            std::printf("Far-origin mass properties wrong: accuracy=%g volume=%.12g\n", c.dAccuracy, dVol);
+            return SM_ERR;
+        }
+
+        // The origin may also be the centroid output variable.
+        SmPoint3d sAliased = c.sOrigin;
+        SmVector3d sAliasedMoments, sAliasedProducts;
+        SER(SmApiBrepComputeMassProperties(pSphere.get(), c.dAccuracy, dDensity, sAliased,
+            dArea, dVol, dM, sAliased, sAliasedMoments, sAliasedProducts));
+        if (sAliased != sCentroid || sAliasedMoments != sMoments || sAliasedProducts != sProducts)
+        {
+            std::printf("Aliased origin/centroid changed the result: accuracy=%g\n", c.dAccuracy);
+            return SM_ERR;
+        }
+    }
+
+    // The kernel integrates about the distant origin itself.
+    SmTArray<SmFace*> sFaces;
+    pSphere->GetFaces(sFaces);
+    if (sFaces.GetSize() != 1) return SM_ERR;
+    const double dEstimate = 4.0 * dRadius * dRadius / 100.0;
+    double dArea = 0.0, dVol = 0.0;
+    SmTArray<SmVector3d> sDeltaMoments;
+    SER(sFaces[0]->ComputePreciseProperties(SM_OT_SAME, 1.0e-3, SmPoint3d(100.0, -200.0, 300.0),
+        dEstimate, 0.0, dArea, dVol, sDeltaMoments));
+    const double dExactArea = 4.0 * SM_PI * dRadius * dRadius;
+    if (!sm_MassApproxEqual(dArea, dExactArea, 1.0e-2 * dExactArea)) return SM_ERR;
+    return SM_SUCCESS;
+}
+
+// A disk whose trim has 100 extra knots in [1000, 1000 + 1e-7], where many
+// spans are too small to integrate: the area must be accurate or an error.
+SmStatus TestSmFaceAreaTinyTrimSpans()
+{
+    SmApiCreateContext();
+    SmBrep* pCreated = NULL;
+    SER(SmApiCreatePlanarCircle(SmVector3d(0.0, 0.0, 0.0), 5.0, pCreated));
+    std::unique_ptr<SmBrep> pBrep(pCreated);
+    SmTArray<SmFace*> sFaces;
+    SmTArray<SmEdge*> sEdges;
+    SmTArray<SmEdgeuse*> sEdgeuses;
+    pBrep->GetFaces(sFaces);
+    if (sFaces.GetSize() != 1) return SM_ERR;
+    sFaces[0]->GetEdges(sEdges);
+    if (sEdges.GetSize() != 1) return SM_ERR;
+    SER(sEdges[0]->GetEdgeuses(sEdgeuses));
+    SmBSplineCurve* pUVCurve = NULL;
+    SER(sEdgeuses[0]->GetOrCreateUVTrimCurve(pUVCurve));
+    SmBSplineCurve* pCurve = dynamic_cast<SmBSplineCurve*>(sEdges[0]->GetCurve());
+    if (!pUVCurve || !pCurve) return SM_ERR;
+
+    // (k + 0.5)/100 misses the circle's knots at multiples of 1/4.
+    const SmExtent1d sIvl = pUVCurve->GetNaturalInterval();
+    SmTArray<double> sNewKnots;
+    for (ULONG k = 0; k < 100; ++k) sNewKnots.Add(sIvl.Evaluate((k + 0.5) / 100.0));
+    SER(pUVCurve->RefineCurve(sNewKnots));
+    const SmExtent1d sTiny(1000.0, 1000.0 + 1.0e-7);
+    SER(pUVCurve->ScaleKnotVector(sTiny.GetMin(), sTiny.GetMax()));
+    SER(pCurve->ScaleKnotVector(sTiny.GetMin(), sTiny.GetMax()));
+    sEdges[0]->SetInterval(sTiny);
+
+    double dArea = 0.0;
+    if (SmApiFaceComputeArea(sFaces[0], 1.0e-3, dArea) != SM_SUCCESS) return SM_SUCCESS;
+    return sm_MassApproxEqual(dArea, 25.0 * SM_PI, 25.0 * SM_PI * 1.0e-3) ? SM_SUCCESS : SM_ERR;
 }
 
 SmStatus TestSmMassProperties()
@@ -729,7 +852,7 @@ SmStatus TestSmMassProperties()
         || std::fabs(dSphereArea - 4.0 * SM_PI) > 4.0 * SM_PI * 1.0e-3)
         return SM_ERR;
 
-    return SM_SUCCESS;
+    return TestSmMassPropertiesFarOrigin();
 }
 
 //*************************************************************************
@@ -2786,6 +2909,204 @@ SmStatus TestSmStitchIntoSolid()
 // 
 //*************************************************************************
 
+// Largest distance between an edge's curve end and its vertex, over all edges of pBrep.
+static double sm_MaxEdgeVertexGap(const SmBrep* pBrep, ULONG& rlWorstEdge)
+{
+    SmTArray<SmEdge*> sEdges;
+    pBrep->GetEdges(sEdges);
+    double dMax = 0.0;
+    rlWorstEdge = 0;
+    for (ULONG ii = 0; ii < sEdges.GetSize(); ++ii)
+    {
+        SmEdge* pEdge = sEdges[ii];
+        SmExtent1d sIvl = pEdge->GetInterval();
+        SmPoint3d sStart, sEnd;
+        if (pEdge->GetCurve()->EvaluatePoint(sIvl.GetMin(), sStart) != SM_SUCCESS
+            || pEdge->GetCurve()->EvaluatePoint(sIvl.GetMax(), sEnd) != SM_SUCCESS)
+        {
+            rlWorstEdge = ii;
+            return std::numeric_limits<double>::infinity();
+        }
+        double dGapStart = sStart.DistanceBetween(pEdge->GetStartVertex()->GetPoint());
+        double dGapEnd   = sEnd.DistanceBetween(pEdge->GetEndVertex()->GetPoint());
+        if (!std::isfinite(dGapStart) || !std::isfinite(dGapEnd))
+        {
+            rlWorstEdge = ii;
+            return std::numeric_limits<double>::infinity();
+        }
+        double dGap = std::max(dGapStart, dGapEnd);
+        if (dGap > dMax)
+        {
+            dMax = dGap;
+            rlWorstEdge = ii;
+        }
+    }
+    return dMax;
+}
+
+// Thin degree 5 x 3 Bezier panel (7 mm thick) closed by four ruled side faces.
+// Geometry reconstructed from the viboceros lamp_well.rs regression.
+static SmStatus sm_CreateLampPanel(const SmContext& crContext, SmBrep*& rpPanel,
+                                   SmBSplineSurface*& rpOuter)
+{
+    rpPanel = NULL;
+    rpOuter = NULL;
+    const double adZ[6]      = {0.29, 0.64, 0.80, 0.78, 0.62, 0.52};
+    const double adCorner[6] = {0.24, 0.12, 0.035, 0., 0., 0.};
+    const double adShift[6]  = {0.23, 0.13, 0.04, 0., 0., 0.};
+    const double aadRow[4][3] = {{0.46, -0.09, 0.}, {0.985, 0.08, 0.}, {0.985, 0.04, 0.55}, {0.985, 0., 1.}};
+
+    // SMLib order: index = iu * lNumV + iv.
+    SmTArray<SmPoint3d> sOuterPts;
+    for (int iu = 0; iu < 6; ++iu)
+        for (int iv = 0; iv < 4; ++iv)
+            sOuterPts.Add(SmPoint3d(-2.32 + 1.67 * iu / 5. + adShift[iu] + aadRow[iv][2] * adCorner[iu],
+                                    aadRow[iv][0], adZ[iu] + aadRow[iv][1]));
+
+    SmTArray<double> sKnots;
+    sKnots.Add(0.0);
+    sKnots.Add(1.0);
+    SmTArray<ULONG> sMultU, sMultV;
+    sMultU.Add(6);
+    sMultU.Add(6);
+    sMultV.Add(4);
+    sMultV.Add(4);
+    SER(SmBSplineSurface::CreateCanonical(crContext, 5, 3, sOuterPts, SM_SF_UNSPECIFIED, sMultU, sMultV,
+                                          sKnots, sKnots, SM_KT_UNSPECIFIED, NULL, NULL, rpOuter));
+
+    // Inner control net: each control point moved 7 mm against the normal at its (i/5, j/3).
+    SmTArray<SmPoint3d> sInnerPts;
+    for (int iu = 0; iu < 6; ++iu)
+        for (int iv = 0; iv < 4; ++iv)
+        {
+            SmPoint3d sPt;
+            SmVector3d sDU, sDV;
+            SER(rpOuter->Evaluate1stDerivatives(SmPoint2d(iu / 5., iv / 3.), TRUE, TRUE, sPt, sDU, sDV));
+            SmVector3d sNormal = sDU * sDV;
+            sNormal.Unitize();
+            sInnerPts.Add(sOuterPts[iu * 4 + iv] - sNormal * 0.007);
+        }
+    SmBSplineSurface* pInner = NULL;
+    SER(SmBSplineSurface::CreateCanonical(crContext, 5, 3, sInnerPts, SM_SF_UNSPECIFIED, sMultU, sMultV,
+                                          sKnots, sKnots, SM_KT_UNSPECIFIED, NULL, NULL, pInner));
+
+    SmTArray<SmSurface*> sSurfaces;
+    SmBSplineSurface* pOuterCopy = new (crContext) SmBSplineSurface(*rpOuter);
+    sSurfaces.Add(pOuterCopy);
+    sSurfaces.Add(pInner);
+
+    // Ruled sides between matching boundary control rows of the outer and inner nets.
+    SmTArray<ULONG> sMultRule;
+    sMultRule.Add(2);
+    sMultRule.Add(2);
+    for (int iSide = 0; iSide < 4; ++iSide)
+    {
+        const bool bAlongV = iSide < 2;            // u = 0 / 1 boundary: curve runs along v
+        const int  iFixed  = (iSide % 2 == 0) ? 0 : (bAlongV ? 5 : 3);
+        const int  iCount  = bAlongV ? 4 : 6;
+        SmTArray<SmPoint3d> sRuledPts;
+        for (int k = 0; k < iCount; ++k)
+        {
+            const ULONG lIdx = bAlongV ? iFixed * 4 + k : k * 4 + iFixed;
+            sRuledPts.Add(sOuterPts[lIdx]);
+            sRuledPts.Add(sInnerPts[lIdx]);
+        }
+        SmBSplineSurface* pRuled = NULL;
+        SER(SmBSplineSurface::CreateCanonical(crContext, iCount - 1, 1, sRuledPts, SM_SF_UNSPECIFIED,
+                                              bAlongV ? sMultV : sMultU, sMultRule, sKnots, sKnots,
+                                              SM_KT_UNSPECIFIED, NULL, NULL, pRuled));
+        sSurfaces.Add(pRuled);
+    }
+
+    rpPanel = new (crContext) SmBrep();
+    for (ULONG ii = 0; ii < sSurfaces.GetSize(); ++ii)
+    {
+        SmFace* pFace = NULL;
+        SER(rpPanel->CreateFaceFromSurface(sSurfaces[ii], sSurfaces[ii]->GetNaturalUVDomain(), pFace));
+    }
+    SmBoolean bSolid = FALSE;
+    ULONG lStitched = 0;
+    double dMaxVGap = 0.0, dMaxEGap = 0.0;
+    SER(SmApiStitchIntoSolid(rpPanel, bSolid, lStitched, dMaxVGap, dMaxEGap));
+    if (!bSolid)
+        return SM_ERR;
+    return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE --- A Boolean difference whose cutter crosses the boundary of a thin
+    curved panel must leave every edge curve ending on its vertices.
+    SmEdgeDefinition::IsInteriorPoint used to authorize trimming an
+    intersection curve to a point that was not on it.
+***********************************************************************/
+SmStatus TestSmBooleanLampWellEndpoints()
+{
+    SmApiCreateContext();
+    const SmContext& crContext = *SmApiGetOrCreateContext();
+
+    struct Case { double dR1, dR2, dAngle; };
+    const Case aCases[] = { {0.16, 0.085, 0.0}, {0.16, 0.085, 0.5}, {0.30, 0.16, 0.3} };
+
+    SmStatus eResult = SM_SUCCESS;
+    for (const Case& rCase : aCases)
+    {
+        for (int iPost = 1; iPost >= 0; --iPost)
+        {
+            SmBrep* pPanel = NULL;
+            SmBSplineSurface* pOuter = NULL;
+            SER(sm_CreateLampPanel(crContext, pPanel, pOuter));
+
+            double dVolBefore = 0.0;
+            SER(SmApiBrepComputeVolume(pPanel, 1e-6, dVolBefore));
+
+            SmPoint3d sCenter;
+            SmVector3d sDU, sDV;
+            SER(pOuter->Evaluate1stDerivatives(SmPoint2d(0.13, 0.30), TRUE, TRUE, sCenter, sDU, sDV));
+            delete pOuter;
+            SmVector3d sNormal = sDU * sDV;
+            sNormal.Unitize();
+            SmVector3d sX = sDU;
+            sX.Unitize();
+            SmVector3d sY = sNormal * sX;
+            SmVector3d sXX = sX * cos(rCase.dAngle) + sY * sin(rCase.dAngle);
+            SmVector3d sYY = sY * cos(rCase.dAngle) - sX * sin(rCase.dAngle);
+            sCenter = sCenter + sNormal * 0.2;
+
+            SmBSplineCurve* pEllipse = NULL;
+            SER(SmBSplineCurve::CreateEllipseSegment(crContext, 3, SmAxis2Placement(sCenter, sXX, sYY),
+                                                     rCase.dR1, rCase.dR2, 0.0, 360.0, SM_CO_QUADRATIC, pEllipse));
+            SmTArray<SmCurve*> sProfile;
+            sProfile.Add(pEllipse);
+            SmBrep* pCutter = new (crContext) SmBrep();
+            {
+                SmPrimitiveCreation sPC(pCutter->GetInfiniteRegion());
+                SER(sPC.CreateLinearSweep(sProfile, sNormal * -1.0, 0.4, 1, TRUE));
+            }
+
+            SmBrep* pResult = NULL;
+            SmStatus eStat = SmApiBooleanWithOptions(pPanel, pCutter, SM_BO_DIFFERENCE, FALSE, FALSE,
+                                                     iPost ? TRUE : FALSE, FALSE, FALSE, pResult);
+            double dVolAfter = 0.0;
+            ULONG lWorst = 0;
+            double dGap = -1.0;
+            if (eStat == SM_SUCCESS && pResult)
+            {
+                SmApiBrepComputeVolume(pResult, 1e-6, dVolAfter);
+                dGap = sm_MaxEdgeVertexGap(pResult, lWorst);
+            }
+            if (eStat != SM_SUCCESS || pResult == NULL || dGap > 1e-6 || !(dVolAfter > 0.0 && dVolAfter < dVolBefore))
+            {
+                fprintf(stderr, "Lamp well r=(%g,%g) angle=%g postprocess=%d: status %ld, volume %g -> %g, "
+                        "edge %lu curve-to-vertex gap %.6e\n", rCase.dR1, rCase.dR2, rCase.dAngle, iPost,
+                        (long)eStat, dVolBefore, dVolAfter, lWorst, dGap);
+                eResult = SM_ERR;
+            }
+            delete pResult;
+        }
+    }
+    return eResult;
+}
+
 SmStatus TestSmStitchIntoShell()
 {
 
@@ -3337,3 +3658,42 @@ SmStatus TestSmMaterialCensus()
     return SM_SUCCESS;
 
 } // End TestSmMaterialCensus
+
+//*************************************************************************
+// SmBrep::RefreshGaps and RefreshTols must report a failure on any edgeuse or
+// vertexuse, not only on the last one processed.
+//*************************************************************************
+SmStatus TestSmBrepRefreshGaps()
+{
+    SmApiCreateContext();
+
+    SmBrep* pBox = NULL;
+    SER( SmApiCreateBox( SmVector3d( 0.0, 0.0, 0.0 ), 2.0, 3.0, 4.0, pBox ) );
+    if( pBox == NULL )
+        return SM_ERR;
+    std::unique_ptr<SmBrep> sBoxOwner( pBox );
+
+    // A healthy Brep refreshes cleanly.
+    if( pBox->RefreshGaps() != SM_SUCCESS || pBox->RefreshTols() != SM_SUCCESS )
+        return SM_ERR;
+
+    // Give the edge of the first edgeuse an empty interval: its gap cannot be
+    // computed. The edge must not also own the last edgeuse, or the failure
+    // would be reported even by a check of only the last result.
+    SmTArray<SmEdgeuse*> sEdgeuses;
+    pBox->GetEdgeuses( sEdgeuses );
+    if( sEdgeuses.GetSize() < 2 )
+        return SM_ERR;
+    SmEdge* pBadEdge = sEdgeuses[0]->GetEdge();
+    if( pBadEdge == NULL || sEdgeuses[sEdgeuses.GetSize() - 1]->GetEdge() == pBadEdge )
+        return SM_ERR;
+    pBadEdge->SetInterval( SmExtent1d( pBadEdge->GetInterval().GetMin() ) );
+
+    if( pBox->RefreshGaps() == SM_SUCCESS )
+        return SM_ERR;
+    if( pBox->RefreshTols() == SM_SUCCESS )
+        return SM_ERR;
+
+    return SM_SUCCESS;
+
+} // End TestSmBrepRefreshGaps

@@ -38,7 +38,7 @@
 #define SM_EFF_ZERO      1.0e-12                         /* Zero numeric tol, used by SmTol::GetScaledZero() methods       */ 
 #define SM_EFF_ZERO_PARAM 1.2e-8                          /* Zero numeric tol for Knot Param values: tad larger than NLib's */
 #define SM_EFF_ZERO_DEG   1.0E-4                          /* Zero numeric tol for Angle degrees                             */
-#define SM_EFF_ZERO_RAD   (SM_EFF_ZERO_DEG * SM_PI/180.0) /*   = 1.74e-5 radians                                            */
+#define SM_EFF_ZERO_RAD   (SM_EFF_ZERO_DEG * SM_PI/180.0) /*   = 1.745e-6 radians                                           */
 
 // Convenience Tolerance values for efficiency 
 #define SM_EFF_ZERO_SQRT     1.0e-6

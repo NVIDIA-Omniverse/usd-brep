@@ -7340,6 +7340,7 @@ SmStatus SmBrep::DeleteFace
     {
       // If there are no vertices and no edges then the entire shell goes away.
       ULONG lVertexCount = sVertices.GetSize();
+      ULONG lVerticesNeedingNewShell = 0;
       SmTopologyTraverser sTopoTraverser;
       SmNewMarkAndLock sMarkLock(GetContext(), SM_MT_ALLMARKS) ; // increments newly locked mark
       if(    pAnyEdgeuse == NULL
@@ -7351,6 +7352,26 @@ SmStatus SmBrep::DeleteFace
         }
       else // the shell still connects to edgeuses or vertexuses
         {
+          // Vertex-only loops supply no boundary edgeuse. An attached wire
+          // can nevertheless survive after the shell loses its last faceuse.
+          if(pShell->m_lListSize == 0 && pAnyEdgeuse == NULL)
+            {
+              for(ii=0; ii<sVertices.GetSize() && pAnyEdgeuse == NULL; ++ii)
+                {
+                  sVertices[ii]->GetVertexuses(sVertexuses);
+                  for(jj=0; jj<sVertexuses.GetSize(); ++jj)
+                    {
+                      if(!sVertexuses[jj]->IsEdgeVertexuse()) { continue; }
+                      SmEdgeuse *pEdgeuse = sVertexuses[jj]->GetEdgeuse();
+                      if(pEdgeuse->IsShellEdgeuse() && pEdgeuse->GetShell() == pShell)
+                        {
+                          pAnyEdgeuse = pEdgeuse;
+                          break;
+                        }
+                    }
+                }
+            }
+
           // See if shell is now a wire shell - if it is point it to an edgeuse
           if (pShell->m_lListSize == 0 && pAnyEdgeuse != NULL)
             {
@@ -7406,10 +7427,13 @@ SmStatus SmBrep::DeleteFace
                   lVertexCount --;
                 }
             } // end counting number of vertices that need a new Shell home
+
+          // The shell vertices counted in lNewShellVertexCount are already subtracted above.
+          lVerticesNeedingNewShell = lVertexCount;
         } // end the shell still connects to edgeuses or vertexuses branch
 
       // if any vertices no longer connect to pShell - need 1 or more new shells
-      if(bDoRegionNesting && ( lVertexCount - lNewShellVertexCount ) > 0 )
+      if(bDoRegionNesting && lVerticesNeedingNewShell > 0 )
         {
           sMarkLock.NewMark();  // increment the mark
           SmShell *pLastNewShell = NULL;
@@ -9056,7 +9080,6 @@ SmStatus SmBrep::RefreshGaps()
 {
   // init return
   SmStatus sRtn = SM_SUCCESS;
-  SmStatus sThisRtn = SM_SUCCESS;
 
   // locals
   ULONG ii ;
@@ -9069,13 +9092,11 @@ SmStatus SmBrep::RefreshGaps()
 
   // for every Edgeuse - refresh gap cache
   for(ii=0;ii<sEdgeuses.GetSize();ii++)
-    { sThisRtn = sEdgeuses[ii]->RefreshGaps(); }
-  if(sThisRtn != SM_SUCCESS) { sRtn = SM_ERR ; }
+    { if(sEdgeuses[ii]->RefreshGaps() != SM_SUCCESS) { sRtn = SM_ERR ; } }
 
   // for every Vertexuse - refresh gap cache
   for(ii=0;ii<sVertexuses.GetSize();ii++)
-    { sThisRtn = sVertexuses[ii]->RefreshGaps() ; }
-  if(sThisRtn != SM_SUCCESS) { sRtn = SM_ERR ; }
+    { if(sVertexuses[ii]->RefreshGaps() != SM_SUCCESS) { sRtn = SM_ERR ; } }
 
   // all done
   return sRtn;
@@ -9101,7 +9122,8 @@ SmStatus SmBrep::RefreshTols()
   if(m_pVertexListHead) GetVertices(sVertices) ;
 
   // Refresh all cached gaps - Values are used by SmTol to compute ZoneTol3d values
-  RefreshGaps() ;
+  // A failure does not stop the tolerance refresh below, but is returned at the end.
+  SmStatus sRtn = RefreshGaps() ;
 
 #ifdef SM_USE_OLDTOL 
   SM_OLDTOL_LINE // for every Face, Edge, and Vertex - refresh Tol
@@ -9151,7 +9173,7 @@ SmStatus SmBrep::RefreshTols()
 #endif // SM_USE_NEWTOL
 
   // all done
-  return SM_SUCCESS ;
+  return sRtn ;
 
 } // end SmBrep::RefreshTols
 
@@ -12230,6 +12252,209 @@ SmBoolean bDebugMe = FALSE ;
 } // end sm_RedistributeSeamUVTrimCurves
 
 /*******************************************************************//**
+PURPOSE: Get the varying UV interval of a straight natural-boundary curve.
+***********************************************************************/
+static SmStatus sm_GetNaturalSeamInterval
+  (const SmCrvOnSurf *pCurve,        // in : defining 3D seam curve
+   const SmExtent1d  &crInterval,    // in : interval of the seam curve
+   const SmSurface   &crSurface,     // in : face surface
+   const SmExtent2d  &crDomain,      // in : natural surface domain
+   SmSurfParamType   &reSeam,        // out: constant parameter direction
+   SmExtent1d        &rSeamInterval) // out: varying UV parameter interval
+{
+  // Init returns
+  reSeam = SM_SP_NEITHER;
+  rSeamInterval.Init();
+
+  // If the defining curve and surface are not the same, then it is not a seam.
+  if(!(*pCurve->GetBaseSurface() == crSurface))
+    { return SM_SUCCESS; }
+  
+  // If the defining UV curve is not a line, then it is not a seam.
+  const SmCurve *pUV = pCurve->GetUVCurve(); 
+  if (pUV->GetNumberControlPoints() != 2 || pUV->GetDegree() != 1)
+    { return SM_SUCCESS; }
+
+  // Evaluate the endpoints of this segment, which may cover only part of a seam.
+  SmPoint3d sStart,sEnd;
+  SER(pUV->EvaluatePoint(crInterval.GetMin(),sStart));
+  SER(pUV->EvaluatePoint(crInterval.GetMax(),sEnd));
+
+  // Match the domain-scaled parameter tolerance used for full-period checks.
+  SmPoint2d    sMin = crDomain.GetMin(), sMax = crDomain.GetMax();
+  SmScaledZero sUTol(1e-8*crDomain.XLength()), sVTol(1e-8*crDomain.YLength());
+
+  // A U seam has constant U on either U boundary; a V seam is analogous.
+  SmBoolean bUSeam =    SmTol::AreSameParam(sStart.x,sEnd.x,&sUTol)
+                    && (SmTol::AreSameParam(sStart.x,sMin.x,&sUTol) || SmTol::AreSameParam(sStart.x,sMax.x,&sUTol));
+  SmBoolean bVSeam =    SmTol::AreSameParam(sStart.y,sEnd.y,&sVTol)
+                    && (SmTol::AreSameParam(sStart.y,sMin.y,&sVTol) || SmTol::AreSameParam(sStart.y,sMax.y,&sVTol));
+  if(!bUSeam && !bVSeam)
+    { return SM_SUCCESS; }
+
+  // Intervals shorter than the tolerance are not valid seam segments.
+  rSeamInterval.AddValue(bUSeam ? sStart.y : sStart.x);
+  rSeamInterval.AddValue(bUSeam ? sEnd.y : sEnd.x);
+  if(rSeamInterval.GetLength() <= (bUSeam ? sVTol : sUTol))
+    { return SM_SUCCESS; }
+
+  // Set the seam parameter direction and return success.
+  reSeam = bUSeam ? SM_SP_U : SM_SP_V;
+
+  return SM_SUCCESS;
+}
+
+static SmBoolean sm_SeamIntervalLess(SmExtent1d sFirst, SmExtent1d sSecond, void *)
+{ return sFirst.GetMin() < sSecond.GetMin(); }
+
+/*******************************************************************//**
+PURPOSE: Recognize completion of the first nonseparating periodic seam.
+
+NOTES: The curve, together with any segments already inserted into its loop,
+       must cover one full natural boundary exactly once. The UV curves are
+       defining SmCrvOnSurf geometry, not optional edgeuse trims. Other loops
+       must be interior holes or isolated vertices. CurveOnClassify partitions
+       the seam at existing vertices before MergeIntervals inserts its edges.
+       This deliberately excludes already cut faces and singly periodic
+       surfaces, where even a closed seam can separate the retained face.
+***********************************************************************/
+static SmBoolean sm_IsFirstNonseparatingSeam
+  (SmFace            *pFace,      // in : face receiving the seam
+   SmVertexuse       *pStartVU,   // in : start vertexuse
+   SmVertexuse       *pEndVU,     // in : end vertexuse
+   const SmCrvOnSurf *pCurve,     // in : defining 3D seam curve
+   const SmExtent1d  &crInterval) // in : interval of the seam curve
+{
+  // Validate inputs.
+  if(pFace == NULL || pStartVU == NULL || pEndVU == NULL || pCurve == NULL)
+    { 
+      SE_MSG(SM_ERR_INVALID_INPUT, _T("Sm_IsFirstNonseparatingSeam: Invalid inputs"));
+      return FALSE; 
+    }
+  // A negative seam classification is expected for ordinary separating cuts.
+  // Completing the seam must join two ends of the same loopuse.
+  SmLoopuse *pSeamLU = pStartVU->GetLoopuse(); 
+  if(pSeamLU != pEndVU->GetLoopuse())
+    { return FALSE; }
+
+  // Get the surface and check that it is periodic in U and V without poles.
+  SmSurface *pSurface = pFace->GetSurface(); 
+  SmExtent2d sDomain = pSurface->GetNaturalUVDomain();
+  if(   !pSurface->IsPeriodic(sDomain,SM_SP_U)
+     || !pSurface->IsPeriodic(sDomain,SM_SP_V)
+     ||  pSurface->GetSingularities() != SM_SS_NONE)
+    { return FALSE; }
+
+  const SmPoint2d sMin = sDomain.GetMin(), sMax = sDomain.GetMax();
+  double          dWidth = sDomain.XLength(), dHeight = sDomain.YLength();
+  AER(dWidth > 0.0 && dHeight > 0.0);
+
+  // Find the natural-boundary interval supplied by the new edge.
+  SmSurfParamType eSeam = SM_SP_NEITHER;
+  SmExtent1d      sInterval;
+  if(SM_SUCCESS != sm_GetNaturalSeamInterval(pCurve,     // in : defining 3D seam curve
+                                             crInterval, // in : interval of the seam curve
+                                             *pSurface,  // in : face surface
+                                             sDomain,    // in : natural surface domain
+                                             eSeam,      // out: constant parameter direction
+                                             sInterval)  // out: varying UV parameter interval
+      || eSeam == SM_SP_NEITHER)
+    { return FALSE; }
+
+  SmTArray<SmExtent1d> sIntervals;
+  sIntervals.Add(sInterval);
+  if(!pSeamLU->IsVertexLoopuse())
+    {
+      // Earlier intervals join vertex loops into one open chain. Its edges
+      // must each be used twice, in opposite directions, by this loopuse.
+      if(pStartVU->GetVertex() == pEndVU->GetVertex())
+        { return FALSE; }
+
+      SmTArray<SmEdge*> sEdges;
+      pSeamLU->GetEdges(sEdges);
+      ULONG lStartDegree = 0, lEndDegree = 0;
+      for(ULONG lEdge=0; lEdge<sEdges.GetSize(); ++lEdge)
+        {
+          SmEdge            *pEdge = sEdges[lEdge];
+          const SmCrvOnSurf *pSegment = SM_CAST_PTR(SmCrvOnSurf,pEdge->GetCurve());
+          SmSurfParamType    eSegmentSeam = SM_SP_NEITHER;
+
+          if(   !pSegment 
+             || SM_SUCCESS != sm_GetNaturalSeamInterval (pSegment,             // in : defining 3D seam curve
+                                                         pEdge->GetInterval(), // in : interval of the seam curve
+                                                         *pSurface,            // in : face surface
+                                                         sDomain,              // in : natural surface domain
+                                                         eSegmentSeam,         // out: constant parameter direction
+                                                         sInterval)            // out: varying UV parameter interval
+             || eSegmentSeam != eSeam)
+            { return FALSE; }
+
+          SmTArray<SmEdgeuse*> sUses;
+          pEdge->GetEdgeuses(sUses);
+          ULONG lSame = 0, lOpposite = 0;
+          for(ULONG lUse=0; lUse<sUses.GetSize(); ++lUse)
+            if(sUses[lUse]->GetLoopuse() == pSeamLU)
+              {
+                if(sUses[lUse]->GetOrientation() == SM_OT_SAME) { ++lSame; }
+                else if(sUses[lUse]->GetOrientation() == SM_OT_OPPOSITE) { ++lOpposite; }
+              }
+          if(lSame != 1 || lOpposite != 1)
+            { return FALSE; }
+
+          lStartDegree +=   (pEdge->GetStartVertex() == pStartVU->GetVertex())
+                         + (pEdge->GetEndVertex()   == pStartVU->GetVertex());
+          lEndDegree   +=   (pEdge->GetStartVertex() == pEndVU->GetVertex())
+                         + (pEdge->GetEndVertex()   == pEndVU->GetVertex());
+          sIntervals.Add(sInterval);
+        }
+      if(lStartDegree != 1 || lEndDegree != 1)
+        { return FALSE; }
+    }
+
+  // A complete period must have neither gaps nor overlapping segments.
+  SmExtent1d   sPeriod = eSeam == SM_SP_U ? sDomain.GetVInterval() : sDomain.GetUInterval();
+  SmScaledZero sParamTol(1e-8*sPeriod.GetLength());
+  sIntervals.ShellSort(sm_SeamIntervalLess,NULL);
+  double dEnd = sPeriod.GetMin();
+  for(ULONG lInterval=0; lInterval<sIntervals.GetSize(); ++lInterval)
+    {
+      if(!SmTol::AreSameParam(dEnd,sIntervals[lInterval].GetMin(),&sParamTol))
+        { return FALSE; }
+      dEnd = sIntervals[lInterval].GetMax();
+    }
+  if(!SmTol::AreSameParam(dEnd,sPeriod.GetMax(),&sParamTol))
+    { return FALSE; }
+
+  // All other edge loops must bound interior holes away from the seams.
+  SmTArray<SmLoop*> sLoops;
+  pFace->GetLoops(sLoops);
+  for(ULONG lLoop=0; lLoop<sLoops.GetSize(); ++lLoop)
+    {
+      if(sLoops[lLoop] == pSeamLU->GetLoop())
+        { continue; }
+
+      // Vertex loops do not separate the face. CurveOnClassify has already
+      // divided the input curve at any vertices that lie on this seam.
+      if(sLoops[lLoop]->GetLoopuse()->IsVertexLoopuse())
+        { continue; }
+
+      SmOrientType eOrientation = SM_OT_UNKNOWN;
+      SmExtent2d   sBounds;
+      if(   !sLoops[lLoop]->IsClosedPtrs()
+         || pFace->ComputeLoopOrientation(sLoops[lLoop],eOrientation,&sBounds,TRUE) != SM_SUCCESS
+         || eOrientation != SM_OT_OPPOSITE)
+        { return FALSE; }
+
+      // Check that the hole stays farther than tolerance from every seam.
+      SmTol2d sUVTol = SmTol::MapTo2d(pFace->GetTolerance(),sBounds.GetMin(),*pSurface); 
+      if(   sBounds.GetMin().x <= sMin.x+sUVTol || sBounds.GetMax().x >= sMax.x-sUVTol
+         || sBounds.GetMin().y <= sMin.y+sUVTol || sBounds.GetMax().y >= sMax.y-sUVTol)
+        { return FALSE; }
+    }
+  return TRUE;
+}
+
+/*******************************************************************//**
 PURPOSE: This method creates a new edge within a face.
 
 NOTES: 
@@ -12238,6 +12463,13 @@ NOTES:
   2.) Input curves get owned by NewEdge. Don't delete them after this call.
     
   3.) Required: pBrep->m_bEditingEnabled flag == TRUE.
+
+  4.) Completing the first seam on an uncut doubly periodic face can create
+      a new loop without a new face. The input and any earlier segments must
+      be SmCrvOnSurf seams. Other loops may be interior holes or isolated
+      vertices. Input intervals must already be divided at intersecting
+      vertices, as CurveOnClassify does before MergeIntervals. Both seam sides
+      remain on the face; insert the orthogonal seam before full UV validation.
 ***********************************************************************/
 SmStatus SmBrep::MakeEdgeInFaceWithVU
   (SmFace           * pFace,             // in : Face where new edge goes
@@ -12395,6 +12627,21 @@ SmBoolean bDebugMe=FALSE;
       SM_ASSERT_MSG( dDistSt < dTolSt && dDistEnd < dTolEnd, sBuff) ;
   }
 #endif // end SM_DEBUG_CODE
+
+  // Decide before editing: a full periodic cut can split the boundary without
+  // separating the face. A same-vertex/same-loop connection alone is insufficient.
+  // Implementation restriction: only SmCrvOnSurf seams, as supplied by
+  // SplitAtSeam, are recognized using their defining UV curves. Equivalent
+  // SmCircle or SmBSplineCurve seams are not yet recognized and follow the
+  // existing same-loop face-splitting path. This curve-type restriction is
+  // an implementation limitation, not a requirement of the BRep topology.
+  const SmCrvOnSurf *pOnSurf = SM_CAST_PTR(SmCrvOnSurf,p3DCurve);
+  SmBoolean         bNewLoopWithoutNewFace = pOnSurf != NULL && sm_IsFirstNonseparatingSeam
+    (pFace,       // in : face receiving the seam
+     pStartVU,    // in : start vertexuse
+     pEndVU,      // in : end vertexuse
+     pOnSurf,     // in : defining 3D seam curve
+     crInterval); // in : interval of the seam curve
 
   // Memory allocation
   // create 1 new Edge and 4 new Edgeuses and 1 new Vertexuse for each Edgeuse.
@@ -12784,7 +13031,12 @@ SmBoolean bDebugMe=FALSE;
       SmFaceuse *pNewFU1 = NULL;
       SmFaceuse *pNewFU2 = NULL;
 
-      // split face creating 1 new face
+      if(bNewLoopWithoutNewFace)
+        {
+          pNewFU1 = pFace->GetUpwardFaceuse();
+          pNewFU2 = pNewFU1->GetMate();
+        }
+      else // separating cut: create one new face
         {
           // allocate the new face attached to a surface (with or without composite faces)
           pNewF              = new (this) SmFace(); NER(pNewF);
@@ -12880,451 +13132,472 @@ SmBoolean bDebugMe=FALSE;
       // Set NewEdge tolerance
       SM_OLDTOL_LINE pNewE->SetTolerance(smos_Max(sCurveZoneTol3d,GetTolerance()));
 
-      // First handle case where edge splits face on outer loop
-      if(pStartLoop->IsOuterLoop() )
+      if(bNewLoopWithoutNewFace)
         {
-          // Actually don't have to do anything additional here.
-        }
-      else // face is split by newEdge connecting an inner loop
-        {
-          // Check to make sure that the pNewLU1 orientation is
-          // oriented clockwise.  If not then switch the new and old
-          // loops faces.  The new will become an inner loop of the
-          // old face and the old will become the outer loop of a new
-          // face.  Swap orientations of the loopuses also.
-          SmOrientType eLoopOrient;
-
-          // Pass TRUE to force 3d computation: since we're constructing things here,
-          // the Brep might not be in a completed, legitimate state (e.g., Edges
-          // crossing seams, etc.), so don't trust uv trim curves.
-          if(pNewF->ComputeLoopOrientation( pNewL, eLoopOrient, NULL, TRUE  ) == SM_SUCCESS )
+          // Both boundary cycles belong to this face. Put one seam side first;
+          // the orthogonal seam will join the two cycles into its outer loop.
+          SER(pNewFU1->Remove(pOldLUTop));
+          SER(pNewFU2->Remove(pOldLUBot));
+          SER(pNewFU1->PreInsert(pOldLUTop));
+          SER(pNewFU2->PreInsert(pOldLUBot));
+          SmTArray<SmLoop*> sLoops;
+          pFace->GetLoops(sLoops);
+          for(ULONG lLoop=0; lLoop<sLoops.GetSize(); ++lLoop)
             {
-              if (eLoopOrient != SM_OT_SAME)
-                { // pNewL is inner loop swap with pFace
-                  if(pFace->ComputeLoopOrientation( pStartLoop, eLoopOrient, NULL, TRUE ) == SM_SUCCESS )
-                    {
-                      // Check to make sure that the loop we are switching with has
-                      // the correct orientation.
-                      if (eLoopOrient != SM_OT_SAME) 
-                        { SE(SM_ERR); }
+              SmLoopuse *pLU1,*pLU2;
+              sLoops[lLoop]->GetLoopuses(pLU1,pLU2);
+              pLU1->SetOrientation(lLoop == 0 ? SM_OT_SAME : SM_OT_OPPOSITE);
+              pLU2->SetOrientation(lLoop == 0 ? SM_OT_SAME : SM_OT_OPPOSITE);
+            }
+        }
+      else
+        {
+          // First handle case where edge splits face on outer loop
+          if(pStartLoop->IsOuterLoop() )
+            {
+              // Actually don't have to do anything additional here.
+            }
+          else // face is split by newEdge connecting an inner loop
+            {
+              // Check to make sure that the pNewLU1 orientation is
+              // oriented clockwise.  If not then switch the new and old
+              // loops faces.  The new will become an inner loop of the
+              // old face and the old will become the outer loop of a new
+              // face.  Swap orientations of the loopuses also.
+              SmOrientType eLoopOrient;
 
-                      // interchange pNewL and pStartLoop
-                      //   make pNewL an inner Loop on pFace
-                      //   make pStartLoop an outer Loop on pNewF
-                      SER(pNewF->RemoveLoop(pNewL));
-                      SER(pFace->RemoveLoop(pStartLoop));
+              // Pass TRUE to force 3d computation: since we're constructing things here,
+              // the Brep might not be in a completed, legitimate state (e.g., Edges
+              // crossing seams, etc.), so don't trust uv trim curves.
+              if(pNewF->ComputeLoopOrientation( pNewL, eLoopOrient, NULL, TRUE  ) == SM_SUCCESS )
+                {
+                  if (eLoopOrient != SM_OT_SAME)
+                    { // pNewL is inner loop swap with pFace
+                      if(pFace->ComputeLoopOrientation( pStartLoop, eLoopOrient, NULL, TRUE ) == SM_SUCCESS )
+                        {
+                          // Check to make sure that the loop we are switching with has
+                          // the correct orientation.
+                          if (eLoopOrient != SM_OT_SAME)
+                            { SE(SM_ERR); }
 
-                      SmLoopuse *pLU1, *pLU2;
-                      pStartLoop->GetLoopuses(pLU1,pLU2);
-                      pLU1->m_eOrientation = SM_OT_SAME;
-                      pLU2->m_eOrientation = SM_OT_SAME;
+                          // interchange pNewL and pStartLoop
+                          //   make pNewL an inner Loop on pFace
+                          //   make pStartLoop an outer Loop on pNewF
+                          SER(pNewF->RemoveLoop(pNewL));
+                          SER(pFace->RemoveLoop(pStartLoop));
 
-                      pNewL->GetLoopuses(pLU1,pLU2);
-                      pLU1->m_eOrientation = SM_OT_OPPOSITE;
-                      pLU2->m_eOrientation = SM_OT_OPPOSITE;
+                          SmLoopuse *pLU1, *pLU2;
+                          pStartLoop->GetLoopuses(pLU1,pLU2);
+                          pLU1->m_eOrientation = SM_OT_SAME;
+                          pLU2->m_eOrientation = SM_OT_SAME;
 
-                      SER(pNewF->InsertLoop(pStartLoop));
-                      SER(pFace->InsertLoop(pNewL));
+                          pNewL->GetLoopuses(pLU1,pLU2);
+                          pLU1->m_eOrientation = SM_OT_OPPOSITE;
+                          pLU2->m_eOrientation = SM_OT_OPPOSITE;
 
-                    } // end compute pStartLoop orientation success check
-                } // end pNewL an inner Loop check
-            } // end compute pNewL orientation success check
-        } // end newEdge connecting an innerLoop check
+                          SER(pNewF->InsertLoop(pStartLoop));
+                          SER(pFace->InsertLoop(pNewL));
 
-      // Now do nesting of inner loops of face to see if they go into
-      // the new face.  Note - don't need to nest outer loop, pNewLoop and pStartLoop
+                        } // end compute pStartLoop orientation success check
+                    } // end pNewL an inner Loop check
+                } // end compute pNewL orientation success check
+            } // end newEdge connecting an innerLoop check
 
-      // Note: Missing Seam case: It's possible that only one of the two Child Faces 
-      //  spawned from a split Parent Face is good enough for the upcoming
-      //  point classify when inserting a missing SeamEdge that has been
-      //  broken up into many segments by crossing Face innerLoop boundaries.
-      //
-      //  The problem is that when a missing SeamEdge segment splits a Face
-      //  with missing SeamEdges, one of its two child faces may continue to contain
-      //  missing seam edges until the very last SeamEdge segment is inserted. As long as the
-      //  Seam segments are inserted in order from one end of the surface to the other,
-      //  one of every pair of SplitFace children will be okay.  (I don't have a proof
-      //  of this, but I have many cases where its always been true. bug[603].
+          // Now do nesting of inner loops of face to see if they go into
+          // the new face.  Note - don't need to nest outer loop, pNewLoop and pStartLoop
 
-      // Check for faces with outerLoops with missing Seam edges and only classify points
-      // against the faces that don't have that problem.
+          // Note: Missing Seam case: It's possible that only one of the two Child Faces
+          //  spawned from a split Parent Face is good enough for the upcoming
+          //  point classify when inserting a missing SeamEdge that has been
+          //  broken up into many segments by crossing Face innerLoop boundaries.
+          //
+          //  The problem is that when a missing SeamEdge segment splits a Face
+          //  with missing SeamEdges, one of its two child faces may continue to contain
+          //  missing seam edges until the very last SeamEdge segment is inserted. As long as the
+          //  Seam segments are inserted in order from one end of the surface to the other,
+          //  one of every pair of SplitFace children will be okay.  (I don't have a proof
+          //  of this, but I have many cases where its always been true. bug[603].
 
-      SmLoopuse *pFaceOuterLoopuse = SM_CAST_PTR(SmLoopuse,pFace->GetUpwardFaceuse()->GetList()) ;
-      SmLoopuse *pNewFOuterLoopuse = SM_CAST_PTR(SmLoopuse,pNewF->GetUpwardFaceuse()->GetList()) ;
+          // Check for faces with outerLoops with missing Seam edges and only classify points
+          // against the faces that don't have that problem.
 
-      SmBoolean bFaceMissingSeam = pFaceOuterLoopuse->IsMissingSeamAtVertices() ; 
-      SmBoolean bNewFMissingSeam = pNewFOuterLoopuse->IsMissingSeamAtVertices() ; 
-      SmBoolean bClassifyToFace  = !bFaceMissingSeam ;
+          SmLoopuse *pFaceOuterLoopuse = SM_CAST_PTR(SmLoopuse,pFace->GetUpwardFaceuse()->GetList()) ;
+          SmLoopuse *pNewFOuterLoopuse = SM_CAST_PTR(SmLoopuse,pNewF->GetUpwardFaceuse()->GetList()) ;
 
-      SM_ASSERT_MSG(!bFaceMissingSeam || !bNewFMissingSeam, _T("SmBrep::MakeEdgeInFaceWithVU - broken assumption: Found two Split ChildFaces that both are missing Seams. \n\t\t Using hueristics to move inner loops to new faces.")) ;
+          SmBoolean bFaceMissingSeam = pFaceOuterLoopuse->IsMissingSeamAtVertices() ;
+          SmBoolean bNewFMissingSeam = pNewFOuterLoopuse->IsMissingSeamAtVertices() ;
+          SmBoolean bClassifyToFace  = !bFaceMissingSeam ;
+
+          SM_ASSERT_MSG(!bFaceMissingSeam || !bNewFMissingSeam, _T("SmBrep::MakeEdgeInFaceWithVU - broken assumption: Found two Split ChildFaces that both are missing Seams. \n\t\t Using hueristics to move inner loops to new faces.")) ;
 
 #ifdef SM_DEBUG_CODE
-      if (bDebugMe)
-        {
-          SM_DUMP(pFaceOuterLoopuse) ; 
-          SM_DUMP(pNewFOuterLoopuse) ;
-
-          ULONG di ;
-          SmTArray<SmVertexuse*> sVUs ;
-          pFaceOuterLoopuse->GetVertexuses(sVUs) ; 
-
-          smgfx_Erase();
-          smgfx_SetLook(1,2, 0,0,1) ; this->Draw(TRUE); sm_GraphicsLoop() ;
-          for(di=0;di<sVUs.GetSize();di++) 
-            { smgfx_SetLook(3,4, 1,0,0) ; if(sVUs[di]) sVUs[di]->Draw() ; sm_GraphicsLoop() ; }
-          smgfx_SetLook(3,4, 0,1,0) ; if(pFaceOuterLoopuse) pFaceOuterLoopuse->Draw(); sm_GraphicsLoop() ;
-          smgfx_SetLook(4,5, 1,0,1) ; if(pNewFOuterLoopuse) pNewFOuterLoopuse->Draw(); sm_GraphicsLoop() ;
-          sm_GraphicsLoop();
-        }
-#endif // SM_DEBUG_CODE
-
-      // move pFace->InnerLoops to pNewF when appropriate
-
-      // upcoming iter locals
-      SmPoint3d sTestPoint ;
-      double    dPointTol ;
-      SmTArray<SmEdge*> sEdges ;
-      SmTArray<SmLoop*> sFaceLoops ;
-      pFace->GetLoops(sFaceLoops) ;
-      // SmLoop  * pFaceOuterLoop = sFaceLoops[0] ;
-
-      // for every pFace->InnerLoop - move nested inner loops from pFace to pNewF as needed
-      for (ULONG i=1; i<sFaceLoops.GetSize();i++)
-        {
-          SmLoop * pLoop = sFaceLoops[i];
-
-          // skip StartLoop and NewLoop
-          if(   pLoop == pNewL
-             || pLoop == pStartLoop) 
-            { continue ; }
-
-          // locals
-          pLoop->GetEdges(sEdges);
-
-          // Get TestPoint: 
-          if (sEdges.GetSize() == 0)
-            {
-              // when VertexLoop - Grab vertex point
-              SmTArray<SmVertex*> sVertices;
-              pLoop->GetVertices(sVertices); // expect only 1
-              if (sVertices.GetSize() == 0) SER(SM_ERR);
-              dPointTol  = sVertices[0]->GetTolerance();
-              sTestPoint = sVertices[0]->GetPoint();
-            }
-          else 
-            {
-              // when EdgeLoop - Grab an edge midpoint
-              SmEdge   * pEdge = sEdges[0] ;
-              SmExtent1d sIvl  = pEdge->GetInterval() ;
-              dPointTol        = pEdge->GetTolerance() ;
-
-              SER(pEdge->GetCurve()->EvaluatePoint(sIvl.Evaluate(0.34567),sTestPoint)) ;
-            }
-
-#ifdef SM_DEBUG_CODE
-          // draw TestPoint(red), LoopBeingClassified(blue), pNewF(green)
           if (bDebugMe)
             {
+              SM_DUMP(pFaceOuterLoopuse) ;
+              SM_DUMP(pNewFOuterLoopuse) ;
+
               ULONG di ;
-              SmLoopuse *pLUT1, *pLUT2;
-              pLoop->GetLoopuses(pLUT1,pLUT2);
+              SmTArray<SmVertexuse*> sVUs ;
+              pFaceOuterLoopuse->GetVertexuses(sVUs) ;
 
               smgfx_Erase();
-              smgfx_SetLook(1,2, 0,0,1) ; this->Draw(TRUE) ; sm_GraphicsLoop() ;
-              smgfx_SetLook(3,4, 1,0,0); sTestPoint.Draw(); sm_GraphicsLoop();
-              smgfx_SetLook(2,3, 0,1,0); pLUT1->Draw(); sm_GraphicsLoop();
-              smgfx_SetLook(2,3, 1,.5,0); for(di=0;di<sFaceLoops.GetSize();di++) 
-                                            { if(sFaceLoops[di] != pLoop) { sFaceLoops[di]->GetLoopuses(pLUT1,pLUT2); pLUT1->Draw() ; sm_GraphicsLoop() ; } }
-              smgfx_SetLook(4,5, 0,1,1); pNewF->Draw(); sm_GraphicsLoop();
-              smgfx_SetLook(5,6, 1,0,1); pFace->Draw(); sm_GraphicsLoop();
+              smgfx_SetLook(1,2, 0,0,1) ; this->Draw(TRUE); sm_GraphicsLoop() ;
+              for(di=0;di<sVUs.GetSize();di++)
+                { smgfx_SetLook(3,4, 1,0,0) ; if(sVUs[di]) sVUs[di]->Draw() ; sm_GraphicsLoop() ; }
+              smgfx_SetLook(3,4, 0,1,0) ; if(pFaceOuterLoopuse) pFaceOuterLoopuse->Draw(); sm_GraphicsLoop() ;
+              smgfx_SetLook(4,5, 1,0,1) ; if(pNewFOuterLoopuse) pNewFOuterLoopuse->Draw(); sm_GraphicsLoop() ;
               sm_GraphicsLoop();
             }
 #endif // SM_DEBUG_CODE
 
-          // classify locals
-          SmFace               * pTgtFace   = bClassifyToFace ? pFace : pNewF ;
-          SmFace               * pOtherFace = bClassifyToFace ? pNewF : pFace ;
-          SmPointClassification  sPointClass(dPointTol, GetContext()) ;
-          SmBoolean              bNeedMove = FALSE ;
+          // move pFace->InnerLoops to pNewF when appropriate
 
-          if(bNewFMissingSeam && bFaceMissingSeam )
-          {
-              SmExtent2d  sFaceDomain, sNewFDomain;
-              SmSurface  *pSurface = pFace->GetSurface();
-              SmBoolean   bSuccess = FALSE;
-              SmPoint2d   sUV;
-              double      dGap;
-              
-              pFace->CalculateUVDomainFromUVTrimCurves( sFaceDomain, TRUE) ;
-              pNewF->CalculateUVDomainFromUVTrimCurves( sNewFDomain, TRUE) ;
+          // upcoming iter locals
+          SmPoint3d sTestPoint ;
+          double    dPointTol ;
+          SmTArray<SmEdge*> sEdges ;
+          SmTArray<SmLoop*> sFaceLoops ;
+          pFace->GetLoops(sFaceLoops) ;
+          // SmLoop  * pFaceOuterLoop = sFaceLoops[0] ;
 
-              SmBoolean bIsMulti;
-              pSurface->DropPoint(
-                  sTestPoint, pSurface->GetNaturalUVDomain(), NULL, bSuccess, sUV, dGap, bIsMulti);
-              
-              bNeedMove = sNewFDomain.ContainsPoint2d( sUV ) ? TRUE : FALSE;
-          }
-          else
-          {
-              // classify TestPoint against pTgtFace outerLoop
-              if(SM_SUCCESS != pTgtFace->Point3DClassify( sTestPoint,  // in : 3dPoint to classify
-                                                            dPointTol,   // in : Obj ZoneTol3d assoc with 3dPoint, if none, use:SmTol::GetZoneTol3d(Brep_Context_Or_NULL)
-                                                            FALSE,       // in : TRUE = intersect point with Face boundaries
-                                                                         //             before doing loop-containment tests.
-                                                                         //      FALSE= skip intersections go straight to
-                                                                         //             loop-containment tests.
-                                                            sPointClass, // out: Point classification for this point.
-                                                                         //      oneof SM_PC_UNKNOWN = point outside of Face
-                                                                         //            SM_PC_FACE    = point in Face
-                                                                         //            SM_PC_EDGE    = point on Edge boundary of Face
-                                                                         //            SM_PC_VERTEX  = point on Vertex boundary of Face
-                                                            NULL,        // in : Optional Guess UV for Point Drop, NULL to ignore, default:[NULL]
-                                                            TRUE ) )       // in : TRUE = classify against outer loop only, FALSE = all loops, default:[FALSE]
-              { // try again with larger tolerance
-                  if(pTgtFace->Point3DClassify( sTestPoint, dPointTol*100.0, FALSE, sPointClass, NULL, TRUE ) != SM_SUCCESS )
-                  {
-                      // give up - moving or not moving is a 50/50 chance here - force the move
-                      sPointClass.SetClassObject( bClassifyToFace ? SM_PC_UNKNOWN : SM_PC_FACE, NULL) ;
-                  }
-              }
+          // for every pFace->InnerLoop - move nested inner loops from pFace to pNewF as needed
+          for (ULONG i=1; i<sFaceLoops.GetSize();i++)
+            {
+              SmLoop * pLoop = sFaceLoops[i];
 
-              // When bClassifyToFace is TRUE and TestPoint classifies to outside the TgtFace we're done.
-              //  However it's possible that the TestLoop still has to be moved even though it's inside the 
-              //  TgtFace when TestLoop is also inside NewFace due to nesting as shown below:
-              //     +----------------------+
-              //     |                      |\ OldFace
-              //     |   +--------------+   |
-              //     |   |              |\  |
-              //     |   |  +--------+  | \ |
-              //     |   |  |        |\ |  \|
-              //     |   |  +--------+  +   +
-              //     |   |              |\  |\ NewFace Made from new geometry being merged into OldFace happens
-              //     |   +--------------+ \ |   to contain one of OldFace's internal loops
-              //     |                      +
-              //     +----------------------+\ TestLoop containing TestPoint has to be moved from OldFace to NewFace.
-              //
-              // The internal TestLoop is inside both OldFace and NewFace when classified only to the
-              //   outer boundaries of the OldFace and NewFace.
-              // We have a problem: when bClassifyToFace == TRUE everything is okay and we can 
-              //      test for nesting by classifying points to both pNewFace and pOldFace outer boundaries.
-              // However, when bClassifyToFace == FALSE we are working with a missing seam.  That means the input 
-              //      OldFace is modeling a closed surface with two 'outer' loops.  Our system can't represent that
-              //      and we are trying to extend this algorithm to work in the face of that database problem because
-              //      this algorithm will be run to heal that case.  The assumption here is that when OldFace is missing a 
-              //      seam, NewFace will be a properly defined face with just one outerloop.  The booelan bClassifyToFace
-              //      is set so that point classifications will be done against Faces with just one valid outerloop.
-              //      But when the algorithm runs into nesting - (adding new geometry closes NewFace loop that's contained within
-              //      OldFace and an OldFace innerLoop happens to be inside the NewFace outer boundary) the method for
-              //      identifying such cases with all Seam edges is to identify the nesting by classifying LoopSamplePoints
-              //      from The innerLoop and NewFace against the outerLoop of OldFace.  When Seam edges are missing
-              //      we can't classify points against the OldFace outer boundary.  It's easy to turn the above example
-              //      into a nesting loop problem when missing a seam by just building the above topology on the side of 
-              //      a cylinder missing its seam. Something extra has to be done to support this last case.
-              //
-              // An efficiency opportunity:  When OldFace and NewFace outer boundaries share an edge or adding a 
-              //     VertexLoop - nesting is not possible.
+              // skip StartLoop and NewLoop
+              if(   pLoop == pNewL
+                 || pLoop == pStartLoop)
+                { continue ; }
+
+              // locals
+              pLoop->GetEdges(sEdges);
+
+              // Get TestPoint:
+              if (sEdges.GetSize() == 0)
+                {
+                  // when VertexLoop - Grab vertex point
+                  SmTArray<SmVertex*> sVertices;
+                  pLoop->GetVertices(sVertices); // expect only 1
+                  if (sVertices.GetSize() == 0) SER(SM_ERR);
+                  dPointTol  = sVertices[0]->GetTolerance();
+                  sTestPoint = sVertices[0]->GetPoint();
+                }
+              else
+                {
+                  // when EdgeLoop - Grab an edge midpoint
+                  SmEdge   * pEdge = sEdges[0] ;
+                  SmExtent1d sIvl  = pEdge->GetInterval() ;
+                  dPointTol        = pEdge->GetTolerance() ;
+
+                  SER(pEdge->GetCurve()->EvaluatePoint(sIvl.Evaluate(0.34567),sTestPoint)) ;
+                }
 
 #ifdef SM_DEBUG_CODE
-              SmBoolean bObsoleteInnerFaceSort = TRUE;
-              SmBoolean bNeedMoveObsolete = FALSE;
-              // obsolete code that did not consider having nested loops - replaced by the acre of cases above
-              if(bObsoleteInnerFaceSort )
+              // draw TestPoint(red), LoopBeingClassified(blue), pNewF(green)
+              if (bDebugMe)
+                {
+                  ULONG di ;
+                  SmLoopuse *pLUT1, *pLUT2;
+                  pLoop->GetLoopuses(pLUT1,pLUT2);
+
+                  smgfx_Erase();
+                  smgfx_SetLook(1,2, 0,0,1) ; this->Draw(TRUE) ; sm_GraphicsLoop() ;
+                  smgfx_SetLook(3,4, 1,0,0); sTestPoint.Draw(); sm_GraphicsLoop();
+                  smgfx_SetLook(2,3, 0,1,0); pLUT1->Draw(); sm_GraphicsLoop();
+                  smgfx_SetLook(2,3, 1,.5,0); for(di=0;di<sFaceLoops.GetSize();di++)
+                                                { if(sFaceLoops[di] != pLoop) { sFaceLoops[di]->GetLoopuses(pLUT1,pLUT2); pLUT1->Draw() ; sm_GraphicsLoop() ; } }
+                  smgfx_SetLook(4,5, 0,1,1); pNewF->Draw(); sm_GraphicsLoop();
+                  smgfx_SetLook(5,6, 1,0,1); pFace->Draw(); sm_GraphicsLoop();
+                  sm_GraphicsLoop();
+                }
+#endif // SM_DEBUG_CODE
+
+              // classify locals
+              SmFace               * pTgtFace   = bClassifyToFace ? pFace : pNewF ;
+              SmFace               * pOtherFace = bClassifyToFace ? pNewF : pFace ;
+              SmPointClassification  sPointClass(dPointTol, GetContext()) ;
+              SmBoolean              bNeedMove = FALSE ;
+
+              if(bNewFMissingSeam && bFaceMissingSeam )
               {
-                  bNeedMoveObsolete = bClassifyToFace ? sPointClass.GetPointClass() == SM_PC_UNKNOWN
-                      : sPointClass.GetPointClass() != SM_PC_UNKNOWN;
+                  SmExtent2d  sFaceDomain, sNewFDomain;
+                  SmSurface  *pSurface = pFace->GetSurface();
+                  SmBoolean   bSuccess = FALSE;
+                  SmPoint2d   sUV;
+                  double      dGap;
+
+                  pFace->CalculateUVDomainFromUVTrimCurves( sFaceDomain, TRUE) ;
+                  pNewF->CalculateUVDomainFromUVTrimCurves( sNewFDomain, TRUE) ;
+
+                  SmBoolean bIsMulti;
+                  pSurface->DropPoint(
+                      sTestPoint, pSurface->GetNaturalUVDomain(), NULL, bSuccess, sUV, dGap, bIsMulti);
+
+                  bNeedMove = sNewFDomain.ContainsPoint2d( sUV ) ? TRUE : FALSE;
               }
+              else
+              {
+                  // classify TestPoint against pTgtFace outerLoop
+                  if(SM_SUCCESS != pTgtFace->Point3DClassify( sTestPoint,  // in : 3dPoint to classify
+                                                                dPointTol,   // in : Obj ZoneTol3d assoc with 3dPoint, if none, use:SmTol::GetZoneTol3d(Brep_Context_Or_NULL)
+                                                                FALSE,       // in : TRUE = intersect point with Face boundaries
+                                                                             //             before doing loop-containment tests.
+                                                                             //      FALSE= skip intersections go straight to
+                                                                             //             loop-containment tests.
+                                                                sPointClass, // out: Point classification for this point.
+                                                                             //      oneof SM_PC_UNKNOWN = point outside of Face
+                                                                             //            SM_PC_FACE    = point in Face
+                                                                             //            SM_PC_EDGE    = point on Edge boundary of Face
+                                                                             //            SM_PC_VERTEX  = point on Vertex boundary of Face
+                                                                NULL,        // in : Optional Guess UV for Point Drop, NULL to ignore, default:[NULL]
+                                                                TRUE ) )       // in : TRUE = classify against outer loop only, FALSE = all loops, default:[FALSE]
+                  { // try again with larger tolerance
+                      if(pTgtFace->Point3DClassify( sTestPoint, dPointTol*100.0, FALSE, sPointClass, NULL, TRUE ) != SM_SUCCESS )
+                      {
+                          // give up - moving or not moving is a 50/50 chance here - force the move
+                          sPointClass.SetClassObject( bClassifyToFace ? SM_PC_UNKNOWN : SM_PC_FACE, NULL) ;
+                      }
+                  }
+
+                  // When bClassifyToFace is TRUE and TestPoint classifies to outside the TgtFace we're done.
+                  //  However it's possible that the TestLoop still has to be moved even though it's inside the
+                  //  TgtFace when TestLoop is also inside NewFace due to nesting as shown below:
+                  //     +----------------------+
+                  //     |                      |\ OldFace
+                  //     |   +--------------+   |
+                  //     |   |              |\  |
+                  //     |   |  +--------+  | \ |
+                  //     |   |  |        |\ |  \|
+                  //     |   |  +--------+  +   +
+                  //     |   |              |\  |\ NewFace Made from new geometry being merged into OldFace happens
+                  //     |   +--------------+ \ |   to contain one of OldFace's internal loops
+                  //     |                      +
+                  //     +----------------------+\ TestLoop containing TestPoint has to be moved from OldFace to NewFace.
+                  //
+                  // The internal TestLoop is inside both OldFace and NewFace when classified only to the
+                  //   outer boundaries of the OldFace and NewFace.
+                  // We have a problem: when bClassifyToFace == TRUE everything is okay and we can
+                  //      test for nesting by classifying points to both pNewFace and pOldFace outer boundaries.
+                  // However, when bClassifyToFace == FALSE we are working with a missing seam.  That means the input
+                  //      OldFace is modeling a closed surface with two 'outer' loops.  Our system can't represent that
+                  //      and we are trying to extend this algorithm to work in the face of that database problem because
+                  //      this algorithm will be run to heal that case.  The assumption here is that when OldFace is missing a
+                  //      seam, NewFace will be a properly defined face with just one outerloop.  The booelan bClassifyToFace
+                  //      is set so that point classifications will be done against Faces with just one valid outerloop.
+                  //      But when the algorithm runs into nesting - (adding new geometry closes NewFace loop that's contained within
+                  //      OldFace and an OldFace innerLoop happens to be inside the NewFace outer boundary) the method for
+                  //      identifying such cases with all Seam edges is to identify the nesting by classifying LoopSamplePoints
+                  //      from The innerLoop and NewFace against the outerLoop of OldFace.  When Seam edges are missing
+                  //      we can't classify points against the OldFace outer boundary.  It's easy to turn the above example
+                  //      into a nesting loop problem when missing a seam by just building the above topology on the side of
+                  //      a cylinder missing its seam. Something extra has to be done to support this last case.
+                  //
+                  // An efficiency opportunity:  When OldFace and NewFace outer boundaries share an edge or adding a
+                  //     VertexLoop - nesting is not possible.
+
+#ifdef SM_DEBUG_CODE
+                  SmBoolean bObsoleteInnerFaceSort = TRUE;
+                  SmBoolean bNeedMoveObsolete = FALSE;
+                  // obsolete code that did not consider having nested loops - replaced by the acre of cases above
+                  if(bObsoleteInnerFaceSort )
+                  {
+                      bNeedMoveObsolete = bClassifyToFace ? sPointClass.GetPointClass() == SM_PC_UNKNOWN
+                          : sPointClass.GetPointClass() != SM_PC_UNKNOWN;
+                  }
 #endif // SM_DEBUG_COD
 
-              // remember when innerLoop needs to move
-              if(( bClassifyToFace == TRUE )                         // no missing seam
-                   && ( sPointClass.GetPointClass() == SM_PC_UNKNOWN ) )  // TestPoint is outside of TgtFace (TgtFace == pFace)
-              {
-                  // move the Loop
-                  bNeedMove = TRUE;
-              }
-              else if(( bClassifyToFace == TRUE )                        // no missing seam
-                        && ( sPointClass.GetPointClass() != SM_PC_UNKNOWN ) ) // TestPoint is inside TgtFace (TgtFace == pFace)
-              {
-                  // Check for nesting - classify TestPoint to OtherFace - if Inside
-                  //                       classify a NewFace->OuterLoop->TestPoint not on TgtFace's outerLoop against
-                  //                          TgtFace's outer loop. If also Inside, The loops nest - move the loop
-                  //                      otherwise don't move the loop
-                  SmTArray<SmEdge *> sTgtLoopEdges;
-                  SmTArray<SmEdge *> sOtherLoopEdges;
-                  pTgtFace->GetEdges( sTgtLoopEdges, NULL, TRUE) ; // TRUE = Get OuterLoop Edges only
-                  pOtherFace->GetEdges( sOtherLoopEdges, NULL, TRUE) ; // TRUE = Get OuterLoop Edges only
-                  SmBoolean bNoNesting = ( sTgtLoopEdges.GetSize() == 0 )
-                      || ( sOtherLoopEdges.GetSize() == 0 )
-                      || ( sTgtLoopEdges.HasCommonElements( sOtherLoopEdges )) ;
-
-                  // when nesting is not possible
-                  if(bNoNesting )
+                  // remember when innerLoop needs to move
+                  if(( bClassifyToFace == TRUE )                         // no missing seam
+                       && ( sPointClass.GetPointClass() == SM_PC_UNKNOWN ) )  // TestPoint is outside of TgtFace (TgtFace == pFace)
                   {
-                      bNeedMove = FALSE;
+                      // move the Loop
+                      bNeedMove = TRUE;
                   }
-                  else // need to check for nesting branch
+                  else if(( bClassifyToFace == TRUE )                        // no missing seam
+                            && ( sPointClass.GetPointClass() != SM_PC_UNKNOWN ) ) // TestPoint is inside TgtFace (TgtFace == pFace)
                   {
-                      // Classify TestPoint to OtherFace outerLoop
-                      if(SM_SUCCESS != pOtherFace->Point3DClassify( sTestPoint,  // in : 3dPoint to classify
-                                                                      dPointTol,   // in : Obj ZoneTol3d assoc with 3dPoint, if none, use:SmTol::GetZoneTol3d(Brep_Context_Or_NULL)
-                                                                      FALSE,       // in : TRUE = intersect point with Face boundaries
-                                                                                   //             before doing loop-containment tests.
-                                                                                   //      FALSE= skip intersections go straight to
-                                                                                   //             loop-containment tests.
-                                                                      sPointClass, // out: Point classification for this point.
-                                                                                   //      oneof SM_PC_UNKNOWN = point outside of Face
-                                                                                   //            SM_PC_FACE    = point in Face
-                                                                                   //            SM_PC_EDGE    = point on Edge boundary of Face
-                                                                                   //            SM_PC_VERTEX  = point on Vertex boundary of Face
-                                                                      NULL,        // in : Optional Guess UV for Point Drop, NULL to ignore, default:[NULL]
-                                                                      TRUE ) )       // in : TRUE = classify against outer loop only, FALSE = all loops, default:[FALSE]
-                      { // try again with larger tolerance
-                          if(pOtherFace->Point3DClassify( sTestPoint, dPointTol*100.0, FALSE, sPointClass, NULL, TRUE ) != SM_SUCCESS )
-                          {
-                              // give up - moving or not moving is a 50/50 chance here - force the move
-                              sPointClass.SetClassObject( bClassifyToFace ? SM_PC_UNKNOWN : SM_PC_FACE, NULL) ;
-                          }
-                      }
+                      // Check for nesting - classify TestPoint to OtherFace - if Inside
+                      //                       classify a NewFace->OuterLoop->TestPoint not on TgtFace's outerLoop against
+                      //                          TgtFace's outer loop. If also Inside, The loops nest - move the loop
+                      //                      otherwise don't move the loop
+                      SmTArray<SmEdge *> sTgtLoopEdges;
+                      SmTArray<SmEdge *> sOtherLoopEdges;
+                      pTgtFace->GetEdges( sTgtLoopEdges, NULL, TRUE) ; // TRUE = Get OuterLoop Edges only
+                      pOtherFace->GetEdges( sOtherLoopEdges, NULL, TRUE) ; // TRUE = Get OuterLoop Edges only
+                      SmBoolean bNoNesting = ( sTgtLoopEdges.GetSize() == 0 )
+                          || ( sOtherLoopEdges.GetSize() == 0 )
+                          || ( sTgtLoopEdges.HasCommonElements( sOtherLoopEdges )) ;
 
-                      // If TestPoint is also in OtherFace
-                      if(sPointClass.GetPointClass() != SM_PC_UNKNOWN )
+                      // when nesting is not possible
+                      if(bNoNesting )
                       {
-                          // find a test point on a OtherFace OuterLoop Edge that is not in the TgtFace OuterLoop
-
-                          // Get TestPoint: no need to check for VertexLoops - Grab an edge midpoint
-                          SmEdge   * pEdge = sOtherLoopEdges[0];
-                          SmExtent1d sIvl = pEdge->GetInterval();
-                          dPointTol = pEdge->GetTolerance();
-
-                          SER( pEdge->GetCurve()->EvaluatePoint( sIvl.Evaluate( 0.34567 ), sTestPoint )) ;
-
-                          // Classify OtherOuterLoop-TestPoint to TgtFace-outerLoop
-                          if(SM_SUCCESS != pTgtFace->Point3DClassify( sTestPoint,  // in : 3dPoint to classify
-                                                                        dPointTol,   // in : Obj ZoneTol3d assoc with 3dPoint, if none, use:SmTol::GetZoneTol3d(Brep_Context_Or_NULL)
-                                                                        FALSE,       // in : TRUE = intersect point with Face boundaries
-                                                                                     //             before doing loop-containment tests.
-                                                                                     //      FALSE= skip intersections go straight to
-                                                                                     //             loop-containment tests.
-                                                                        sPointClass, // out: Point classification for this point.
-                                                                                     //      oneof SM_PC_UNKNOWN = point outside of Face
-                                                                                     //            SM_PC_FACE    = point in Face
-                                                                                     //            SM_PC_EDGE    = point on Edge boundary of Face
-                                                                                     //            SM_PC_VERTEX  = point on Vertex boundary of Face
-                                                                        NULL,        // in : Optional Guess UV for Point Drop, NULL to ignore, default:[NULL]
-                                                                        TRUE ) )       // in : TRUE = classify against outer loop only, FALSE = all loops, default:[FALSE]
+                          bNeedMove = FALSE;
+                      }
+                      else // need to check for nesting branch
+                      {
+                          // Classify TestPoint to OtherFace outerLoop
+                          if(SM_SUCCESS != pOtherFace->Point3DClassify( sTestPoint,  // in : 3dPoint to classify
+                                                                          dPointTol,   // in : Obj ZoneTol3d assoc with 3dPoint, if none, use:SmTol::GetZoneTol3d(Brep_Context_Or_NULL)
+                                                                          FALSE,       // in : TRUE = intersect point with Face boundaries
+                                                                                       //             before doing loop-containment tests.
+                                                                                       //      FALSE= skip intersections go straight to
+                                                                                       //             loop-containment tests.
+                                                                          sPointClass, // out: Point classification for this point.
+                                                                                       //      oneof SM_PC_UNKNOWN = point outside of Face
+                                                                                       //            SM_PC_FACE    = point in Face
+                                                                                       //            SM_PC_EDGE    = point on Edge boundary of Face
+                                                                                       //            SM_PC_VERTEX  = point on Vertex boundary of Face
+                                                                          NULL,        // in : Optional Guess UV for Point Drop, NULL to ignore, default:[NULL]
+                                                                          TRUE ) )       // in : TRUE = classify against outer loop only, FALSE = all loops, default:[FALSE]
                           { // try again with larger tolerance
-                              if(pTgtFace->Point3DClassify( sTestPoint, dPointTol*100.0, FALSE, sPointClass, NULL, TRUE ) != SM_SUCCESS )
+                              if(pOtherFace->Point3DClassify( sTestPoint, dPointTol*100.0, FALSE, sPointClass, NULL, TRUE ) != SM_SUCCESS )
                               {
                                   // give up - moving or not moving is a 50/50 chance here - force the move
                                   sPointClass.SetClassObject( bClassifyToFace ? SM_PC_UNKNOWN : SM_PC_FACE, NULL) ;
                               }
                           }
 
-                          // Arrive here when innerLoop is in both TgtFace and OtherFace OuterLoops 
-                          // if OtherFace-OuterLoop is also in TgtFaceOuterLoop
-                          if(sPointClass.GetPointClass() != SM_PC_UNKNOWN ) // OtherFace OuterLoop inside TgtFaceOuterLoop
+                          // If TestPoint is also in OtherFace
+                          if(sPointClass.GetPointClass() != SM_PC_UNKNOWN )
                           {
-                              // move the InnerLoop
-                              bNeedMove = TRUE;
-                          } // end OtherFace nests inside TgtFace check
-                      } // innerLoop is also in OtherFace check
-                  } // end need to check for nesting branch
-              } // end bClassifyTOFace && PointClass.GetPointClass() != SM_PC_UNKNOWN branch
+                              // find a test point on a OtherFace OuterLoop Edge that is not in the TgtFace OuterLoop
 
-              else if(( bClassifyToFace == FALSE )                        // adding a MissingSeam
-                        && ( sPointClass.GetPointClass() != SM_PC_UNKNOWN ) )  // TestPoint is inside TgtFace (TgtFace=pNewF)
-              {
-                  // move the Loop
-                  bNeedMove = TRUE;
-              }
-              else if(( bClassifyToFace == FALSE )                        // adding a MissingSeam
-                        && ( sPointClass.GetPointClass() == SM_PC_UNKNOWN ) )  // TestPoint is outside TgtFace (TgtFace=pNewF)
-              {
-                  // This is the problem case - a seam is missing so we can't classify test points against
-                  // OldFace in case OldFace continues to have bits and pieces of its seam missing.
+                              // Get TestPoint: no need to check for VertexLoops - Grab an edge midpoint
+                              SmEdge   * pEdge = sOtherLoopEdges[0];
+                              SmExtent1d sIvl = pEdge->GetInterval();
+                              dPointTol = pEdge->GetTolerance();
 
-                  // don't move the Loop
-                  bNeedMove = FALSE;
+                              SER( pEdge->GetCurve()->EvaluatePoint( sIvl.Evaluate( 0.34567 ), sTestPoint )) ;
 
-                  // don't expect this case to occur - because when seam is missing we expect to be adding
-                  //  missing seam intervals.  In which case nesting should not be a problem.  If that's
-                  // not true then we need a new idea - 
-                  //   maybe force a classification with a specified sample line.
-                  //  A sample line that is known to run from TestPoint to a point on the Outerloop.
-                  //  Then that intersection has to be tested for for direction to see if its coming
-                  //  from the inside or the outside.  
-                  //  For now - just put in an assert that asks for more programming if the case ever comes up.
+                              // Classify OtherOuterLoop-TestPoint to TgtFace-outerLoop
+                              if(SM_SUCCESS != pTgtFace->Point3DClassify( sTestPoint,  // in : 3dPoint to classify
+                                                                            dPointTol,   // in : Obj ZoneTol3d assoc with 3dPoint, if none, use:SmTol::GetZoneTol3d(Brep_Context_Or_NULL)
+                                                                            FALSE,       // in : TRUE = intersect point with Face boundaries
+                                                                                         //             before doing loop-containment tests.
+                                                                                         //      FALSE= skip intersections go straight to
+                                                                                         //             loop-containment tests.
+                                                                            sPointClass, // out: Point classification for this point.
+                                                                                         //      oneof SM_PC_UNKNOWN = point outside of Face
+                                                                                         //            SM_PC_FACE    = point in Face
+                                                                                         //            SM_PC_EDGE    = point on Edge boundary of Face
+                                                                                         //            SM_PC_VERTEX  = point on Vertex boundary of Face
+                                                                            NULL,        // in : Optional Guess UV for Point Drop, NULL to ignore, default:[NULL]
+                                                                            TRUE ) )       // in : TRUE = classify against outer loop only, FALSE = all loops, default:[FALSE]
+                              { // try again with larger tolerance
+                                  if(pTgtFace->Point3DClassify( sTestPoint, dPointTol*100.0, FALSE, sPointClass, NULL, TRUE ) != SM_SUCCESS )
+                                  {
+                                      // give up - moving or not moving is a 50/50 chance here - force the move
+                                      sPointClass.SetClassObject( bClassifyToFace ? SM_PC_UNKNOWN : SM_PC_FACE, NULL) ;
+                                  }
+                              }
 
-                  // report any case where added edge isn't on the boundary - that would be a case we haven't 
-                  // expected.
-                  SmSurface * pSurface = pFace->GetSurface();
-                  SmExtent2d  sUVDomain = pSurface->GetNaturalUVDomain();
+                              // Arrive here when innerLoop is in both TgtFace and OtherFace OuterLoops
+                              // if OtherFace-OuterLoop is also in TgtFaceOuterLoop
+                              if(sPointClass.GetPointClass() != SM_PC_UNKNOWN ) // OtherFace OuterLoop inside TgtFaceOuterLoop
+                              {
+                                  // move the InnerLoop
+                                  bNeedMove = TRUE;
+                              } // end OtherFace nests inside TgtFace check
+                          } // innerLoop is also in OtherFace check
+                      } // end need to check for nesting branch
+                  } // end bClassifyTOFace && PointClass.GetPointClass() != SM_PC_UNKNOWN branch
+
+                  else if(( bClassifyToFace == FALSE )                        // adding a MissingSeam
+                            && ( sPointClass.GetPointClass() != SM_PC_UNKNOWN ) )  // TestPoint is inside TgtFace (TgtFace=pNewF)
+                  {
+                      // move the Loop
+                      bNeedMove = TRUE;
+                  }
+                  else if(( bClassifyToFace == FALSE )                        // adding a MissingSeam
+                            && ( sPointClass.GetPointClass() == SM_PC_UNKNOWN ) )  // TestPoint is outside TgtFace (TgtFace=pNewF)
+                  {
+                      // This is the problem case - a seam is missing so we can't classify test points against
+                      // OldFace in case OldFace continues to have bits and pieces of its seam missing.
+
+                      // don't move the Loop
+                      bNeedMove = FALSE;
+
+                      // don't expect this case to occur - because when seam is missing we expect to be adding
+                      //  missing seam intervals.  In which case nesting should not be a problem.  If that's
+                      // not true then we need a new idea -
+                      //   maybe force a classification with a specified sample line.
+                      //  A sample line that is known to run from TestPoint to a point on the Outerloop.
+                      //  Then that intersection has to be tested for for direction to see if its coming
+                      //  from the inside or the outside.
+                      //  For now - just put in an assert that asks for more programming if the case ever comes up.
+
+                      // report any case where added edge isn't on the boundary - that would be a case we haven't
+                      // expected.
+                      SmSurface * pSurface = pFace->GetSurface();
+                      SmExtent2d  sUVDomain = pSurface->GetNaturalUVDomain();
 
 
 #ifdef SM_DEBUG_CODE
-                  // draw TestPoint(red), LoopBeingClassified(blue), pNewF(green)
-                  if(bDebugMe )
-                  {
-                      ULONG di;
-                      SmLoopuse *pLUT1, *pLUT2;
-                      pLoop->GetLoopuses( pLUT1, pLUT2) ;
+                      // draw TestPoint(red), LoopBeingClassified(blue), pNewF(green)
+                      if(bDebugMe )
+                      {
+                          ULONG di;
+                          SmLoopuse *pLUT1, *pLUT2;
+                          pLoop->GetLoopuses( pLUT1, pLUT2) ;
 
-                      smgfx_Erase();
-                      smgfx_SetLook( 1, 2, 0, 0, 1) ; this->Draw( TRUE) ; sm_GraphicsLoop();
-                      smgfx_SetLook( 3, 4, 1, 0, 0) ; sTestPoint.Draw(); sm_GraphicsLoop();
-                      smgfx_SetLook( 2, 3, 0, 1, 0) ; pLUT1->Draw(); sm_GraphicsLoop();
-                      smgfx_SetLook( 2, 3, 1, .5, 0) ; for ( di = 0; di < sFaceLoops.GetSize(); di++ )
-                      { if(sFaceLoops[di] != pLoop ) { sFaceLoops[di]->GetLoopuses( pLUT1, pLUT2) ; pLUT1->Draw(); sm_GraphicsLoop(); } }
-                      smgfx_SetLook( 4, 5, 0, 1, 1) ; pNewF->Draw(); sm_GraphicsLoop();
-                      smgfx_SetLook( 5, 6, 1, 0, 1) ; pFace->Draw(); sm_GraphicsLoop();
-                      sm_GraphicsLoop();
-                  }
+                          smgfx_Erase();
+                          smgfx_SetLook( 1, 2, 0, 0, 1) ; this->Draw( TRUE) ; sm_GraphicsLoop();
+                          smgfx_SetLook( 3, 4, 1, 0, 0) ; sTestPoint.Draw(); sm_GraphicsLoop();
+                          smgfx_SetLook( 2, 3, 0, 1, 0) ; pLUT1->Draw(); sm_GraphicsLoop();
+                          smgfx_SetLook( 2, 3, 1, .5, 0) ; for ( di = 0; di < sFaceLoops.GetSize(); di++ )
+                          { if(sFaceLoops[di] != pLoop ) { sFaceLoops[di]->GetLoopuses( pLUT1, pLUT2) ; pLUT1->Draw(); sm_GraphicsLoop(); } }
+                          smgfx_SetLook( 4, 5, 0, 1, 1) ; pNewF->Draw(); sm_GraphicsLoop();
+                          smgfx_SetLook( 5, 6, 1, 0, 1) ; pFace->Draw(); sm_GraphicsLoop();
+                          sm_GraphicsLoop();
+                      }
 
-                  // expect pNewE->pNewEdgeuse->pUVTrimCurve to be on pSurface->Boundary
-                  SmBoolean        bCurveOnBoundary = TRUE;  
-                  SmEdgeuse* pEdgeuse = pNewE->GetEdgeuseOfFace( pFace) ;
-                  if(pEdgeuse != NULL) pEdgeuse->GetOrCreateUVTrimCurve( pUVTrimCurve) ;
+                      // expect pNewE->pNewEdgeuse->pUVTrimCurve to be on pSurface->Boundary
+                      SmBoolean        bCurveOnBoundary = TRUE;
+                      SmEdgeuse* pEdgeuse = pNewE->GetEdgeuseOfFace( pFace) ;
+                      if(pEdgeuse != NULL) pEdgeuse->GetOrCreateUVTrimCurve( pUVTrimCurve) ;
 
-                  if(pUVTrimCurve != NULL )
-                  {
-                      bCurveOnBoundary = pSurface->IsOnUVBoundary( sUVDomain,
-                                                                   *pUVTrimCurve,
-                                                                   0, NULL) ;
-                  }
+                      if(pUVTrimCurve != NULL )
+                      {
+                          bCurveOnBoundary = pSurface->IsOnUVBoundary( sUVDomain,
+                                                                       *pUVTrimCurve,
+                                                                       0, NULL) ;
+                      }
 
-                  // Fire a warning unless we know this case is okay
-                  SM_ASSERT_MSG( bCurveOnBoundary == TRUE,
-                                 _T( "SmBrep::MakeEdgeInFaceWithVU() - found a case of an innerLoop that might be nested that was not expected. Review for extensions." )) ;
+                      // Fire a warning unless we know this case is okay
+                      SM_ASSERT_MSG( bCurveOnBoundary == TRUE,
+                                     _T( "SmBrep::MakeEdgeInFaceWithVU() - found a case of an innerLoop that might be nested that was not expected. Review for extensions." )) ;
 #endif // SM_DEBUG_CODE
 
-              } // end (bClassifyToFace == FALSE) && (sPointClass.GetPointClass() == SM_PC_UNKNOWN) branch
+                  } // end (bClassifyToFace == FALSE) && (sPointClass.GetPointClass() == SM_PC_UNKNOWN) branch
 
 #ifdef SM_DEBUG_CODE
-              // obsolete code that did not consider having nested loops - replaced by the acre of cases above
-              if(bObsoleteInnerFaceSort )
-              {
-                  if(bNeedMoveObsolete != bNeedMove )
+                  // obsolete code that did not consider having nested loops - replaced by the acre of cases above
+                  if(bObsoleteInnerFaceSort )
                   {
-                      SM_DBG_MSG( bObsoleteInnerFaceSort != bNeedMove,
-                                  _T( "SmBrep::MakeEdgeInFaceWithUV() The InnerLoopMove logic should be reviewed here" )) ;
+                      if(bNeedMoveObsolete != bNeedMove )
+                      {
+                          SM_DBG_MSG( bObsoleteInnerFaceSort != bNeedMove,
+                                      _T( "SmBrep::MakeEdgeInFaceWithUV() The InnerLoopMove logic should be reviewed here" )) ;
+                      }
                   }
-              }
 #endif // SM_DEBUG_COD
-          }
-          // When the InnerLoop is out of pFace->OuterLoop or in pNewF->OuterLoop
-          if(bNeedMove)
-            {
-              // move InnerLoop from pFace to pNewF
-              pFace->Notify(SM_NO_PRE_EDIT, pFace, this, NULL);
-              pNewF->Notify(SM_NO_PRE_EDIT, pNewF, this, NULL);
-              pFace->RemoveLoop(pLoop);
-              pNewF->InsertLoop(pLoop);
+              }
+              // When the InnerLoop is out of pFace->OuterLoop or in pNewF->OuterLoop
+              if(bNeedMove)
+                {
+                  // move InnerLoop from pFace to pNewF
+                  pFace->Notify(SM_NO_PRE_EDIT, pFace, this, NULL);
+                  pNewF->Notify(SM_NO_PRE_EDIT, pNewF, this, NULL);
+                  pFace->RemoveLoop(pLoop);
+                  pNewF->InsertLoop(pLoop);
 
-              // regen sFaceLoops - Face-LoopList changed - redo all the remaining inner loop classifications
-              pFace->GetLoops(sFaceLoops) ; // refresh sFaceLoops - should have 1 fewer loops
-              i = 0 ;                       // reset iterator to review all sFaceLoops (again) since order is not guaranteed
-            }
-        } // end iter every pFace->InnerLoop moving nested loops to pNewF as needed
+                  // regen sFaceLoops - Face-LoopList changed - redo all the remaining inner loop classifications
+                  pFace->GetLoops(sFaceLoops) ; // refresh sFaceLoops - should have 1 fewer loops
+                  i = 0 ;                       // reset iterator to review all sFaceLoops (again) since order is not guaranteed
+                }
+            } // end iter every pFace->InnerLoop moving nested loops to pNewF as needed
+        } // end separating cut
 
       // always create a new loop
       // usually create a new face except for special cases

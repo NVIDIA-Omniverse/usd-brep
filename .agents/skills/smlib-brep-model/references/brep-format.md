@@ -1049,7 +1049,8 @@ three cases:
 
 The present SMLib-to-USD exporter preserves selected analytic surfaces but exports edge and wire
 curves as NURBS in its normal path. Treat that as current implementation policy, not a schema or
-SMLib limitation.
+SMLib limitation. The per-type mapping, with SMLib class names, is in
+[supported geometry](../../../operations/usd_import_export.md#supported-geometry).
 
 ## Translation and normalization rules
 

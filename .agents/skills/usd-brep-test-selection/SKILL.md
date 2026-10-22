@@ -125,6 +125,7 @@ Use `./tests.sh linux-x86_64` for the complete canonical gate. Use the headless 
 ./tests/prog_test/prog_test.sh linux-x86_64 --suite booleans
 ./tests/prog_test/prog_test.sh linux-x86_64 --suite fillets
 ./tests/prog_test/prog_test.sh linux-x86_64 --suite tessellation
+./tests/prog_test/prog_test.sh linux-x86_64 --suite healing
 ```
 
 For changes to `prog_test` itself, do not rely on process success alone. The
@@ -148,10 +149,17 @@ Use these defaults for obvious `source/SMLib/` changes:
 | sweeps | `sweeps` |
 | primitive creation, analytic primitives | `primitives` |
 | tessellation, polybrep, polygon operations | `tessellation` |
-| topology, trimming, BRep import/heal | `topology`, `trimmed-surfaces`, `brep-import` |
+| healer stages, repair properties, repeated healing | `healing`; add `topology` for classification or mutation tracking |
+| topology, trimming, BRep import | `topology`, `healing`, `trimmed-surfaces`, `brep-import` |
 | SSI / surface intersectors | `ssi-analytic`, `ssi-advanced` |
 | CCI / curve intersectors | `cci-advanced` |
 | section / silhouette | `section-advanced`, `silhouette-advanced` |
+
+`topology` includes `smFaceTest.cpp` classification and derived-UV tests as well as
+the direct topology tests in `smTopoTest.cpp`. `healing` runs `smHealTest.cpp` and
+is included in the default run immediately after `topology`. Keep each standalone
+suite independent; do not rely on another suite to prepare its fixtures. See
+[prog_test organization](../../../tests/prog_test/README.md) for placement guidance.
 
 ## Troubleshooting
 

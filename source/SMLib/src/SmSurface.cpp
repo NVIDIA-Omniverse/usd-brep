@@ -22368,7 +22368,8 @@ SmBoolean SmSurface::IsPlanar
  const
 { // test for planarity on Surface PseudoBox
   SmPseudoBox sPseudoBox ;
-  CalculateBoundingBox(GetNaturalUVDomain(), NULL, &sPseudoBox, NULL) ;
+  // Unpadded box: the zone-tolerance padding made flat surfaces fail small dTol3d.
+  CalculateBoundingBox(GetNaturalUVDomain(), NULL, &sPseudoBox, NULL, NULL, NULL, FALSE) ;
   return(sPseudoBox.IsPlanar(dTol3d, pOptPlanePoint,
                              pOptPlaneNormal, pOptActualDeviation)) ;
 

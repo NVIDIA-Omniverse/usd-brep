@@ -140,7 +140,14 @@ class SM_EXPORT SmDatabaseIO
   virtual SmStatus ReadShort     (short     & rInt);
   virtual SmStatus ReadChar      (char      & rChar);
   SmStatus ReadType(long & lType, ULONG *pOptDim=NULL) ;
-  void     GoToNextLine() { if(m_pStreamIn) { m_pStreamIn->ignore(SM_MAXSIZE, '\n') ; } }
+
+  // At the end of the input there is no next line: skipping there would mark the stream
+  // failed, as if the last value read had not been a number
+  void     GoToNextLine() { if(m_pStreamIn && !m_pStreamIn->eof()) { m_pStreamIn->ignore(SM_MAXSIZE, '\n') ; } }
+
+  // TRUE once a read has run past the end of the input or met text that is not a number.
+  // The Read methods above do not report either, so callers check this.
+  SmBoolean ReadFailed  () { return (m_pStreamIn && m_pStreamIn->fail()) ? TRUE : FALSE ; }
 
   // for debug
   SmBoolean IsValidType(long & lType) ;

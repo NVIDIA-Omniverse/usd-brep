@@ -1514,7 +1514,7 @@ NOTES: See STEP Part 42
 SmStatus SmBSplineCurve::CreateCanonical
   (const SmContext           & crContext,             // in : context for new object construction
    ULONG                       lDimension,            // in : valid dimension - 2 or 3  
-   ULONG                       lDegree,               // in : valid degree - 1 through 32  
+   ULONG                       lDegree,               // in : valid degree - 1 through 17  
    const SmTArray<SmPoint3d> & crControlPointsList,   // in : Euclidian form of the control points.
    SmBSplineCurveForm          eBSplineCurveForm,     // in : oneof  SM_CF_POLYLINE_FORM,  SM_CF_PARABOLIC_ARC, 
                                                       //             SM_CF_CIRCULAR_ARC,   SM_CF_HYPERBOLIC_ARC,
@@ -7248,15 +7248,17 @@ SmStatus SmBSplineCurve::ReadFromDB
   SER(  (   rpNewCurve == NULL
          || rpNewCurve->IsKindOf(SmBSplineCurve_TYPE)) ? SM_SUCCESS : SM_ERR) ;
 
-  // init output object
-  SmBSplineCurve *pBSplineCurve =   (rpNewCurve == NULL)
-                                  ? new (crContext) SmBSplineCurve(lDim)
-                                  : (SmBSplineCurve *)rpNewCurve ;
+  // init output object - a new one is made only once the whole curve has been read,
+  // so a read that fails part way has none to free
+  SmBSplineCurve *pBSplineCurve = (SmBSplineCurve *)rpNewCurve ;
+
   // file type
   SmFileType eType = rDB.GetFileType();
 
   // locals
   gw_REAL    wx, wy, wz, w;
+  const TCHAR *cpReadFailedMsg = _T("NURBS curve data ends early or holds text that is not a number.") ;
+  SM_REF1(cpReadFailedMsg) ; // release builds drop SER_MSG messages
 
   // Get parameters from the top 
   gw_INDEX   i, n ;
@@ -7285,6 +7287,8 @@ SmStatus SmBSplineCurve::ReadFromDB
                                 SER(rDB.ReadLong(lBSplineCurveForm));
                               }
                          }
+  SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
+
   // GWC: [prog_test SmCurve::ReadFromFile("C:\\TestFiles\\pt_TestFiles\\Drop\\PS_LiftCrv_Crv1.dat")]
   //  works when lDim == 3 and lReadDim == 2 so removing this check - its not needed.
   //      if(lDim != (ULONG)lReadDim)
@@ -7298,6 +7302,46 @@ SmStatus SmBSplineCurve::ReadFromDB
   //            }
   //        }
 
+  // A curve above NL_MAXDEG evaluates, but a surface built from it (an extrusion or a
+  // sweep) has that degree and overflows NLib's surface evaluators, which size their
+  // stack arrays by NL_MAXDEG. A degree-0 curve has a zero tangent. NLib's own curve
+  // checks also cap curves at NL_MAXDEG, so reject anything outside [1, NL_MAXDEG].
+  if (p < 1 || p > NL_MAXDEG)
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage,
+                 _T("NURBS curve degree %d is outside the supported range 1 to %d."),
+                 (int)p,
+                 NL_MAXDEG);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+
+  // The count comes straight from the file too, as the highest index. A curve needs at
+  // least degree + 1 control points, and the NURB is one block whose byte size is a ULONG,
+  // so reject a count that would overflow it before it sizes anything.
+  if (n < p)
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage,
+                 _T("NURBS curve control point count %lld is fewer than degree + 1 (%d)."),
+                 (long long)n + 1,
+                 (int)p + 1);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+  if ((ULONG)n >= ULONG_MAX / (4 * sizeof(gw_CPOINT)))
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage, _T("NURBS curve control point count %lld is too large."), (long long)n + 1);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+  // Any nonzero flag would otherwise select the rational read below.
+  if (rat != NL_NO && rat != NL_YES)
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage, _T("NURBS curve rational flag %d is neither %d nor %d."), (int)rat, NL_NO, NL_YES);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+
   // knot count
   gw_INDEX m = n+p+1;
 
@@ -7305,6 +7349,9 @@ SmStatus SmBSplineCurve::ReadFromDB
   gw_CURVE *cur = sm_AllocateNurbCurve(n,p,m);
   if(cur == NULL)
     { SER(SM_ERR) ; }
+
+  // frees the NURB on every failure below, until the curve takes it
+  SmMemDelete sNurbCleanup(cur) ;
 
   // curve locals
   gw_CPOINT  *Pw;
@@ -7329,6 +7376,7 @@ SmStatus SmBSplineCurve::ReadFromDB
                      else /* Binary */      { SER(rDB.ReadDouble(wx));
                                               SER(rDB.ReadDouble(wy));
                                             }
+                     SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
                      N_CPtFromWxWyWz(wx,wy,NL_NOZ,NL_NOW,&Pw[i]);
                    }
                } break ;
@@ -7345,6 +7393,7 @@ SmStatus SmBSplineCurve::ReadFromDB
                                               SER(rDB.ReadDouble(wy));
                                               SER(rDB.ReadDouble(wz));
                                             }
+                     SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
                      N_CPtFromWxWyWz(wx,wy,wz,NL_NOW,&Pw[i]);
                    }
                } break ;
@@ -7361,6 +7410,7 @@ SmStatus SmBSplineCurve::ReadFromDB
                                               SER(rDB.ReadDouble(wy));
                                               SER(rDB.ReadDouble(w));
                                             }
+                     SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
                      N_CPtFromWxWyWz(wx,wy,NL_NOZ,w,&Pw[i]);
                    }
                } break ;
@@ -7378,6 +7428,7 @@ SmStatus SmBSplineCurve::ReadFromDB
                                               SER(rDB.ReadDouble(wz));
                                               SER(rDB.ReadDouble(w));
                                             }
+                     SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
                      N_CPtFromWxWyWz(wx,wy,wz,w,&Pw[i]);
                    }
                } break ;
@@ -7396,9 +7447,13 @@ SmStatus SmBSplineCurve::ReadFromDB
                              }
       else /* Binary */      { SER(rDB.ReadDouble(U[i]));
                              }
+      SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
     }    
 
-  // Set output
+  // Set output - the curve now owns the NURB
+  if (pBSplineCurve == NULL)
+    { pBSplineCurve = new (crContext) SmBSplineCurve(lDim) ; }
+  sNurbCleanup.Clear() ;
   pBSplineCurve->m_pNurb               = cur ;
   pBSplineCurve->m_bNurbIsBorrowed     = FALSE ;
   pBSplineCurve->m_bOutOfBoundsEnabled = FALSE ;
@@ -7406,13 +7461,16 @@ SmStatus SmBSplineCurve::ReadFromDB
   pBSplineCurve->m_eBSplineCurveForm   = (SmBSplineCurveForm) lBSplineCurveForm ;
   pBSplineCurve->m_lDim                = (ULONG)lReadDim ;
 
-  rpNewCurve = pBSplineCurve ;
-
   // fix 2d curve representations
   if (lDim == 2 && lReadDim == 3) 
     {
-      SER(rpNewCurve->ConvertTo2D());
+      SmStatus eStatus = pBSplineCurve->ConvertTo2D() ;
+      if (eStatus != SM_SUCCESS && rpNewCurve == NULL)
+        { delete pBSplineCurve ; }
+      SER(eStatus);
     }
+
+  rpNewCurve = pBSplineCurve ;
 
   // all done
   return(SM_SUCCESS) ; 

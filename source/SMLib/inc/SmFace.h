@@ -178,14 +178,10 @@ public:
   // Compute the orientation of a loop within a face
   SmStatus ComputeLoopOrientation
   (
-    const SmLoop      * pLoop,                        // in : target loop 
-    SmOrientType      & reLoopOrient,                 // out: SM_OT_SAME     = outerLoop 
-                                                      //      SM_OT_OPPOSITE = InnerLoop 
-    SmExtent2d        * pUVBounds = NULL,             // out: UVBoundingBox of all loop->Edges 
-                                                      //      NULL to ignore. default:[NULL] 
-    SmBoolean           bDo3DLoopComputation = FALSE  // in : TRUE  = Walk candidate outerLoops in 3D to classify 
-                                                      //      FALSE = Walk candidate outerLoops in 2D to classify 
-                                                      //      default:[FALSE] 
+    const SmLoop *pLoop,                           // in : target loop
+    SmOrientType &reLoopOrient,                    // out: SM_OT_SAME = CCW; SM_OT_OPPOSITE = CW
+    SmExtent2d   *pUVBounds = NULL,                 // out: UV bounds of all loop edges; NULL to ignore
+    SmBoolean    bDo3DLoopComputation = FALSE       // in : TRUE uses defining 3D curves; FALSE tries UV trims first
   ) const;
 
   // Classify the Loop Properties of all FaceProperties using CurveClassify (an alternative algorithm to ComputeLoopOrientation)
@@ -209,9 +205,9 @@ public:
                                                           //                         //        SM_CMT_TOPLOOP,         // NoArea_Loop (invalid) contains lowerdomain UVPoints - AddMisingSeam heals to OuterLoop
                                                           //                         //        SM_CMT_WIRELOOP,        // A set of connected Edgeuses without a closed portion.
     SmCrvDirOnFaceType         & reClassifyCrv_StartType, // out: ClassifyCrv StartPt classification pointing out from start of ClassifyCrv (not always a touch)
-                                                          //        oneof: SM_CD_LAMINA SM_CD_SEAM SM_CD_POLE SM_CD_POLE_NO_VERTEX SM_CD_NONE
+                                                          //        oneof: SM_CD_LAMINA SM_CD_SEAM SM_CD_SEAM_NO_EDGEUSE SM_CD_POLE SM_CD_POLE_NO_VERTEX SM_CD_NONE
     SmCrvDirOnFaceType         & reClassifyCrv_StopType,  // out: ClassifyCrv StopPt classification pointing out from End of ClassifyCrv (not always a touch)
-                                                          //        oneof: SM_CD_LAMINA SM_CD_SEAM SM_CD_POLE SM_CD_POLE_NO_VERTEX SM_CD_NONE
+                                                          //        oneof: SM_CD_LAMINA SM_CD_SEAM SM_CD_SEAM_NO_EDGEUSE SM_CD_POLE SM_CD_POLE_NO_VERTEX SM_CD_NONE
     SmTArray<ULONG>            & rOrderedNoAreaIndices,   // out: NoArea_loops Ordered from lowest domain to highest domain.             
     SmLooptreeItem            *& rpLooptreeRoot,          // out: LoopContainmentTree based solely on geometry relations, NULL on Input  
     SmCurveClassification      & rCrvClassification,      // in : scratch CurveClassification memory to save time 
@@ -713,6 +709,10 @@ public:
   // predicates
 // Remove Composites
 //  SmBoolean         IsCompositeFace   () const ; // this Face is part of a composite face (returns FALSE for SmCFace objects)
+  // A whole closed surface whose only boundaries are isolated vertex loops.
+  SmBoolean         IsClosedSurfaceWithVertexLoops
+    (const SmFaceProps *pOptFaceProps = NULL) const; // in : current face properties; NULL or unavailable closure = query surface
+
   // With bSkipQuickCheck == FALSE, IsDegenerate is logically const but lazily
   // creates any missing edgeuse UV trim curves (via NormalizedEvaluate /
   // PointClassify); existing curves are not changed. That path is not safe to call

@@ -7,7 +7,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-SMLib is a NURBS-based boundary representation (BRep) solid modeling kernel. It represents solids as collections of topological entities (shells, faces, edges, vertices) bound to exact geometric definitions (NURBS surfaces, B-spline curves, analytic primitives). Geometry is mathematically exact and resolution-independent, unlike polygon meshes.
+SMLib is a boundary representation (BRep) solid modeling kernel for NURBS and analytic geometry. It represents solids as collections of topological entities (shells, faces, edges, vertices) bound to exact geometric definitions (NURBS surfaces, B-spline curves, analytic primitives). Geometry is mathematically exact and resolution-independent, unlike polygon meshes.
 
 The library is layered: a low-level C++ kernel (`SMLib`), a stable C-style C++ wrapper (`SM_API`), a USD integration layer (`SM_API_USD`), and Python bindings (`SmPyLib` / `_omni_solid`).
 
@@ -27,7 +27,7 @@ The library is layered: a low-level C++ kernel (`SMLib`), a stable C-style C++ w
 ./repo.sh format
 ```
 
-See the [build instructions](README.md#build-it) for prerequisites and Windows/macOS commands.
+See the [build instructions](BUILDING.md#build-it) for prerequisites and Windows/macOS commands.
 
 ## Code Style
 
@@ -193,17 +193,19 @@ Hard rules:
 - **[.agents/operations/INDEX.md](.agents/operations/INDEX.md)** — operation router.
 - **[source/HYDRA_USD_BREP/README.md](source/HYDRA_USD_BREP/README.md)** — viewing BrepArrays in usdview: the launcher, requirements and display modes.
 - **[README.md](README.md)** — top-level repo usage.
+- **[BUILDING.md](BUILDING.md)** — building, testing and running the tools from source.
 
 ## Agent Conventions in This Repo
 
 - Single source of truth for agent docs is **`AGENTS.md`** plus **`.agents/`**.
 - When adding a new operation guide, follow the existing guide structure and link it from `.agents/operations/INDEX.md`.
-- When a change fixes a bug listed in `KNOWN_ISSUES.md`, remove its entry in the same change.
+- When a change fixes a bug listed in `KNOWN_ISSUES.md`, remove its entry and add a `CHANGELOG.md` entry in the same change.
 
 ## Repo-Local Skills
 
 Repo-local agent skills live under **`.agents/skills/`**:
 
+- **[usd-brep-bug-report](.agents/skills/usd-brep-bug-report/SKILL.md)** — verify suspected bugs, check known issues and API usage, validate inputs with the local USD BRep asset validator and SMLib `AssertValid`, and prepare reproductions contained in this repo.
 - **[smlib-python-api-use](.agents/skills/smlib-python-api-use/SKILL.md)** — using the existing `_omni_solid` Python API correctly from scripts, examples, tests, and diagnostics.
 - **[smlib-sm-api-use](.agents/skills/smlib-sm-api-use/SKILL.md)** — using existing native `SmApi*` wrappers, including ownership/status handling and the runnable Boolean/bounds example.
 - **[smlib-python-api-maintain](.agents/skills/smlib-python-api-maintain/SKILL.md)** — stable `_omni_solid` bindings: pybind11, stubs, docstrings, mutation semantics, and binding tests.

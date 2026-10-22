@@ -18,7 +18,7 @@ Use this skill to answer schema questions with source references, verify authore
 
 Use this sequence for every task, then continue with the matching question, asset, drift, or development section.
 
-1. Work from the `solidmodeling` repository root and record its commit and working tree state. Do not pull or switch branches over local work.
+1. Work from the usd-brep repository root and record its commit and working tree state. Do not pull or switch branches over local work.
 2. Read `source/schema/omniSolid/resources/schema.usda` as the normative source.
 3. Treat design documents and comments outside that layer only as rationale. If they conflict with `schema.usda`, follow `schema.usda` and report the conflict.
 4. Treat generated schema metadata, serializers, utilities, validators, examples, and tests as implementations that may drift.
@@ -36,9 +36,9 @@ Read [references/schema-contract.md](references/schema-contract.md) before answe
 
 ## Requirements
 
-- Read access to the `solidmodeling` checkout containing the authoritative schema and its consumers.
+- Read access to the usd-brep checkout containing the authoritative schema and its consumers.
 - Python 3 and `pxr.Sdf` to run the bundled schema comparison script. Pass `--usd-python-path` when `pxr` is not on the ambient Python path.
-- Built `solidmodeling` USD and validator dependencies only when running the validator CLI; source-only schema questions do not require a build.
+- Built USD and validator dependencies only when running the validator CLI; source-only schema questions do not require a build.
 
 ## Answer Schema Questions
 
@@ -58,7 +58,7 @@ Read [references/validation-and-drift.md](references/validation-and-drift.md), t
 1. Confirm the layer opens and identify every authored `BrepArray` prim, including inactive or otherwise non-default prims when relevant.
 2. Confirm the OmniSolid plugin is registered and the intended applied API schemas are recognized. Treat "no BrepArray prims found" as inconclusive, never as a pass.
 3. Inspect raw `Sdf` property specs when authored types or authorship matter; composed `UsdAttribute` views can inherit schema types and hide a bad raw declaration.
-4. Run `tools/brep_validator_cli/validate_usd.sh <asset>` from `solidmodeling` when its built dependencies are available.
+4. Run `tools/brep_validator_cli/validate_usd.sh <asset>` from the repository root when its built dependencies are available.
 5. Reclassify every validator issue against the authoritative schema: schema violation, derived-invariant violation, policy finding, contradiction, or underspecified.
 6. Manually cover explicit schema clauses not exercised by the validator.
 7. Report the exact scope checked. Do not claim full compliance from parsing, schema recognition, a zero-exit validator run, or round-trip success alone.

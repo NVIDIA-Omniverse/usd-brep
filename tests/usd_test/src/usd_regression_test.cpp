@@ -30,6 +30,8 @@
 #include "SmBrepData.h"
 #include "SmEdgeuse.h"
 #include "SmTrimmingTools.h"
+#include "SmFilletExecutive.h"
+#include "SmSurfOfRevolution.h"
 
 // omni_solid_brep_data
 #include "UsdBrepArrayData.h"
@@ -1039,53 +1041,257 @@ static SmStatus usdBrep_TestAnalyticUvCurvesAreOmitted()
         usdBrep_WriteString("Error: BrepReadFromUsdStage failed in analytic UV omission test.\n");
         return SM_ERR;
     }
-    SmContext sRoundTripContext;
-    SmBrep* pRoundTripBrep = nullptr;
-    UsdBrepArraySpans sSpans;
-    SER(SMU_BrepConvert::BrepMove_OneUsdBrepToSMLib(
-        sRoundTripContext, sRoundTripArrays, sSpans, 0, pRoundTripBrep));
-    SmObjDelete sRoundTripClean(pRoundTripBrep);
-
-    SmTArray<SmEdgeuse*> sRoundTripEdgeuses;
-    pRoundTripBrep->GetEdgeuses(sRoundTripEdgeuses);
-    uint32_t lExpectedCurveCount = 0;
-    for (ULONG ii = 0; ii < sRoundTripEdgeuses.GetSize(); ++ii)
+    // Inspect imported data before healing can generate derived UV curves.
+    SmContext              sRoundTripContext;
+    SmBrepData            *pRoundTripData = nullptr;
+    UsdBrepArraySpans       sSpans;
+    SmTArray<SmAttribute*>  sAttributes;
+    SER(SMU_BrepConvert::BrepMove_OneUsdBrepToSMLibData(
+        sRoundTripContext, // in : context for the imported data
+        sRoundTripArrays,  // in : attributes read from USD
+        sSpans,            // i/o: packed member spans
+        0,                 // in : Brep member index
+        pRoundTripData,    // out: imported Brep data
+        sAttributes));     // out: referenced attributes
+    SmObjDelete               sRoundTripClean(pRoundTripData);
+    SmObjsDelete<SmAttribute*> sAttributeClean(&sAttributes);
+    if (pRoundTripData->m_vUVCurves.GetSize() != 0)
     {
-        SmEdgeuse* pEU = sRoundTripEdgeuses[ii];
-        if (pEU->GetOrientation() != SM_OT_SAME)
-        {
-            continue;
-        }
-        ++lExpectedCurveCount;
-        if (pEU->GetUVTrimCurve() != nullptr)
-        {
-            usdBrep_WriteString("Error: Analytic-face UV curve was restored from USD unexpectedly.\n");
-            return SM_ERR;
-        }
-    }
-
-    uint32_t lGeneratedCurveCount = 0;
-    for (ULONG ii = 0; ii < sRoundTripEdgeuses.GetSize(); ++ii)
-    {
-        SmEdgeuse* pEU = sRoundTripEdgeuses[ii];
-        if (pEU->GetOrientation() != SM_OT_SAME)
-        {
-            continue;
-        }
-        SmCurve* pTrimCurve = nullptr;
-        double dMaxDist = 0.0;
-        SER(pEU->GetOrCreateUVTrimCurve(pTrimCurve, &dMaxDist, nullptr, TRUE));
-        if (pTrimCurve == nullptr)
-        {
-            usdBrep_WriteString("Error: Failed to construct an analytic-face UV curve ad hoc.\n");
-            return SM_ERR;
-        }
-        ++lGeneratedCurveCount;
-    }
-    if (lExpectedCurveCount == 0 || lGeneratedCurveCount != lExpectedCurveCount)
-    {
-        usdBrep_WriteString("Error: Not all analytic-face UV curves were constructed ad hoc.\n");
+        usdBrep_WriteString("Error: Analytic-face UV curve was restored from USD unexpectedly.\n");
         return SM_ERR;
+    }
+
+    return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- Count faces whose surface has m_bSwapUV XOR m_bInsideOut.
+***********************************************************************/
+static ULONG usdBrep_CountAnalyticFacesOpposingUsdNormal(SmBrep* pBrep)
+{
+    SmTArray<SmFace*> sFaces;
+    pBrep->GetFaces(sFaces);
+    ULONG lCount = 0;
+    for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+    {
+        SmSurfOfRevolution* pRevolution = SM_CAST_PTR(SmSurfOfRevolution, sFaces[ii]->GetSurface());
+        if (pRevolution != NULL && (pRevolution->GetSwapUVBit() != FALSE) != (pRevolution->GetInsideOut() != FALSE))
+        {
+            ++lCount;
+        }
+    }
+    return lCount;
+}
+
+/***********************************************************************
+PURPOSE --- AssertValid(SM_LEVEL_2); on failure dump the asserts and write rError.
+***********************************************************************/
+static bool usdBrep_IsValidLevel2(SmBrep* pBrep, const std::string& rError)
+{
+    SmAssertArray sAsserts;
+    if (pBrep->AssertValid(&sAsserts, SM_LEVEL_2))
+    {
+        return true;
+    }
+    sAsserts.Dump(TRUE, FILE_NAME, LINE_NUMBER, FUNC_NAME, pBrep->GetClassString());
+    usdBrep_WriteString(rError);
+    return false;
+}
+
+/***********************************************************************
+PURPOSE --- Export pBrep, then require the source to be unchanged and valid and
+            the re-import (healing disabled) to be valid.
+***********************************************************************/
+static SmStatus usdBrep_CheckAnalyticFaceRoundTrip(SmBrep* pBrep, const char* pName)
+{
+    if (!usdBrep_IsValidLevel2(pBrep, TfStringPrintf("Error: %s fixture is not a valid source Brep.\n", pName)))
+    {
+        return SM_ERR;
+    }
+
+    SmTArray<SmFace*> sFaces;
+    pBrep->GetFaces(sFaces);
+    std::vector<SmExtent2d> sDomains;
+    for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+    {
+        sDomains.push_back(sFaces[ii]->GetUVDomain());
+    }
+
+    std::vector<SmBrep*> sBreps = { pBrep };
+    UsdBrepArrayData sArrays;
+    SER(SMU_BrepConvert::BrepAppend_SMLibToUsdBrep(sBreps, sArrays, nullptr));
+
+    if (!usdBrep_IsValidLevel2(pBrep, TfStringPrintf("Error: exporting the %s left the source Brep invalid.\n", pName)))
+    {
+        return SM_ERR;
+    }
+    for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+    {
+        if (!(sFaces[ii]->GetUVDomain() == sDomains[ii]))
+        {
+            usdBrep_WriteString(TfStringPrintf("Error: exporting the %s changed a source face UV domain.\n", pName));
+            return SM_ERR;
+        }
+    }
+
+    SmContext sImportContext;
+    SmBrep* pImported = nullptr;
+    UsdBrepArraySpans sSpans;
+    SER(SMU_BrepConvert::BrepMove_OneUsdBrepToSMLib(sImportContext, sArrays, sSpans, 0, pImported, FALSE));
+    SmObjDelete sImportedClean(pImported);
+    if (!usdBrep_IsValidLevel2(pImported, TfStringPrintf("Error: %s re-imported from USD is invalid.\n", pName)))
+    {
+        return SM_ERR;
+    }
+    return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- GitHub usd-brep #4 scene: a 40x40x6 box minus a flush radius 3
+            cylinder, with the 4 vertical corner edges filleted at radius 3. The
+            fillet swaps the UV of the hole's cylindrical face.
+***********************************************************************/
+static SmStatus usdBrep_BuildFilletedBoxWithFlushHole(const SmContext& crContext, SmBrep*& rpBrep)
+{
+    rpBrep = nullptr;
+
+    SmBrep* pBox = new (crContext) SmBrep();
+    SmObjDelete sBoxClean(pBox);
+    SmPrimitiveCreation sBoxPC(pBox->GetInfiniteRegion());
+    SER(sBoxPC.CreateBox(40.0, 40.0, 6.0, SmAxis2Placement(-20, -20, 0, 1, 0, 0, 0, 1, 0)));
+
+    SmBrep* pCylinder = new (crContext) SmBrep();
+    SmObjDelete sCylinderClean(pCylinder);
+    SmPrimitiveCreation sCylinderPC(pCylinder->GetInfiniteRegion());
+    SER(sCylinderPC.CreateCone(6.0, 3.0, 3.0, 0.0, 360.0, SmAxis2Placement()));
+
+    // SmMerge combines pCylinder into pBox and deletes pCylinder.
+    SmMerge sMerge(crContext, pBox, pCylinder);
+    sCylinderClean.Clear();
+    SmBrep* pResult = nullptr;
+    SER(sMerge.ManifoldBoolean(SM_BO_DIFFERENCE, pResult));
+    if (pResult != pBox)
+    {
+        usdBrep_WriteString("Error: box minus flush cylinder did not return the box Brep.\n");
+        return SM_ERR;
+    }
+
+    // The corner edges are vertical at |x| = |y| = 20.
+    SmTArray<SmEdge*> sEdges;
+    SmTArray<SmEdge*> sCornerEdges;
+    pBox->GetEdges(sEdges);
+    for (ULONG ii = 0; ii < sEdges.GetSize(); ++ii)
+    {
+        const SmPoint3d sStart = sEdges[ii]->GetStartVertex()->GetPoint();
+        const SmPoint3d sEnd = sEdges[ii]->GetEndVertex()->GetPoint();
+        if (std::fabs(std::fabs(sStart.x) - 20.0) < 1e-6 && std::fabs(std::fabs(sStart.y) - 20.0) < 1e-6 && std::fabs(sEnd.x - sStart.x) < 1e-6 &&
+            std::fabs(sEnd.y - sStart.y) < 1e-6)
+        {
+            sCornerEdges.Add(sEdges[ii]);
+        }
+    }
+    if (sCornerEdges.GetSize() != 4)
+    {
+        usdBrep_WriteString(TfStringPrintf("Error: expected 4 box corner edges, found %lu.\n", (unsigned long)sCornerEdges.GetSize()));
+        return SM_ERR;
+    }
+
+    SmFilletExecutive sFilletExecutive(crContext, pBox);
+    sFilletExecutive.SetDoGlobalMerge(TRUE);
+    SER(sFilletExecutive.SetFilletParameters(pBox, sCornerEdges, SM_FSG_CIRCULAR, SM_FS_CONST_RADIUS, 3.0, NULL, -1.0, -1.0, -1.0, -1.0));
+    SER(sFilletExecutive.DoFillet());
+    pBox->StitchAndOrient();
+
+    sBoxClean.Clear();
+    rpBrep = pBox;
+    return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- Analytic faces whose NURBS normal opposes their USD normal
+            (m_bSwapUV XOR m_bInsideOut) must round-trip through USD valid. Each
+            fixture is checked to have such faces, except the inside-out swapped
+            sphere, whose bits cancel.
+***********************************************************************/
+static SmStatus usdBrep_TestSwappedAnalyticFaceRoundTrip()
+{
+    enum Shape
+    {
+        kCone,
+        kSphere,
+        kTorus,
+        kFilletedBoxWithFlushHole
+    };
+    struct Fixture
+    {
+        const char* pName;
+        Shape eShape;
+        double dA, dB; // cone radii, sphere radius, torus radii; a negative sphere radius is inside out
+        bool bSwapCurvedFaces;
+        bool bExpectOpposing;
+    };
+    const Fixture aFixtures[] = {
+        { "cylinder", kCone, 3.0, 3.0, true, true },
+        { "cone", kCone, 3.0, 1.5, true, true },
+        { "sphere", kSphere, 3.0, 0.0, true, true },
+        { "torus", kTorus, 5.0, 1.5, true, true },
+        { "inside-out sphere", kSphere, -3.0, 0.0, false, true },
+        { "inside-out swapped sphere", kSphere, -3.0, 0.0, true, false },
+        { "filleted box with flush hole", kFilletedBoxWithFlushHole, 0.0, 0.0, false, true },
+    };
+
+    for (const Fixture& crFixture : aFixtures)
+    {
+        SmContext sContext;
+        SmBrep* pBrep = nullptr;
+        if (crFixture.eShape == kFilletedBoxWithFlushHole)
+        {
+            SER(usdBrep_BuildFilletedBoxWithFlushHole(sContext, pBrep));
+        }
+        else
+        {
+            pBrep = new (sContext) SmBrep();
+        }
+        SmObjDelete sClean(pBrep);
+        SmPrimitiveCreation sPC(pBrep->GetInfiniteRegion());
+        switch (crFixture.eShape)
+        {
+            case kCone:
+                SER(sPC.CreateCone(6.0, crFixture.dA, crFixture.dB, 0.0, 360.0, SmAxis2Placement()));
+                break;
+            case kSphere:
+                SER(sPC.CreateSphere(crFixture.dA, 0.0, 360.0, SmAxis2Placement()));
+                break;
+            case kTorus:
+                SER(sPC.CreateTorus(crFixture.dA, crFixture.dB, 0.0, 360.0, SmAxis2Placement()));
+                break;
+            case kFilletedBoxWithFlushHole:
+                break;
+        }
+
+        if (crFixture.bSwapCurvedFaces)
+        {
+            SmTArray<SmFace*> sFaces;
+            pBrep->GetFaces(sFaces);
+            for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+            {
+                if (sFaces[ii]->GetSurface()->IsKindOf(SmSurfOfRevolution_TYPE))
+                {
+                    SER(sFaces[ii]->SwapUV());
+                }
+            }
+        }
+
+        const ULONG lOpposing = usdBrep_CountAnalyticFacesOpposingUsdNormal(pBrep);
+        if (crFixture.bExpectOpposing != (lOpposing > 0))
+        {
+            usdBrep_WriteString(
+                TfStringPrintf("Error: %s fixture has %lu analytic faces opposing the USD normal.\n", crFixture.pName, (unsigned long)lOpposing)
+            );
+            return SM_ERR;
+        }
+
+        SER(usdBrep_CheckAnalyticFaceRoundTrip(pBrep, crFixture.pName));
     }
 
     return SM_SUCCESS;
@@ -1105,6 +1311,7 @@ SmStatus my_test_edgeuse_uvcurves()
 
     SER(usdBrep_TestEdgeuseUvCurveWriteOrientation());
     SER(usdBrep_TestAnalyticUvCurvesAreOmitted());
+    SER(usdBrep_TestSwappedAnalyticFaceRoundTrip());
 
     SmContext sContext;
     SmBrep* pBrep = new (sContext) SmBrep();
@@ -1947,6 +2154,33 @@ static SmStatus usdBrep_TestBrepMaterialImportFallback()
     usdBrep_WriteString("PASSED: usdBrep_TestBrepMaterialImportFallback\n\n");
     return SM_SUCCESS;
 } // end usdBrep_TestBrepMaterialImportFallback
+
+/***********************************************************************
+PURPOSE --- A UsdGeomCylinder prim converts to a Brep on an SmCylinder.
+***********************************************************************/
+static SmStatus usdBrep_TestUsdCylinderPrimIsSmCylinder()
+{
+    UsdStageRefPtr sStage = UsdStage::CreateInMemory();
+    UsdGeomCylinder sUsdCylinder = UsdGeomCylinder::Define(sStage, SdfPath("/Cylinder"));
+
+    SmContext sContext;
+    SmBrep* pBrep = NULL;
+    SER(SMU_BrepConvert::CreateSmBrep_FromUsdCylinder(sContext, sUsdCylinder, pBrep));
+    SmObjDelete sBrepCleanup(pBrep);
+
+    SmTArray<SmFace*> sFaces;
+    pBrep->GetFaces(sFaces);
+    ULONG lCylinders = 0;
+    for (ULONG ii = 0; ii < sFaces.GetSize(); ++ii)
+        if (sFaces[ii]->GetSurface()->GetType() == SmCylinder_TYPE)
+            ++lCylinders;
+    if (sFaces.GetSize() != 3 || lCylinders != 1 || !pBrep->AssertValid())
+    {
+        usdBrep_WriteString("  FAIL: the UsdGeomCylinder Brep is not a valid solid with one SmCylinder face\n");
+        return SM_ERR;
+    }
+    return SM_SUCCESS;
+} // end usdBrep_TestUsdCylinderPrimIsSmCylinder
 
 /***********************************************************************
 PURPOSE --- Regression: shell-point geometry is packed only for shells
@@ -2814,6 +3048,13 @@ SmStatus my_test_usd()
     {
         sRtn = sStat;
         usdBrep_WriteString("Failed: usdBrep_TestConversionFailurePropagation\n\n");
+    }
+
+    sStat = usdBrep_TestUsdCylinderPrimIsSmCylinder();
+    if (sStat != SM_SUCCESS)
+    {
+        sRtn = sStat;
+        usdBrep_WriteString("Failed: usdBrep_TestUsdCylinderPrimIsSmCylinder\n\n");
     }
 
     // Regression: the B-rep healer must not crash while importing a BrepArray.

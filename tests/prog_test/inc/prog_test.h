@@ -23,6 +23,15 @@
 
 #include <SmMessages.h>
 
+// Run an independent test once, report errors, and retain the first failure.
+// Pass a SmStatus accumulator; use SER for dependent steps inside a test.
+#define PT_RUN(result,call)                                   \
+  do {                                                        \
+    SmStatus sPTRunStatus = (call);                           \
+    SE(sPTRunStatus);                                         \
+    if((result) == SM_SUCCESS) { (result) = sPTRunStatus; }   \
+  } while(FALSE)
+
 struct ProgTestRunResult
 {
     const char* pSuiteName;

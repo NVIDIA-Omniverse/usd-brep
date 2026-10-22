@@ -90,7 +90,7 @@ class SM_EXPORT SmTopologyChangeCallback : public SmNotifyCallback
  public:
   SmTArray<SmTopology*>   * m_pRmList       = NULL ; // list of all topology objects notified of a removal - treat as stale pointers
   SmTArray<SmTopology*>   * m_pAddList      = NULL ; // list of all topology objects notified of a addition
-  SmTArray<SmTopology*>   * m_pChgList      = NULL ; // list of all topology objects notified of a geometry change
+  SmTArray<SmTopology*>   * m_pChgList      = NULL ; // geometry notifications for diagnostics; does not request healing
   SmTArray<SmNotifyEvent> * m_pNotifyEvents = NULL ; // list of all events that modified the Rm, Add, or Chg lists
 
 #ifdef SM_DEBUG_CODE
@@ -100,6 +100,9 @@ class SM_EXPORT SmTopologyChangeCallback : public SmNotifyCallback
 #endif // SM_DEBUG_CODE
 
  public:
+  // Expand completed edits from AddList into remove/add entries for dependent edges/faces.
+  void RecordDependencies(SmBrep *pBrep); // in : edited Brep with completed topology
+
   // constructor
   SmTopologyChangeCallback(SmTArray<SmTopology*>   * pRmList       =NULL, // in : list of all topology objects notified of a removal
                            SmTArray<SmTopology*>   * pAddList      =NULL, // in : list of all topology objects notified of a addition
@@ -351,7 +354,7 @@ class SM_EXPORT SmTrackTopologyChanges
                                                      // An object ptr added and removed from the topology graph won't be in this list.
                                                      // An object ptr added, removed, deleted, reused, added again will be in this list.
                             
-    SmTArray<SmTopology *>  m_sChgList ;             // list of all topology objects whose geometries have been redefined
+    SmTArray<SmTopology *>  m_sChgList ;             // geometry notifications for diagnostics; does not request healing
                             
     SmTArray<SmNotifyEvent> m_sNotifyList ;          // capture the event history that added and removed elements from Add and Rm lists                                                      
                                                       

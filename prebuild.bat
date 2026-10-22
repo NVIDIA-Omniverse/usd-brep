@@ -57,7 +57,7 @@ if "!NEEDS_REGEN!"=="1" (
         set "PATH=%SCRIPT_DIR%_build\target-deps\usd\release\bin;%SCRIPT_DIR%_build\target-deps\usd\release\lib;%PATH%"
         "%PYTHON%" "%USD_GEN_SCHEMA%" "%SCHEMA_USDA%" "%SCHEMA_SRC_DIR%"
         if errorlevel 1 ( goto Error )
-        echo prebuild: Schema regeneration complete; remember to commit the updated files in %SCHEMA_SRC_DIR%
+        echo prebuild: Schema regeneration complete; remember to commit the updated files in "%SCHEMA_SRC_DIR%"
     ) else (
         echo prebuild: WARNING: schema.usda was edited but the compiled schema could not be regenerated.
         echo prebuild:          usdGenSchema needs the Python 'jinja2' module. Install it with:

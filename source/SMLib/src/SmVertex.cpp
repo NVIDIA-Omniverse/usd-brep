@@ -257,6 +257,7 @@ SmVertexuse * SmVertex::GetVertexuseOfFace
 //      // when VU connects to TgtFace (or one of its member faces)
 //      if(   (!bIsComposite && pThisFace == pFace)
 //         || ( bIsComposite && ((SmCFace*)pFace)->ContainsFace(pThisFace)))
+      if ( pThisFace == pFace )
         {
           // remember any found Vertexuses
           pRet = pVU;
@@ -355,15 +356,14 @@ SmLoop * SmVertex::GetLoopOfFace
       if ( pFU == NULL )
         { continue; }
 
-#ifdef SM_DEBUG_CODE
       SmFace * pThisFace = pFU->GetFace() ;
       SM_ASSERT_MSG(pThisFace != NULL, _T("SmVertex::GetLoopOfFace - found a Faceuse without a Face owner - needs debug")) ; 
-#endif // SM_DEBUG_CODE
 
 // Remove Composite
 //      // when VU connects to TgtFace (or one of its member faces)
 //      if(   (!bIsComposite && pThisFace == pFace)
 //         || ( bIsComposite && ((SmCFace*)pFace)->ContainsFace(pThisFace)))
+      if ( pThisFace == pFace )
         {
           // remember any found Vertexuses
           pRet = pVU->GetLoopuse()->GetLoop() ;

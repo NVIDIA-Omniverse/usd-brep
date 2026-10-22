@@ -69,13 +69,14 @@ Compute the enclosed volume of a manifold solid.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `brep` | Brep | — | BRep to measure |
-| `relative_accuracy` | float | `0.001` | Accuracy between 1.0e-1 (coarse) and 1.0e-8 (fine) |
+| `relative_accuracy` | float | `0.001` | Accuracy passed to the kernel; values below 1.0e-8 are not recommended |
 
 **Returns:** volume as a float (in cubic world units).
 
 **Design notes:**
 - Requires a manifold solid (closed volume). Undefined for open shells.
 - `relative_accuracy` controls the precision of the numerical integration. Smaller values = more accurate but slower.
+- Values below `1.0e-8` are not recommended because roundoff can prevent convergence.
 - For simple shapes (boxes, spheres), even coarse accuracy gives exact results. For complex shapes with many curved faces, tighter accuracy may be needed.
 - Volume is in cubic world units. A 10×10×10 box has volume 1000.0.
 
@@ -395,9 +396,9 @@ These queries return read-only geometric or topological properties of a `Brep` /
 | Method | Flat alias | Purpose |
 |---|---|---|
 | `brep.bounding_box(tight=False)` | `brep_bounding_box(brep, tight)` | Axis-aligned bounding box as `((min_x,min_y,min_z), (max_x,max_y,max_z))`. `tight=True` samples each face's surface for a minimal box (expensive); default returns the loose vertex/edge/face union. |
-| `brep.volume(relative_accuracy=1e-3)` | `compute_volume(brep, relative_accuracy)` | Enclosed volume in cubic modeling units. Closed manifold solid required. Finite `relative_accuracy` is clamped to `[1e-8, 1e-1]`; non-finite values raise `RuntimeError`. |
-| `brep.area(relative_accuracy=1e-3)` | — | Total surface area in square modeling units: the sum of `face.area()` over every face, with the same `relative_accuracy` clamp. Works on sheet bodies and open shells, which `mass_properties()` rejects. Non-finite `relative_accuracy` raises `RuntimeError`. Wraps `SmApiBrepComputeArea`. |
-| `brep.mass_properties(relative_accuracy=1e-3, density=1.0, origin=None)` | — | Dict of mass properties for a closed manifold solid, computed directly from the exact BRep geometry by adaptive numerical integration to `relative_accuracy` (clamped to `[1e-4, 1e-1]`): `area`, `volume`, `mass` (`density * volume`), `centroid` (mass centre of gravity `(x, y, z)`, origin-independent), and **mass** `moments_of_inertia` `(Ixx, Iyy, Izz)` / `products_of_inertia` `(Iyz, Izx, Ixy)` taken about axes through `origin` (parallel to world axes). `origin=None` (default) returns **centroidal** inertia (recovers the centroid, then integrates about it — two passes); pass an explicit `(x,y,z)` for a single pass about that point. Products are the raw positive integrals `(∫yz dm, ∫zx dm, ∫xy dm)`; an inertia tensor's off-diagonals are their negatives. `density` must be `>= 1e-12`; a non-solid, an attributed Brep (`SM_AI_MASS_PROPERTIES`), or a non-finite `density` / `relative_accuracy` / `origin` raises `RuntimeError`. The C `SmApiBrepComputeMassProperties` takes the origin explicitly and runs a single `ComputePreciseProperties` pass; `SmApiBrepComputeVolume` shares that core. |
+| `brep.volume(relative_accuracy=1e-3)` | `compute_volume(brep, relative_accuracy)` | Enclosed volume in cubic modeling units. Closed manifold solid required. Finite `relative_accuracy` values below `1e-8` are not recommended because roundoff can prevent convergence. Non-finite values raise `RuntimeError`. |
+| `brep.area(relative_accuracy=1e-3)` | — | Total surface area in square modeling units: the sum of `face.area()` over every face, with the same `relative_accuracy` guidance. Works on sheet bodies and open shells, which `mass_properties()` rejects. Non-finite `relative_accuracy` raises `RuntimeError`. Wraps `SmApiBrepComputeArea`. |
+| `brep.mass_properties(relative_accuracy=1e-3, density=1.0, origin=None)` | — | Dict of mass properties for a closed manifold solid, computed directly from the exact BRep geometry by adaptive numerical integration to `relative_accuracy` values below `1e-8` are not recommended because roundoff can prevent convergence. Returns `area`, `volume`, `mass` (`density * volume`), `centroid` (mass centre of gravity `(x, y, z)`, origin-independent), and **mass** `moments_of_inertia` `(Ixx, Iyy, Izz)` / `products_of_inertia` `(Iyz, Izx, Ixy)` taken about axes through `origin` (parallel to world axes). `origin=None` (default) returns **centroidal** inertia (recovers the centroid, then integrates about it — two passes); pass an explicit `(x,y,z)` for a single pass (integrated about the bounding-box midpoint and shifted exactly to the origin). Products are the raw positive integrals `(∫yz dm, ∫zx dm, ∫xy dm)`; an inertia tensor's off-diagonals are their negatives. `density` must be `>= 1e-12`; a non-solid, an attributed Brep (`SM_AI_MASS_PROPERTIES`), or a non-finite `density` / `relative_accuracy` / `origin` raises `RuntimeError`. The C `SmApiBrepComputeMassProperties` takes the origin explicitly and runs a single `ComputePreciseProperties` pass about the bounding-box midpoint; `SmApiBrepComputeVolume` shares that core. |
 | `brep.is_manifold_solid()` | `is_manifold_solid(brep)` | `True` if every edge is shared by exactly two faces. |
 | `brep.copy()` | `brep_copy(brep)` | Deep-copy into a fresh handle, preserving geometry types: NURBS are not promoted to analytics. Mutating the result does not affect the source — use this before in-place mutators (`fillet_edges`, `cut`, `translate`, …) when the original must be preserved. `copy.copy(brep)` and `copy.deepcopy(brep)` give the same deep copy (so does `PolyBrep`). |
 | `brep.center()` | — | Centre of the loose bounding box as `(x, y, z)`. Convenience for a rough anchor; for the mass centre of gravity use `mass_properties()['centroid']`. |
@@ -415,7 +416,7 @@ failure reporting are retained; this is not a tessellation approximation.
 | Method | Flat alias | Purpose |
 |---|---|---|
 | `face.bounding_box(tight=False)` | `face_bounding_box(face, tight)` | Axis-aligned bounding box of the face. `tight=True` samples within the trim boundary (expensive). |
-| `face.area(relative_accuracy=1e-3)` | `face_area(face, relative_accuracy)` | Surface area within the trim boundary, in square modeling units. Always positive — a geometric, not signed, quantity. `relative_accuracy` clamped to `[1e-4, 1e-1]`. |
+| `face.area(relative_accuracy=1e-3)` | `face_area(face, relative_accuracy)` | Surface area within the trim boundary, in square modeling units. Always positive — a geometric, not signed, quantity. `relative_accuracy` values below `1e-8` are not recommended. |
 
 ### Edge properties
 
@@ -449,7 +450,7 @@ The kernel's radial-edge data structure links every face, edge, and vertex to it
 | `face.interior_point()` | `(x,y,z)` | A 3D point evaluated on the owning surface at a UV strictly inside the trim boundary (interior to the outer loop and outside any holes). If no such point can be evaluated, the call raises `RuntimeError`. Seed point for ray tests / classification / picking. Wraps `SmApiFaceInternalPoint`. |
 | `face.classify_uv(u, v)` | `str` | Trim-aware classification of a UV parameter: `"inside"`, `"outside"` (outside the outer loop **or** inside a hole), `"boundary"` (on an edge), or `"vertex"`. `(u, v)` is a parameter on the parent `surface()`. Wraps `SmApiFaceClassifyUV`. |
 | `face.closest_point(point)` | `((x,y,z), dist)` | Closest point on the *trimmed* face to `point`. Unlike a plain surface closest point, always lies within (or on) the trim boundary — scopes an `SmShape` to this one face and runs `SmTopologySolver::ShapePointSolve`. Wraps `SmApiFaceClosestPoint`. |
-| `face.centroid(relative_accuracy=1e-3)` | `(x,y,z)` | Area centroid of the trimmed face. Shares the `SmFace::ComputePreciseProperties` integration `area()` already runs. `relative_accuracy` clamped to `[1e-4, 1e-1]`, same as `area()`. Wraps `SmApiFaceComputeCentroid`. |
+| `face.centroid(relative_accuracy=1e-3)` | `(x,y,z)` | Area centroid of the trimmed face. Shares the `SmFace::ComputePreciseProperties` integration `area()` already runs. `relative_accuracy` values below `1e-8` are not recommended, same as `area()`. Wraps `SmApiFaceComputeCentroid`. |
 | `face.brep()` | `Brep` | Parent Brep. |
 
 ### Edge

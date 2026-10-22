@@ -214,8 +214,10 @@ public:
     SmStatus CloseIntersectionLoop
     (
       SmVertex  * pBrepVertex,                                 ///< [in ]: target vertex from m_pBrep     <br>
-      SmBoolean & rbMadeNewTopology                            ///< [out]: TRUE =                         <br>
+      SmBoolean & rbMadeNewTopology,                           ///< [out]: TRUE =                         <br>
                                                                ///<      : FALSE=                         <br>
+      SmTArray< SmVertex* > & rDeletedVertices,                ///< [out]: vertices deleted by squeezes   <br>
+      SmTArray< SmEdge*   > & rDeletedEdges                    ///< [out]: edges deleted by squeezes      <br>
     );
 
     SmStatus DeleteFaces

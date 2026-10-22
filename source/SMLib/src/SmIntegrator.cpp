@@ -768,9 +768,9 @@ SmStatus SmODEIntegrator::BulirschStoerStep(SmTArray<double> & y,
     nseq[4] = 8;
     nseq[5] = 10;
     nseq[6] = 12;
-    nseq[0] = 14;
-    nseq[0] = 16;
-    nseq[0] = 18;
+    nseq[7] = 14;
+    nseq[8] = 16;
+    nseq[9] = 18;
 
     ULONG reduct, exitflag=0;
     

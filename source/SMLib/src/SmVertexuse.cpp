@@ -273,9 +273,16 @@ SmBoolean bDebugMe = FALSE ;
                           || SM_ARE_SAME_TO_TOL(sThisUVPnt.y, sSurfUVDomain.GetVMax(), SM_EFF_ZERO_PARAM * 1000));
                   if(bDoublyPeriodicCorner) { sPrevUVTan = -sPrevUVTan; }
 
-                  // for cases of just one closed direction (cylinders, spheres) - orthogonalize the endTans to cross the seam
-                  if     ( bClosedU && !bClosedV) { sThisUVTan.y = 0.0 ; sPrevUVTan.y = 0.0 ; }
-                  else if(!bClosedU &&  bClosedV) { sThisUVTan.x = 0.0 ; sPrevUVTan.x = 0.0 ; }
+                  // Away from a doubly periodic corner, only motion across the
+                  // crossed seam can choose its side. A torus seam partitioned
+                  // at a vertex can have both adjacent tangents along the seam.
+                  if(!bDoublyPeriodicCorner)
+                    {
+                      if(bClosedU && SM_ARE_SAME_TO_TOL(dDistU,dDomainLengthU,SM_EFF_ZERO_PARAM * 1000))
+                        { sThisUVTan.y = 0.0; sPrevUVTan.y = 0.0; }
+                      else
+                        { sThisUVTan.x = 0.0; sPrevUVTan.x = 0.0; }
+                    }
 
                   // skip cases where the EndTans are parallel to Seam (ex: vertex on pole at end of seam)
                   //  after the orthogonalization that can be checked by checking for degenerate tangents
@@ -387,8 +394,24 @@ SmBoolean bDebugMe = FALSE ;
                                   break;
                                 }
                             }
-                          SM_ASSERT_MSG(bFoundCorner, _T("SmVertexuse::ComputeUVPoint - no valid doubly periodic corner"));
-                          SM_REF1(bFoundCorner);
+                          // Before a missing seam is inserted, the two sector arms
+                          // can enter opposite periodic sides without a common corner.
+                          // Preserve this edgeuse's UV; ComputeUVSector keeps both ends.
+                          SmBoolean bMissingSeam = FALSE;
+                          if(!bFoundCorner)
+                            {
+                              SmBoolean bAcrossU = SM_ARE_SAME_TO_TOL(dDistU, dDomainLengthU, SM_EFF_ZERO_PARAM * 1000);
+                              SmBoolean bAcrossV = SM_ARE_SAME_TO_TOL(dDistV, dDomainLengthV, SM_EFF_ZERO_PARAM * 1000);
+                              bMissingSeam =
+                                  (bAcrossU || SM_IS_ZERO_TO_TOL(dDistU, SM_EFF_ZERO_PARAM * 1000))
+                                  && (bAcrossV || SM_IS_ZERO_TO_TOL(dDistV, SM_EFF_ZERO_PARAM * 1000))
+                                  && (   (bAcrossU && sThisUVTan.x * sPrevUVTan.x < 0.)
+                                      || (bAcrossV && sThisUVTan.y * sPrevUVTan.y < 0.))
+                                  && sSurfUVDomain.ContainsPoint2d(sThisStep_FromThis, SM_EFF_ZERO_PARAM)
+                                  && sSurfUVDomain.ContainsPoint2d(sPrevStep_FromPrev, SM_EFF_ZERO_PARAM);
+                              if(bMissingSeam) { sUVGuess = sThisUVPnt; }
+                            }
+                          SM_ASSERT_MSG(bFoundCorner || bMissingSeam, _T("SmVertexuse::ComputeUVPoint - no valid doubly periodic corner"));
                         }
                       // else our assumptions and tests are not properly detecting a SeamCurve with UVTrimCurves on different sides
                       else
@@ -784,14 +807,13 @@ SmStatus SmVertexuse::ComputeUVSector
 
       rUVSectorIO.m_pBegEdgeuse   = GetEdgeuse() ;
       rUVSectorIO.m_pEndEdgeuse   = rUVSectorIO.m_pBegEdgeuse ? rUVSectorIO.m_pBegEdgeuse->GetCornerMateEdgeuse(pVertex) : NULL ;
-      SmVertexuse * pEndVertexuse =   (   rUVSectorIO.m_pEndEdgeuse 
-                                       && rUVSectorIO.m_pEndEdgeuse->GetVertexuse()->GetVertex() == pVertex) 
-                                    ? rUVSectorIO.m_pEndEdgeuse->GetVertexuse() 
-                                    : rUVSectorIO.m_pEndEdgeuse->GetMate()->GetVertexuse() ;
-
       // no work - no face sector - attached to wires
       if(rUVSectorIO.m_pBegEdgeuse == NULL || rUVSectorIO.m_pEndEdgeuse == NULL)
         { return(SM_ERR) ; }      
+
+      // The preceding edgeuse ends at this corner. Comparing vertex objects
+      // cannot distinguish its starting and ending uses when the edge is closed.
+      SmVertexuse *pEndVertexuse = rUVSectorIO.m_pEndEdgeuse->GetMate()->GetVertexuse();
 
       // locals
       SmEdge    * pBegEdge    = rUVSectorIO.m_pBegEdgeuse ? rUVSectorIO.m_pBegEdgeuse->GetEdge() : NULL ;
@@ -990,8 +1012,8 @@ lDebugCnt++ ;
         //      faceuse->Orientation == OPPOSITE,
 
         // count Opposite orientations
-        ULONG lOppositeCount =   pFaceuse->GetOrientation() == SM_OT_OPPOSITE ? 1 : 0
-                               + pLoopuse->GetOrientation() == SM_OT_OPPOSITE ? 1 : 0 ;
+        ULONG lOppositeCount =   (pFaceuse->GetOrientation() == SM_OT_OPPOSITE ? 1 : 0)
+                               + (pLoopuse->GetOrientation() == SM_OT_OPPOSITE ? 1 : 0) ;
 
       // UVSector AngDeg in SurfNormal coordinates
       if(     lOppositeCount == 0 

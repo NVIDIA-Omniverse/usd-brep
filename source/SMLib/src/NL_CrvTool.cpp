@@ -1888,13 +1888,19 @@ NL_FLAG N_CrvRemoveKnot( NL_CURVE *curP, NL_PARAMETER u, NL_INDEX nu, NL_REAL to
 
             error = N_BasisFindGlobalMax( knq, i - 1, p, lto, &maxl, &tmp );
 
-            if( error EQ NL_YES )
-              { maxl = 1.0; }
+            if( error EQ NL_YES ) /* handled: fall back to the bound max == 1 */
+              {
+                maxl = 1.0;
+                error = NL_NO;
+              }
 
             error = N_BasisFindGlobalMax( knq, i, p, lto, &maxr, &tmp );
 
-            if( error EQ NL_YES )
-              { maxr = 1.0; }
+            if( error EQ NL_YES ) /* handled: fall back to the bound max == 1 */
+              {
+                maxr = 1.0;
+                error = NL_NO;
+              }
 
             max = NL_MAX( lam * alf * maxl, oml * omd * maxr );
 
@@ -1911,7 +1917,10 @@ NL_FLAG N_CrvRemoveKnot( NL_CURVE *curP, NL_PARAMETER u, NL_INDEX nu, NL_REAL to
             error = N_BasisFindGlobalMax( knq, i, p, lto, &max, &tmp );  /* find ith CtrlPt's  max basis value */ 
 
             if( error EQ NL_YES ) /* when N_BasisFindGlobalMax() returns an error assume max == 1 */
-              { max = 1.0; }
+              {
+                max = 1.0;
+                error = NL_NO;
+              }
 
             if( max * dw GT tol ) /* don't move control points (to remove knots) if change moves the curve by more than tol */
               { break; }

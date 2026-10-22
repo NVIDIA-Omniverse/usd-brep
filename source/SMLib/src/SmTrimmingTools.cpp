@@ -1872,8 +1872,9 @@ SmBoolean bDebugMe = FALSE;
         { break ; }
       
       // arrive here when pC = first curve of a new loop:
-      SmOrientType eCurveOrient = SM_OT_SAME;
-      ULONG        nLoopEdges   = 0;
+      SmOrientType eCurveOrient     = SM_OT_SAME;
+      ULONG        nLoopEdges       = 0;
+      ULONG        nFirstCurveIndex = nCurveIndex;
       
       // build-this-loop while block
       while( TRUE ) 
@@ -1982,6 +1983,12 @@ SmBoolean bDebugMe = FALSE;
           // expected exit: from build-this-loop block: closed loop
           if (bNextCurveSeen) 
             {
+              // a closed loop ends at its first curve's start point; ending on another
+              //   seen curve (e.g. the start of a closed curve in the chain) leaves it open
+              const SmPoint3d& sLoopEndPt = (eCurveOrient == SM_OT_SAME) ? sEndPt : sStartPt;
+              if (sLoopEndPt.DistanceBetween(sVertexPoints[2*nFirstCurveIndex]) >= smos_Max(d3DTol,dFeatureSize))
+                { sRet = SM_ERR ; }
+
               // back into the start-next-loop block
               break;
           }

@@ -394,6 +394,51 @@ SmStatus SmTopologyChangeCallback::Execute           // run once for every SmObj
 } // end SmTopologyChangeCallback::Execute
 
 /*******************************************************************//**
+PURPOSE: Refresh properties that depend on completed topology edits.
+
+NOTES: Called by StopTracking after the atomic edit, not during Notify.
+       Added objects and completed edits enter AddList. Their connected edges
+       and faces enter both remove/add lists for property replacement. ChgList
+       remains diagnostic; removed handles are never traversed.
+***********************************************************************/
+void SmTopologyChangeCallback::RecordDependencies
+ (SmBrep *pBrep) // in : edited Brep with completed topology
+{
+  if(pBrep == NULL) { return ; }
+
+  SmTArray<SmTopology*> sTargets ;
+  sTargets.AppendUnique(*m_pAddList) ;
+  for(ULONG lTarget=0; lTarget<sTargets.GetSize(); ++lTarget)
+    {
+      SmTopology *pTarget = sTargets[lTarget] ;
+      if(!pBrep->IsLiveTopologyMember(pTarget)) { continue ; }
+
+      SmTArray<SmEdge*> sEdges ;
+      SmTArray<SmFace*> sFaces ;
+      if(pTarget->IsKindOf(SmVertex_TYPE))
+        {
+          SmVertex *pVertex = (SmVertex *)pTarget ;
+          pVertex->GetEdges(sEdges) ;
+          pVertex->GetFaces(sFaces) ;
+        }
+      else if(pTarget->IsKindOf(SmEdge_TYPE))
+        { ((SmEdge *)pTarget)->GetFaces(sFaces) ; }
+
+      for(ULONG lEdge=0; lEdge<sEdges.GetSize(); ++lEdge)
+        {
+          AddUnique(m_pRmList, sEdges[lEdge], pBrep) ;
+          AddUnique(m_pAddList, sEdges[lEdge], pBrep) ;
+          sTargets.AddUnique(sEdges[lEdge]) ;
+        }
+      for(ULONG lFace=0; lFace<sFaces.GetSize(); ++lFace)
+        {
+          AddUnique(m_pRmList, sFaces[lFace], pBrep) ;
+          AddUnique(m_pAddList, sFaces[lFace], pBrep) ;
+        }
+    }
+}
+
+/*******************************************************************//**
 PURPOSE: SmTrackTopologyChanges constructor
 
 NOTES: Init internal members and start SmContext::m_SysNotifyCallback
@@ -539,6 +584,10 @@ void SmTrackTopologyChanges::StopTracking()
         { 
           // turn off SmObject::Notify() tracking by setting SmContext::m_pSysNotifyCallback ptr to NULL
           ((SmContext *)m_pBrep->GetContext())->SetSysNotifyCallback(m_pLastNotifyCallback) ;
+
+          // Notifications can occur midway through rewiring edgeuses. Traverse
+          // dependencies only now, after the caller has completed its edit.
+          m_sTopologyChangeCallback.RecordDependencies(m_pBrep) ;
           
           // clear this objects - m_pLastNotifyCallback value
           m_pLastNotifyCallback = NULL ;

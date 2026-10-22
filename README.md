@@ -1,105 +1,124 @@
 # USD BRep
 
-Standalone Omniverse repo containing USD BRep (NURBS boundary-representation solid modeling) libraries.
+Solid modeling for [OpenUSD](https://openusd.org/). USD BRep creates and edits
+boundary-representation (BRep) solids and reads and writes them in USD as
+`BrepArray` prims.
 
-## Requirements
+BRep faces and edges can be NURBS or analytic geometry. Plane, cylinder, cone, sphere
+and torus faces are written to USD as analytic surfaces. Edge curves are written as
+NURBS; analytic line, circle and ellipse edges in USD from other tools are read as
+analytic curves. Other SMLib types, such as parabolas and surfaces of revolution, are
+written as NURBS. See [supported geometry](.agents/operations/usd_import_export.md#supported-geometry)
+for the SMLib class names.
 
-- [**Git**](https://git-scm.com/downloads) and [**Git LFS**](https://git-lfs.com/): Git LFS is required for the large binary fixtures tracked in `.gitattributes` (USD assets, STEP/IGES/JT models).
+## Repo contents
 
-- **(Windows - C++ Only) Microsoft Visual Studio (2019 or 2022)** with the MSVC C++ toolset:
-  - Install from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (or **Build Tools for Visual Studio**) with the **Desktop development with C++** workload selected. A VS install without the C++ toolset is not enough.
-  - The build uses this **host-installed** compiler (`msbuild.link_host_toolchain` in `repo.toml`), not Packman `msvc`.
-  - `msbuild.vs_version` is pinned to `vs2019`, so VS 2022 users also need the **MSVC v142 build tools** component.
-  - If discovery fails, set `msbuild.vs_path`, `msbuild.vs_version`, or both — see [repo_build toolchains](https://docs.omniverse.nvidia.com/kit/docs/repo_build/latest/docs/toolchains.html). These settings locate an installed toolset; they do not install one.
+### USD
 
-- **(Windows - C++ Only) Windows SDK**: Install alongside MSVC via the Visual Studio Installer. If discovery fails, set `msbuild.winsdk_path` in `repo.toml`.
+Libraries and tools that work on BReps stored in USD files:
 
-- **(Windows) [Microsoft Visual C++ Redistributable](https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist)**: Required to run the built binaries, which link the VC runtime dynamically rather than bundling it. The **Desktop development with C++** workload above ships the redistributable, so a machine set up to build already has it — install it separately only on machines that run the binaries without Visual Studio.
+- **[USD BRep schema](source/schema/README.md) (omniSolid):** defines the `BrepArray` prim, which stores BReps in
+  USD with their full topology and NURBS or analytic geometry; see the
+  [proposal](proposals/UsdSolid/README.md) and its
+  [problem statement](proposals/cad_geometry/README.md).
+- **[Import/export](source/SM_API_USD/inc/SmApiUsd.h):** reads `BrepArray` prims into
+  SMLib BReps and writes SMLib BReps back to USD.
+- **[USD Validator](tools/brep_validator/README.md):** checks that the BReps in a USD file comply with the BRep
+  schema.
+- **[Healer](source/SM_API_USD/inc/SmApiUsdHeal.h):** heals the BReps across a whole USD scene, preserving layers,
+  references, instancing, transforms and materials.
+- **[Geometry validator](tools/brep_geometry_validator/README.md):** runs AssertValid (see [Kernel](#kernel)) on every
+  `BrepArray` prim in a USD file.
+- **[Tessellator](source/SM_API_USD/inc/SmApiUsdTessellate.h):** writes a `UsdGeomMesh` for each BRep in the `BrepArray`
+  prims of a USD file.
+- **Viewers:**
+  - **[hdUsdBrep](source/HYDRA_USD_BREP/README.md):** Hydra plugin for viewing USD BReps in usdview.
+  - **[view_usd](tools/scripts/view_usd.py):** shows a USD file's BReps, tessellated, in a PyVista window.
+  - **[smlib_gui](tools/smlib_gui/README.md):** desktop app for opening, inspecting and editing USD and SMLib BReps.
+- **Converters:**
+  - **OpenCASCADE:** [occt_to_usd](tools/occt_to_usd/README.md) and [usd_to_occt](tools/usd_to_occt/README.md)
+    convert between OpenCASCADE and USD BReps.
+  - **Utility libraries:** [BREP_USD_DATA](source/BREP_USD_DATA/README.md),
+    [BREP_STAGING](source/BREP_STAGING/README.md) and [USD_BREP_UTILS](source/USD_BREP_UTILS/README.md)
+    support writing USD converters to and from other formats.
+- **APIs:** [C++](source/SM_API_USD) and [Python](tools/pyproject/README.md) (USD).
 
-- **(Linux) build-essential**: `sudo apt-get install build-essential`
+### Kernel
 
-All other build-time dependencies — OpenUSD, Python 3.12, pybind11, **premake**, and the `repo_*` tools — are pulled automatically via Packman when you build.
+The SMLib kernel, and tools that work on BReps in memory:
 
-## Using this repo
+- **[Kernel (SMLib)](source/SMLib):** creates and edits BRep solids, with booleans, fillets,
+  sweeps and offsets.
+- **[Healer](source/SM_API/inc/SmApiHeal.h):** fixes common geometric and topological defects in BReps.
+- **[Tessellator](source/SMLib/inc/SmTess.h):** meshes BReps into triangles. The Hydra plugin uses it to draw
+  BReps in usdview.
+- **Geometry validator (AssertValid):** checks the geometric quality and topological
+  consistency of BReps in memory.
+- **APIs:** [C++](source/SM_API) and [Python](tools/pyproject/README.md) (SMLib).
+- **[Examples](Examples/README.md):** runnable Python and C++ examples for each API layer.
 
-Prerequisites are listed under [Requirements](#requirements). Use `./repo.sh` on Linux and macOS, `./repo.bat` on Windows. macOS: [macOS local development](#macos-local-development).
+### Agents
 
-### Build it
+Guidance for coding agents, starting from [AGENTS.md](AGENTS.md):
 
-Run prebuild before building a fresh checkout or after deleting `_build`. It stages
-the omniSolid schema plugin in `_build/schema/omniSolid/resources`; `repo build`
-alone does not create these resources, which USD tools require at runtime.
+- **[Docs](.agents/docs/OVERVIEW.md):** the library's layers and key concepts, what each
+  error code means and how to fix it.
+- **[Operations](.agents/operations/INDEX.md):** a guide for each API area, such as booleans,
+  fillets, tessellation, healing and USD import/export.
+- **[Skills](.agents/skills):** workflows for debugging kernel operations, using and
+  maintaining the C++ and Python APIs, working with the USD schema and converters, choosing
+  tests and writing bug reports.
 
-```bash
-# Linux
-./prebuild.sh
-./repo.sh build
+## Documentation
 
-# macOS
-./prebuild.sh -p macos-universal
-./repo.sh build -p macos-universal
+[nvidia-omniverse.github.io/usd-brep](https://nvidia-omniverse.github.io/usd-brep/), including the Python and C++ API reference.
 
-# Windows
-./prebuild.bat
-./repo.bat build
-```
+## Quick start
 
-### Test it
-
-```bash
-./repo.sh test
-./tests.sh linux-x86_64              # or macos-universal
-```
-
-### Format it
-
-```bash
-./repo.sh format
-```
-
-### Run the Python GUI
-
-```bash
-# Debug binaries by default (kernel Dump() echoes to the terminal).
-uv run --locked --group gui python tools/scripts/smlib_gui.py
-
-# Release binaries: add --release
-uv run --locked --group gui python tools/scripts/smlib_gui.py --release
-```
-
-See `tools/smlib_gui/README.md` for smoke-test and troubleshooting commands.
-
-### Explore examples
-
-Runnable compositions organized by API layer live under [Examples](Examples/README.md).
-
-## macOS local development
-
-Apple Silicon only: `./repo.sh build -p macos-universal`. Build symlinks host Packman Python into `_build/target-deps/python` when available (`SMLIB_PYTHON_ROOT` to override).
-
-**Python-only (default):** kernel, C++ tests, `_smlib_tests`, and `_smlib_dev` (imports need Tier 1 `_omni_solid`). No OpenUSD, OCCT, or `_omni_solid`.
+The Python package is on PyPI for CPython 3.12 on Linux (x86_64, aarch64) and Windows:
 
 ```bash
-./repo.sh build -p macos-universal -j10
-./tests.sh macos-universal
+pip install usd-brep
 ```
 
-**Tier 1 (optional):** local OpenUSD 3.12 staged via `setup-macos-local-deps.sh`.
+```python
+import usd_brep
 
-```bash
-export SMLIB_USD_ROOT=~/opt/usd-25.11-py312
-./tools/scripts/setup-macos-local-deps.sh
-./repo.sh build -p macos-universal -j10
-./tests.sh macos-universal
+sphere = usd_brep.primitives.create_sphere((0.0, 0.0, 0.0), 1.0)
+box = usd_brep.primitives.create_box((0.0, 0.0, 0.0), 1.0, 1.0, 1.0)
+cut = usd_brep.booleans.boolean_difference(sphere, box)  # a sphere missing one octant
+
+usd_brep.usd.export_brep(cut, "cut.usda")
+(brep,) = usd_brep.usd.import_breps("cut.usda")
 ```
 
-Set `PYTHONPATH="$PWD/_build/macos-universal/release"` to import Python extensions. Packman OpenUSD/Python packages are not available on macOS. The macOS premake package (`premake@5.0.0-beta1+nv1-macos-universal`, `deps/host-deps.packman.xml`) is not on the public Packman server either; supply it through a user-level Packman configuration. Avoid `./repo.sh build -x`; delete `_build`, `_compiler`, and `_repo` to clean.
+To repair the BReps in an existing USD scene, `usd.heal_file` heals the `BrepArray`
+geometry in the layers the scene uses and writes the scene with its layers,
+references, instancing, transforms and materials kept:
+
+```python
+usd_brep.usd.heal_file("input.usdc", "input_healed.usdc")
+```
+
+See the [package README](tools/pyproject/README.md) for the API's submodules and
+[Examples](Examples/README.md) for runnable examples in Python and C++.
+
+## Issues
+
+- **Known issues:** [KNOWN_ISSUES.md](KNOWN_ISSUES.md), and the [open issues](https://github.com/NVIDIA-Omniverse/usd-brep/issues) on GitHub.
+- **Fixed issues:** the "Fixed" sections of the [CHANGELOG](CHANGELOG.md), and the [closed issues](https://github.com/NVIDIA-Omniverse/usd-brep/issues?q=is%3Aissue%20is%3Aclosed) on GitHub.
+
+## Build from source
+
+To build the libraries, tests and tools yourself, see [BUILDING.md](BUILDING.md).
+It covers requirements for Linux, Windows and macOS, building, testing, viewing
+BReps in usdview and the Python GUI.
 
 ## Contributing
 
 This project is currently not accepting contributions.
 
-Issues and bug reports are welcome through the project issue tracker, and security
+Issues and bug reports are welcome through the [issue tracker](https://github.com/NVIDIA-Omniverse/usd-brep/issues), and security
 issues should be reported as described in `SECURITY.md`. See `CONTRIBUTING.md` for
 details.
 
@@ -114,16 +133,3 @@ Copyright (c) 2020-2026, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 under the MIT License instead; see `THIRD_PARTY_NOTICES.md` for the full text.
 
 For third-party notices and bundled components, see `THIRD_PARTY_NOTICES.md`.
-
-## Heal USD BRep assets
-
-`usd.heal_file` heals BrepArray definitions in the layers used by the current USD
-composition and writes the scene with the healed geometry, keeping its layers,
-references, native instancing, transforms and materials. External layers used only
-by unselected variants remain referenced but are not healed. Material subset
-opinions outside the BRep's defining prim spec are rejected rather than lost.
-
-```python
-import usd_brep
-usd_brep.usd.heal_file("input.usdc", "input_healed.usdc")
-```

@@ -46,6 +46,20 @@ omniSolid schema plugin, and OpenUSD ignores schema plugins registered after it
 has loaded its schema types. Otherwise, set ``PXR_PLUGINPATH_NAME`` to the
 omniSolid ``resources`` directory.
 
+Example
+-------
+
+``Examples/PyAPI/round_corner_pipe.py`` builds a bounded rectangular pipe with spherical corners from
+a planar sweep, primitives, transforms and exact booleans:
+
+.. brep-mesh:: ../Examples/PyAPI/round_corner_pipe.py
+
+   model = build_round_corner_pipe(_square_path(10.0), 1.0)
+
+.. literalinclude:: ../Examples/PyAPI/round_corner_pipe.py
+   :language: python
+   :pyobject: build_round_corner_pipe
+
 Reference
 ---------
 

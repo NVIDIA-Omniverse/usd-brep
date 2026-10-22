@@ -251,7 +251,9 @@ SMAPI_EXPORT SmApiStatus SmApiCreateSkinPrimitive
 SMAPI_EXPORT SmApiStatus SmApiCreateSkinFromFaces
 (
     SmTArray<SmFace*>& rFaces,              ///< [in ]: Sequence of faces whose loops to loft between   <br>
-    ULONG lDegree,                          ///< [in ]: Degree in loft direction: 1=linear, 2=quad, 3=cubic <br>
+    ULONG lDegree,                          ///< [in ]: Degree in loft direction, 1 to 17 (NL_MAXDEG):  <br>
+                                            ///<       1=linear, 2=quad, 3=cubic. Any other degree       <br>
+                                            ///<       returns SM_ERR_INVALID_INPUT                      <br>
     SmTArray<SmFace*>& rNewFaces,           ///< [out]: Resulting lofted faces                          <br>
     SmBrep*& rpResult                      ///< [out]: Resulting SmBrep                                <br>
 );

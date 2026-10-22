@@ -7619,6 +7619,7 @@ SmBoolean bDebugMe = FALSE ;
                 idxMin = i;
                 if (vl < sKnots[i-1]) 
                   {  vl = sKnots[i-1];
+                    idxMin = i-1;
                   }
               }
           } // end lower V Trim boundary near knot value check
@@ -7629,16 +7630,16 @@ SmBoolean bDebugMe = FALSE ;
             if (vr <= dKnot || i==sKnots.GetSize()-1) 
               {
                 vr = dKnot;
-                idxMin = i;
+                idxMax = i;
               }
             else 
               {
                 vr = dKnot + 10.0 * dTolMax;
-                idxMin = i;
+                idxMax = i;
                 if (vr > sKnots[i+1]) 
                   {
                     vr = sKnots[i+1];
-                    idxMin = i+1;
+                    idxMax = i+1;
                   }
               }
           } // end upper V Trim boundary near knot value check

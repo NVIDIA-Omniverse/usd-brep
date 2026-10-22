@@ -4,8 +4,8 @@
 // brep_geometry_validator - standalone SMLib geometry/topology validator for USD BrepArray prims.
 //
 // Imports every unique BrepArray prim found in the input USD file(s) into a real SmBrep and runs
-// SmBrep::AssertValid on it. This is the kernel-level "is the built solid actually sound"
-// check (closing loops, manifold edges, on-surface UV trim curves, ...). It is a sibling of the
+// SmBrep::AssertValid on it (SmApiUsdGeometryValidate). This is the kernel-level "is the built
+// solid actually sound" check (closing loops, manifold edges, on-surface UV trim curves, ...). It is a sibling of the
 // schema-level brep_validator (the BA.xxx checks): the schema validator checks the USD data is
 // well-formed, this one checks the built solid is geometrically/topologically sound.
 //
@@ -14,7 +14,6 @@
 //
 // Options:
 //   --level <0|1|2>   AssertValid test depth: 0 fastest, 2 = all tests (default 2)
-//   --no-healer       skip SMLib healer during USD import (faster)
 //   --progress        print import/validation progress to stderr
 //   --workers <N>     parallel prim validation (0 = auto, 1 = serial, default 1)
 //   -q, --quiet       suppress per-failure detail lines (keep the per-file summary)
@@ -28,12 +27,8 @@
 // breps (capped at 250). Hard errors (no input, open/import failure, zero breps) also yield
 // a non-zero code, so callers can treat "rc != 0" as "not clean".
 
-#include "SmuConvert.h"
+#include "SmApiUsdGeometryValidate.h"
 #include "UsdBrepUtilities.h"
-
-#include "SmAssertArray.h"
-#include "SmBrep.h"
-#include "SmContext.h"
 
 #include "UsdBrepSuppressPixarWarningsPush.h"
 #include <pxr/usd/usd/stage.h>
@@ -68,7 +63,7 @@ namespace
 {
 
 // ---- per-prim timing instrumentation (enabled via --timing <file>) ----
-// Records, per prim: worker thread index, and heal (import) + validate start/end
+// Records, per prim: worker thread index, and import + validate start/end
 // times in microseconds relative to g_timingT0. Written out serially after the
 // parallel loop, so no locking is needed on the hot path beyond thread-id assignment.
 std::chrono::steady_clock::time_point g_timingT0;
@@ -98,8 +93,7 @@ unsigned TimingThreadIndex()
 }
 
 // Incremental (crash-safe) per-prim timing writer: appended as each prim finishes,
-// so a mid-run crash (e.g. the healer thread-safety gap under --workers) still leaves
-// the completed prims on disk.
+// so a mid-run crash still leaves the completed prims on disk.
 std::FILE* g_timingFp = nullptr;
 std::mutex g_timingMutex;
 
@@ -118,11 +112,10 @@ void PrintUsage(const char* zProg)
         "\n"
         "options:\n"
         "  --level <0|1|2>   AssertValid depth: 0 fastest, 2 = all tests (default 2)\n"
-        "  --no-healer       skip SMLib healer during USD import (faster)\n"
         "  --progress        print import/validation progress to stderr\n"
         "  --discovery-stats print authored/prototype prims visited during discovery\n"
         "  --workers <N>     parallel prim validation (0 = auto, 1 = serial, default 1)\n"
-        "  --timing <file>   write per-prim heal/validate timing (JSONL) for charting\n"
+        "  --timing <file>   write per-prim import/validate timing (JSONL) for charting\n"
         "  -q, --quiet       suppress per-failure detail lines\n"
         "  -h, --help        show this help\n"
         "\n"
@@ -132,76 +125,15 @@ void PrintUsage(const char* zProg)
     );
 }
 
-SmAssertTestLevel ToTestLevel(int iLevel)
-{
-    switch (iLevel)
-    {
-        case 0: return SM_LEVEL_0;
-        case 1: return SM_LEVEL_1;
-        default: return SM_LEVEL_2;
-    }
-}
-
-// Validate a single SmBrep. Returns true when valid; on failure increments rChecksFailed and
-// prints per-check FAIL lines (unless bQuiet). pOptStdoutMutex serializes stdout in parallel runs.
-bool ValidateBrep(const SmBrep* pBrep, SmAssertTestLevel eLevel, bool bQuiet, unsigned long& rChecksFailed,
-                  const char* zPrimPath, std::mutex* pOptStdoutMutex = nullptr)
-{
-    if (pBrep == nullptr)
-    {
-        return false;
-    }
-
-    SmAssertArray sAList;
-    if (pBrep->AssertValid(&sAList, eLevel))
-    {
-        return true;
-    }
-
-    rChecksFailed += sAList.GetSize();
-    if (!bQuiet)
-    {
-        const char* zPath = (zPrimPath != nullptr && zPrimPath[0] != '\0') ? zPrimPath : "?";
-        for (ULONG jj = 0; jj < sAList.GetSize(); ++jj)
-        {
-            const SmAssertReport* pRep = sAList[jj];
-            if (pRep == nullptr)
-            {
-                continue;
-            }
-            // Report fields are TCHAR* (wchar_t on Windows UNICODE builds). Pass them as %s
-            // arguments via SM_FPRINTF rather than formatting into a buffer and then handing that
-            // buffer to a single-arg print macro -- on Windows UNICODE that would treat the buffer
-            // as a format string, so a '%' inside any field would be a format-string bug.
-            TCHAR sMsg[SM_TBLOCK_SIZE];
-            pRep->FormatLogMessage(sMsg, SM_TBLOCK_SIZE);
-            const std::basic_string<TCHAR> sPath = smos_ToTChar(zPath);
-            std::unique_lock<std::mutex> sStdoutLock;
-            if (pOptStdoutMutex != nullptr)
-            {
-                sStdoutLock = std::unique_lock<std::mutex>(*pOptStdoutMutex);
-            }
-            SM_FPRINTF(stdout, _T("  FAIL[%lu] path=%s owner=%s name=%s msg=%s\n"),
-                       (unsigned long)jj,
-                       sPath.c_str(),
-                       pRep->m_sOwnerTypeString ? pRep->m_sOwnerTypeString : _T("?"),
-                       pRep->m_pName ? pRep->m_pName : _T("?"),
-                       sMsg);
-        }
-    }
-    return false;
-}
-
 struct PrimValidateResult
 {
-    bool bImportFailed = false;
-    bool bMissingBreps = false;
+    std::string sError;  // why the import failed; empty if it did not
     int iBreps = 0;
     int iInvalid = 0;
     unsigned long lChecksFailed = 0;
     // timing (us relative to g_timingT0; -1 = did not run)
     unsigned iThreadId = 0;
-    long long iHealStartUs = -1, iHealEndUs = -1, iValStartUs = -1, iValEndUs = -1;
+    long long iImportStartUs = -1, iImportEndUs = -1, iValStartUs = -1, iValEndUs = -1;
 };
 
 void WriteTimingRecord(const SdfPath& rPrim, const PrimValidateResult& rResult)
@@ -213,64 +145,53 @@ void WriteTimingRecord(const SdfPath& rPrim, const PrimValidateResult& rResult)
     std::lock_guard<std::mutex> sLock(g_timingMutex);
     std::fprintf(g_timingFp,
                  "{\"t\":%u,\"hs\":%lld,\"he\":%lld,\"vs\":%lld,\"ve\":%lld,\"prim\":\"%s\"}\n",
-                 rResult.iThreadId, rResult.iHealStartUs, rResult.iHealEndUs,
+                 rResult.iThreadId, rResult.iImportStartUs, rResult.iImportEndUs,
                  rResult.iValStartUs, rResult.iValEndUs, rPrim.GetText());
     std::fflush(g_timingFp);
 }
 
-PrimValidateResult ProcessPrim(const UsdGeomGprim& rGprim, const SdfPath& rStablePath,
-                               SmAssertTestLevel eLevel, bool bQuiet, SmBoolean bHealerIsEnabled,
+PrimValidateResult ProcessPrim(const UsdGeomGprim& rGprim, const SdfPath& rStablePath, int iLevel, bool bQuiet,
                                std::mutex* pStdoutMutex)
 {
     PrimValidateResult sResult;
     sResult.iThreadId = TimingThreadIndex();
 
-    // One SmContext per prim: deleting breps while reusing a shared context corrupts
-    // kernel marks/caches (SmApiUsdTessellateBrepArray also uses one context per prim).
-    SmContext sContext;
-    std::vector<SmBrep*> vFromPrim;
-    sResult.iHealStartUs = TimingElapsedUs();
-    const SmStatus sStat =
-        SMU_BrepConvert::BrepMove_UsdToSMLib(sContext, rGprim, vFromPrim, bHealerIsEnabled);
-    sResult.iHealEndUs = TimingElapsedUs();
+    sResult.iImportStartUs = TimingElapsedUs();
+    SmApiUsdGeometryResult sGeometry;
+    const SmStatus sStat = SmApiUsdGeometryValidate(rGprim.GetPrim(), iLevel, sGeometry);
+    sResult.iImportEndUs = sResult.iImportStartUs + static_cast<long long>(sGeometry.m_dImportSeconds * 1e6);
     if (sStat != SM_SUCCESS)
     {
-        sResult.bImportFailed = true;
-        for (SmBrep* pBrep : vFromPrim)
-        {
-            delete pBrep;
-        }
+        sResult.sError = sGeometry.m_sMessage;
         return sResult;
     }
-    if (vFromPrim.empty() ||
-        std::any_of(vFromPrim.begin(), vFromPrim.end(), [](const SmBrep* pBrep) { return pBrep == nullptr; }))
-    {
-        sResult.bMissingBreps = true;
-        for (SmBrep* pBrep : vFromPrim)
-        {
-            delete pBrep;
-        }
-        return sResult;
-    }
-
-    sResult.iValStartUs = TimingElapsedUs();
-    for (SmBrep* pBrep : vFromPrim)
-    {
-        if (pBrep == nullptr)
-        {
-            continue;
-        }
-
-        ++sResult.iBreps;
-        if (!ValidateBrep(pBrep, eLevel, bQuiet, sResult.lChecksFailed,
-                          rStablePath.GetText(), pStdoutMutex))
-        {
-            ++sResult.iInvalid;
-        }
-        delete pBrep;
-    }
+    // End after the call so freeing the Breps counts, as before.
+    sResult.iValStartUs = sResult.iImportEndUs;
     sResult.iValEndUs = TimingElapsedUs();
 
+    sResult.iBreps = static_cast<int>(sGeometry.m_lBrepCount);
+    sResult.iInvalid = static_cast<int>(sGeometry.m_lInvalidBreps);
+    sResult.lChecksFailed = static_cast<unsigned long>(sGeometry.m_sFailures.size());
+    if (!bQuiet && !sGeometry.m_sFailures.empty())
+    {
+        std::unique_lock<std::mutex> sStdoutLock;
+        if (pStdoutMutex != nullptr)
+        {
+            sStdoutLock = std::unique_lock<std::mutex>(*pStdoutMutex);
+        }
+        // FAIL[j] numbers the checks within each Brep.
+        unsigned long jj = 0;
+        for (size_t ii = 0; ii < sGeometry.m_sFailures.size(); ++ii, ++jj)
+        {
+            if (ii > 0 && sGeometry.m_sFailures[ii].m_lBrep != sGeometry.m_sFailures[ii - 1].m_lBrep)
+            {
+                jj = 0;
+            }
+            const SmApiUsdGeometryFailure& rFailure = sGeometry.m_sFailures[ii];
+            std::printf("  FAIL[%lu] path=%s owner=%s name=%s msg=%s\n", jj, rStablePath.GetText(),
+                        rFailure.m_sOwner.c_str(), rFailure.m_sCheck.c_str(), rFailure.m_sDetail.c_str());
+        }
+    }
     return sResult;
 }
 
@@ -300,8 +221,8 @@ void ReportProgress(bool bProgress, size_t iProcessed, size_t iPrimTotal, int iB
 
 // Import + validate every BrepArray prim in one file. Returns the number of invalid breps;
 // sets rbHardError on open/import problems (which also count as "not clean").
-int ValidateFile(const std::string& sInput, SmAssertTestLevel eLevel, bool bQuiet, bool bProgress,
-                 bool bDiscoveryStats, SmBoolean bHealerIsEnabled, bool& rbHardError, int iWorkers,
+int ValidateFile(const std::string& sInput, int iLevel, bool bQuiet, bool bProgress,
+                 bool bDiscoveryStats, bool& rbHardError, int iWorkers,
                  const std::string& sTimingFile)
 {
     rbHardError = false;
@@ -461,7 +382,7 @@ int ValidateFile(const std::string& sInput, SmAssertTestLevel eLevel, bool bQuie
                     {
                         const OrderedGprim& rOrderedBrep = vOrderedBreps[iPrim];
                         vResults[iPrim] = ProcessPrim(rOrderedBrep.second, rOrderedBrep.first,
-                                                     eLevel, bQuiet, bHealerIsEnabled, &sStdoutMutex);
+                                                     iLevel, bQuiet, &sStdoutMutex);
                         WriteTimingRecord(rOrderedBrep.first, vResults[iPrim]);
 
                         if (bProgress)
@@ -487,7 +408,7 @@ int ValidateFile(const std::string& sInput, SmAssertTestLevel eLevel, bool bQuie
         {
             const OrderedGprim& rOrderedBrep = vOrderedBreps[iPrim];
             vResults[iPrim] =
-                ProcessPrim(rOrderedBrep.second, rOrderedBrep.first, eLevel, bQuiet, bHealerIsEnabled, nullptr);
+                ProcessPrim(rOrderedBrep.second, rOrderedBrep.first, iLevel, bQuiet, nullptr);
             WriteTimingRecord(rOrderedBrep.first, vResults[iPrim]);
             iBrepCount += vResults[iPrim].iBreps;
             iInvalid += vResults[iPrim].iInvalid;
@@ -503,15 +424,9 @@ int ValidateFile(const std::string& sInput, SmAssertTestLevel eLevel, bool bQuie
         const OrderedGprim& rOrderedBrep = vOrderedBreps[iPrim];
         const SdfPath& sStablePath = rOrderedBrep.first;
         const PrimValidateResult& rResult = vResults[iPrim];
-        if (rResult.bImportFailed)
+        if (!rResult.sError.empty())
         {
-            std::fprintf(stderr, "ERROR: import failed for %s %s\n", sInput.c_str(), sStablePath.GetText());
-            rbHardError = true;
-        }
-        else if (rResult.bMissingBreps)
-        {
-            std::fprintf(stderr, "ERROR: import produced missing Breps for %s %s\n",
-                         sInput.c_str(), sStablePath.GetText());
+            std::fprintf(stderr, "ERROR: %s for %s %s\n", rResult.sError.c_str(), sInput.c_str(), sStablePath.GetText());
             rbHardError = true;
         }
 
@@ -543,7 +458,6 @@ int main(int argc, char** argv)
     bool bDiscoveryStats = false;
     int iWorkers = 1;
     std::string sTimingFile;
-    SmBoolean bHealerIsEnabled = TRUE;
 
     for (int ii = 1; ii < argc; ++ii)
     {
@@ -556,10 +470,6 @@ int main(int argc, char** argv)
         else if (sArg == "-q" || sArg == "--quiet")
         {
             bQuiet = true;
-        }
-        else if (sArg == "--no-healer")
-        {
-            bHealerIsEnabled = FALSE;
         }
         else if (sArg == "--progress")
         {
@@ -655,8 +565,6 @@ int main(int argc, char** argv)
         }
     }
 
-    const SmAssertTestLevel eLevel = ToTestLevel(iLevel);
-
     g_timingT0 = std::chrono::steady_clock::now();
     if (!sTimingFile.empty())
     {
@@ -669,7 +577,7 @@ int main(int argc, char** argv)
     {
         bool bHardError = false;
         iTotalInvalid +=
-            ValidateFile(sInput, eLevel, bQuiet, bProgress, bDiscoveryStats, bHealerIsEnabled, bHardError, iWorkers,
+            ValidateFile(sInput, iLevel, bQuiet, bProgress, bDiscoveryStats, bHardError, iWorkers,
                          sTimingFile);
         bAnyHardError = bAnyHardError || bHardError;
     }

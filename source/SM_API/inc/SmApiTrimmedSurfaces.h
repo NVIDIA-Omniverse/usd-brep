@@ -58,6 +58,8 @@ SMAPI_EXPORT SmApiStatus SmApiTrimProjectParallel(
 /// Ownership of crPlanarCurves: consumed on success (the new faces use them; do
 /// not delete or reuse them). On failure they are left with the caller, who must
 /// delete them, and rpResult is set to NULL.
+/// Endpoint matching and degenerate-curve checks use the new Brep's default
+/// tolerance; there is no parameter to set it.
 SMAPI_EXPORT SmApiStatus SmApiCreatePlanarFaces( 
     const SmTArray<SmCurve*>& crPlanarCurves,  ///< [in ]: Planar bounding curves                                            <br>
     SmBrep*& rpResult                   ///< [out]: Resulting SmBrep                                                  <br>

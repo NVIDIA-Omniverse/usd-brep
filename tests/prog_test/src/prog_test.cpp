@@ -15,6 +15,7 @@
 #include <smFilletTest.h>
 #include <smMergeTest.h>
 #include <smOffsetTest.h>
+#include <smHealTest.h>
 
 #include <cstring>
 #include <filesystem>
@@ -46,6 +47,7 @@ static SmStatus my_test_fillet_const_radius()
 static const ProgSuite gProgSuites[] =
 {
     { "topology",          _T("**************************************  Testing Topology    ****************************************"),       _T("my_test_topology"),          NULL,                                                          my_test_topology,           TRUE  },
+    { "healing",           _T("**************************************  Testing Healing     ****************************************"),       _T("my_test_healing"),           NULL,                                                          my_test_healing,            TRUE  },
     { "booleans",          _T("**************************************  Testing Booleans    ****************************************"),       _T("my_test_merge"),             _T("**************** Testing Booleans Time %lf secs **********\n"), my_test_merge,              TRUE  },
     { "offset",            _T("*************************************  Testing Offsetting    ***************************************"),       _T("my_offset_regression"),      _T("********** Testing Offsetting Time %lf secs **********\n"),    my_offset_regression,       TRUE  },
     { "fillets",           _T("*************************************  Testing Filleting     ***************************************"),       _T("my_test_fillet_regression"), _T("********** Testing Filleting Time %lf secs **********\n"),     my_test_fillet_const_radius, TRUE },

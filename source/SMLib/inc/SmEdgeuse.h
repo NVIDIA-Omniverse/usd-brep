@@ -124,6 +124,10 @@ public:
   // UVTrimCurve management: UVtrimCurve stored once for every Edgeuse/Mate pair (on Edgeuse with orientation == SM_OT_SAME) 
   SmBSplineCurve  * GetUVTrimCurve  (SmEdgeuse **pOptOwner=NULL) const ;             // rtn: UVTrimCurve from Edgeuse or Mate. Return NULL if none attached
   SmDropCurveFail * GetDropCurveFail(SmEdgeuse **pOptOwner=NULL) const ;             // rtn: State Data saved when UVTrimCurve was created
+  // GetOrCreateUVTrimCurve: building a new UVTrimCurve can increase tolerances (never decreases them).
+  //   CreateUVTrimCurve sets EdgeTol to 1.01 * the achieved gap when it had to retry with a looser tolerance,
+  //   and SetUVTrimCurve raises EdgeTol to >= 2 * MaxDistToSurf unless the Brep is validate-only.
+  //   SmEdge::SetTolerance cascades the increase to both end Vertex tolerances.
   SmStatus          GetOrCreateUVTrimCurve
   (
     SmCurve *& rpUVTrimCurve,                 // out: UVTrimCurve attached to Edgeuse/Mate pair                                                                           

@@ -3580,7 +3580,14 @@ static constexpr SmBoolean bLogMe = FALSE ;
       SmExtent1d sIvl1, sIvl2, sIvl3;
       pPSBox->GetIntervals(sIvl1,sIvl2,sIvl3);
       double dHeight = sIvl3.GetLength();
-      if (dHeight*dHeight <= dChordHeightSquared) 
+
+      // Bezier patch boxes are padded by SM_ZONE_TOL_3D on each side, so a chord height
+      // tolerance no larger than that could never be met; test the unpadded height.
+      if (   pNode->m_eAuxDataType == SM_AD_BEZIER_SURFACE
+          && pSurfaceCache->m_dChordHeightTolerance <= 2.0 * SM_ZONE_TOL_3D)
+        { dHeight = smos_Max(dHeight - 2.0 * SM_ZONE_TOL_3D, 0.0); }
+
+      if (dHeight*dHeight <= dChordHeightSquared)
         { 
           pAux->m_bChordHeightSatisfied = TRUE ;
 #ifdef SM_SBDV_LOG

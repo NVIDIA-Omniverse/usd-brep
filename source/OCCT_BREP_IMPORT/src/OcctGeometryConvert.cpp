@@ -168,52 +168,103 @@ pxr::VtArray<double> BuildFlatKnots(const std::vector<double>& rKnots, const std
     return sFlat;
 }
 
-// Evaluate a (possibly rational/periodic) B-spline curve at parameter t in local space via de Boor.
-// Poles/weights are unrolled for periodic curves to match BuildFlatKnots. Returns the front pole on
-// any inconsistency. Used for domain sampling, so robustness matters more than micro-accuracy.
-pxr::GfVec3d EvalBSplineCurveLocal(const SCurve3d& rCurve, double t)
+// A periodic B-spline's flat knots repeat with the period: T(i + N) = T(i) + period, N = pole count.
+// BuildFlatKnots emits one window whose domain [T(degree), T(degree + N)] is the first period, so a
+// face or edge that crosses the seam (say [3*pi/2, 5*pi/2]) falls partly outside it. Slide the window
+// by whole knots until it contains [dLo, dHi]; the caller rotates the poles by the same amount.
+// Returns that index shift (0 when no move is needed or possible). The curve is unchanged.
+int ShiftPeriodicWindow(pxr::VtArray<double>& rFlat, int iDegree, int iPoleCount, double dLo, double dHi)
+{
+    const int iLen = static_cast<int>(rFlat.size());
+    const int iFirst = iLen - iPoleCount - iDegree - 1; // first stored knot index (see BuildFlatKnots)
+    if (iPoleCount <= 0 || iDegree < 0 || iFirst < 0 || !(dHi > dLo))
+    {
+        return 0;
+    }
+    const double dPeriod = rFlat[static_cast<size_t>(iDegree + iPoleCount)] - rFlat[static_cast<size_t>(iDegree)];
+    if (!(dPeriod > 0.0))
+    {
+        return 0;
+    }
+    const double dTol = 1.0e-9 * std::max(1.0, dPeriod);
+    // T(i) for any index i, extending the stored period by whole periods (iWrap = floor((i-iFirst)/N)).
+    const auto fKnot = [&](long long i)
+    {
+        const long long iRel = i - iFirst;
+        const long long iWrap = (iRel >= 0) ? iRel / iPoleCount : -((-iRel + iPoleCount - 1) / iPoleCount);
+        return rFlat[static_cast<size_t>(i - iWrap * iPoleCount)] + iWrap * dPeriod;
+    };
+    // Nothing to do when the first period already covers [dLo, dHi].
+    if (fKnot(iDegree) <= dLo + dTol && fKnot(iDegree + iPoleCount) >= dHi - dTol)
+    {
+        return 0;
+    }
+    const double dTurns = std::floor((dLo + dTol - fKnot(iDegree)) / dPeriod);
+    if (!(std::fabs(dTurns) * iPoleCount < 1.0e8))
+    {
+        return 0;
+    }
+    int iShift = static_cast<int>(dTurns) * iPoleCount;
+    while (fKnot(iDegree + iShift + 1) <= dLo + dTol)
+    {
+        ++iShift;
+    }
+    if (fKnot(iDegree + iShift + iPoleCount) < dHi - dTol)
+    {
+        return 0;
+    }
+    pxr::VtArray<double> sShifted(rFlat.size());
+    for (int i = 0; i < iLen; ++i)
+    {
+        sShifted[static_cast<size_t>(i)] = fKnot(i + iShift);
+    }
+    rFlat.swap(sShifted);
+    return iShift;
+}
+
+// Build the de Boor arrays of a (possibly rational/periodic) B-spline curve in local space: poles
+// rvP, weights rvW and flat knots rvU. Poles/weights are unrolled for periodic curves to match
+// BuildFlatKnots. Returns false on any inconsistency.
+bool BuildBSplineArrays(const SCurve3d& rCurve, std::vector<pxr::GfVec3d>& rvP, std::vector<double>& rvW, std::vector<double>& rvU)
 {
     const int iP = rCurve.iDegree;
     const int iN0 = static_cast<int>(rCurve.sPoles.size());
     if (iP < 1 || iN0 < 1)
     {
-        return iN0 > 0 ? ToVec(rCurve.sPoles.front()) : ToVec(rCurve.sLocation);
+        return false;
     }
 
     const int iExtra = PeriodicExtraPoles(rCurve.iMults, iP, rCurve.bPeriodic);
     const int iN = iN0 + iExtra;
     const bool bHaveW = rCurve.bRational && static_cast<int>(rCurve.dWeights.size()) == iN0;
 
-    std::vector<pxr::GfVec3d> vP(static_cast<size_t>(iN));
-    std::vector<double> vW(static_cast<size_t>(iN));
+    rvP.resize(static_cast<size_t>(iN));
+    rvW.resize(static_cast<size_t>(iN));
     for (int i = 0; i < iN; ++i)
     {
         const int iSrc = (i < iN0) ? i : (i - iN0);
-        vP[static_cast<size_t>(i)] = ToVec(rCurve.sPoles[static_cast<size_t>(iSrc)]);
-        vW[static_cast<size_t>(i)] = bHaveW ? rCurve.dWeights[static_cast<size_t>(iSrc)] : 1.0;
+        rvP[static_cast<size_t>(i)] = ToVec(rCurve.sPoles[static_cast<size_t>(iSrc)]);
+        rvW[static_cast<size_t>(i)] = bHaveW ? rCurve.dWeights[static_cast<size_t>(iSrc)] : 1.0;
     }
 
     // Bezier curves carry no explicit knots; synthesize the clamped [0..0, 1..1] vector.
-    pxr::VtArray<double> vU;
     if (rCurve.dKnots.empty() && iN0 == iP + 1)
     {
-        for (int i = 0; i < iP + 1; ++i)
-        {
-            vU.push_back(0.0);
-        }
-        for (int i = 0; i < iP + 1; ++i)
-        {
-            vU.push_back(1.0);
-        }
+        rvU.assign(static_cast<size_t>(iP + 1), 0.0);
+        rvU.resize(static_cast<size_t>(2 * (iP + 1)), 1.0);
     }
     else
     {
-        vU = BuildFlatKnots(rCurve.dKnots, rCurve.iMults, iP, rCurve.bPeriodic);
+        const pxr::VtArray<double> vFlat = BuildFlatKnots(rCurve.dKnots, rCurve.iMults, iP, rCurve.bPeriodic);
+        rvU.assign(vFlat.begin(), vFlat.end());
     }
-    if (static_cast<int>(vU.size()) != iN + iP + 1)
-    {
-        return vP.front();
-    }
+    return static_cast<int>(rvU.size()) == iN + iP + 1;
+}
+
+// Evaluate the de Boor arrays of a degree-iP B-spline curve (from BuildBSplineArrays) at t.
+pxr::GfVec3d EvalBSplineArrays(int iP, const std::vector<pxr::GfVec3d>& vP, const std::vector<double>& vW, const std::vector<double>& vU, double t)
+{
+    const int iN = static_cast<int>(vP.size());
 
     // Clamp t to the valid evaluation domain [U[p], U[n]].
     const double dLo = vU[static_cast<size_t>(iP)];
@@ -283,6 +334,21 @@ pxr::GfVec3d EvalBSplineCurveLocal(const SCurve3d& rCurve, double t)
         sPt /= vDW[static_cast<size_t>(iP)];
     }
     return sPt;
+}
+
+// Evaluate a (possibly rational/periodic) B-spline curve at parameter t in local space via de Boor.
+// Returns the front pole (or the location) on any inconsistency. Used for domain sampling, so
+// robustness matters more than micro-accuracy.
+pxr::GfVec3d EvalBSplineCurveLocal(const SCurve3d& rCurve, double t)
+{
+    std::vector<pxr::GfVec3d> vP;
+    std::vector<double> vW;
+    std::vector<double> vU;
+    if (!BuildBSplineArrays(rCurve, vP, vW, vU))
+    {
+        return rCurve.sPoles.empty() ? ToVec(rCurve.sLocation) : ToVec(rCurve.sPoles.front());
+    }
+    return EvalBSplineArrays(rCurve.iDegree, vP, vW, vU, t);
 }
 
 // A NURBS curve in local (pre-transform) space: the building block for lowering swept surfaces.
@@ -1117,16 +1183,18 @@ bool ConvertCurve3d(const SCurve3d& rCurve, const pxr::GfMatrix4d& rTransform, S
             rOut.uiNurbVertexCount = static_cast<uint32_t>(iNewN);
             rOut.vNurbControlVertices.clear();
             rOut.vNurbWeights.clear();
+            rOut.vNurbKnots = BuildFlatKnots(pCurve->dKnots, pCurve->iMults, pCurve->iDegree, pCurve->bPeriodic);
+            // Unroll a periodic curve over the period the edge uses.
+            const int iShift = (pCurve->bPeriodic && bRange) ? ShiftPeriodicWindow(rOut.vNurbKnots, pCurve->iDegree, iN, dLo, dHi) : 0;
             // For a periodic curve the poles wrap modulo iN, so the appended poles are the first
             // iExtra poles. This is the unclamped form that is geometrically identical to the
             // periodic curve over its valid parameter range.
             for (int i = 0; i < iNewN; ++i)
             {
-                const int iSrc = (i < iN) ? i : (i - iN);
+                const int iSrc = ((i + iShift) % iN + iN) % iN;
                 rOut.vNurbControlVertices.push_back(Place(rTransform, pCurve->sPoles[static_cast<size_t>(iSrc)]));
                 rOut.vNurbWeights.push_back(bHaveWeights ? pCurve->dWeights[static_cast<size_t>(iSrc)] : 1.0);
             }
-            rOut.vNurbKnots = BuildFlatKnots(pCurve->dKnots, pCurve->iMults, pCurve->iDegree, pCurve->bPeriodic);
             return true;
         }
 
@@ -1289,8 +1357,8 @@ bool ConvertSurface(
             rOut.sOrigin = Place(rTransform, pSurface->sLocation);
             rOut.sRefDirection = Orient(rTransform, pSurface->sXAxis);
             rOut.dRadius = pSurface->dRadius;
-            // USD requires a half-angle in (0, pi/2). OCCT may store a negative half-angle (radius
-            // shrinking along +axis); flipping the axis and negating the angle is the same surface.
+            // Keep the half-angle positive. OCCT may store a negative half-angle (radius shrinking
+            // along +axis); flipping the axis and negating the angle is the same surface.
             if (pSurface->dSemiAngle < 0.0)
             {
                 rOut.sAxis = -Orient(rTransform, pSurface->sAxis);
@@ -1331,6 +1399,15 @@ bool ConvertSurface(
             const int iNewU = iNbU + iExtraU;
             const int iNewV = iNbV + iExtraV;
             const bool bRational = pSurface->bURational || pSurface->bVRational;
+            rOut.vNurbUKnots = BuildFlatKnots(pSurface->dUKnots, pSurface->iUMults, pSurface->iUDegree, pSurface->bUPeriodic);
+            rOut.vNurbVKnots = BuildFlatKnots(pSurface->dVKnots, pSurface->iVMults, pSurface->iVDegree, pSurface->bVPeriodic);
+            // Unroll a periodic U over the period the face's trims use, so the face stays inside the
+            // surface domain when its trims cross OCCT's seam.
+            int iShiftU = 0;
+            if (pSurface->bUPeriodic && pUVHint && !pUVHint->IsEmpty() && static_cast<int>(pSurface->sPoles.size()) == iNbU * iNbV)
+            {
+                iShiftU = ShiftPeriodicWindow(rOut.vNurbUKnots, pSurface->iUDegree, iNbU, pUVHint->GetMin()[0], pUVHint->GetMax()[0]);
+            }
             const bool bHaveWeights = bRational && pSurface->dWeights.size() == pSurface->sPoles.size() &&
                                       static_cast<int>(pSurface->sPoles.size()) == iNbU * iNbV;
 
@@ -1349,7 +1426,7 @@ bool ConvertSurface(
             {
                 for (int iu = 0; iu < iNewU; ++iu)
                 {
-                    const int iSrcU = (iu < iNbU) ? iu : (iu - iNbU);
+                    const int iSrcU = ((iu + iShiftU) % iNbU + iNbU) % iNbU;
                     for (int iv = 0; iv < iNewV; ++iv)
                     {
                         const int iSrcV = (iv < iNbV) ? iv : (iv - iNbV);
@@ -1370,9 +1447,6 @@ bool ConvertSurface(
                 rOut.uiNurbUVertexCount = static_cast<uint32_t>(iNbU);
                 rOut.uiNurbVVertexCount = static_cast<uint32_t>(iNbV);
             }
-
-            rOut.vNurbUKnots = BuildFlatKnots(pSurface->dUKnots, pSurface->iUMults, pSurface->iUDegree, pSurface->bUPeriodic);
-            rOut.vNurbVKnots = BuildFlatKnots(pSurface->dVKnots, pSurface->iVMults, pSurface->iVDegree, pSurface->bVPeriodic);
             return true;
         }
 
@@ -1650,6 +1724,33 @@ pxr::GfVec3d EvalCurve3dPoint(const SCurve3d& rCurve, const pxr::GfMatrix4d& rTr
             return rTransform.Transform(ToVec(pCurve->sLocation));
         }
     }
+}
+
+SPreparedCurve3d PrepareCurve3d(const SCurve3d& rCurve, const pxr::GfMatrix4d& rTransform)
+{
+    SPreparedCurve3d sOut;
+    sOut.pCurve = &rCurve;
+    sOut.sTransform = rTransform;
+    const SCurve3d* pBasis = &rCurve;
+    while ((pBasis->eType == ECurveType::Trimmed || pBasis->eType == ECurveType::Offset) && pBasis->pBasis)
+    {
+        pBasis = pBasis->pBasis.get();
+    }
+    if (pBasis->eType == ECurveType::Bezier || pBasis->eType == ECurveType::BSpline)
+    {
+        sOut.bBSpline = BuildBSplineArrays(*pBasis, sOut.vPoles, sOut.vWeights, sOut.vKnots);
+        sOut.iDegree = pBasis->iDegree;
+    }
+    return sOut;
+}
+
+pxr::GfVec3d EvalCurve3dPoint(const SPreparedCurve3d& rCurve, double t)
+{
+    if (!rCurve.bBSpline)
+    {
+        return EvalCurve3dPoint(*rCurve.pCurve, rCurve.sTransform, t);
+    }
+    return rCurve.sTransform.Transform(EvalBSplineArrays(rCurve.iDegree, rCurve.vPoles, rCurve.vWeights, rCurve.vKnots, t));
 }
 
 } // namespace occt

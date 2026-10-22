@@ -11,6 +11,9 @@
 #include <pxr/base/gf/matrix4d.h>
 #include <pxr/base/gf/range1d.h>
 #include <pxr/base/gf/range2d.h>
+#include <pxr/base/gf/vec3d.h>
+
+#include <vector>
 
 namespace occt
 {
@@ -64,6 +67,23 @@ bool ConvertSurface(
 // exact; Bezier/BSpline are evaluated via de Boor (rational + periodic aware). Trimmed/Offset are
 // resolved to their basis. Used to sample edge geometry for domain bounding.
 pxr::GfVec3d EvalCurve3dPoint(const SCurve3d& rCurve, const pxr::GfMatrix4d& rTransform, double t);
+
+// A 3D curve prepared for repeated evaluation. EvalCurve3dPoint rebuilds a Bezier/BSpline's pole,
+// weight and flat knot arrays on every call, which costs time linear in the curve's size;
+// PrepareCurve3d builds them once. Other curves are evaluated by EvalCurve3dPoint as before.
+struct SPreparedCurve3d
+{
+    const SCurve3d* pCurve = nullptr;
+    pxr::GfMatrix4d sTransform;
+    bool bBSpline = false; // the de Boor arrays below are set (local space, periodic poles unrolled)
+    int iDegree = 0;
+    std::vector<pxr::GfVec3d> vPoles;
+    std::vector<double> vWeights;
+    std::vector<double> vKnots; // flat
+};
+
+SPreparedCurve3d PrepareCurve3d(const SCurve3d& rCurve, const pxr::GfMatrix4d& rTransform);
+pxr::GfVec3d EvalCurve3dPoint(const SPreparedCurve3d& rCurve, double t);
 
 } // namespace occt
 

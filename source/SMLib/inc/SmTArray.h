@@ -2394,7 +2394,7 @@ SM_TARRAY_TEMPLATE_PREDECLARATION(void*) ;
 #define SM_HISTOGRAM_EDGELEN_BUCKETCNT 11
 #define SM_HISTOGRAM_EDGELEN_INDEX(a) (  ((a) < 1e-5) ?  0 \
                                        : ((a) > 1e+4) ? 10 \
-                                       : ((ULONG)(smos_Floor(smos_Log10(a))) + 6) )
+                                       : ((ULONG)(smos_Floor(smos_Log10(a)) + 6)) )
 
 #endif // __SMTARRAY_H__
 

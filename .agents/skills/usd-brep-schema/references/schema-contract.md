@@ -17,7 +17,7 @@
 
 ## Authority and Notation
 
-Use `source/schema/omniSolid/resources/schema.usda` as the authority. That layer was last changed by `solidmodeling` commit `9889a1fc579671a229c917988469593007c7266f` on 2026-06-05, and this reference was rechecked on 2026-07-14. Recheck current source before relying on it.
+Use `source/schema/omniSolid/resources/schema.usda` as the authority. That layer was last changed on 2026-06-05, and this reference was rechecked on 2026-07-14. Recheck current source before relying on it.
 
 Labels used below:
 

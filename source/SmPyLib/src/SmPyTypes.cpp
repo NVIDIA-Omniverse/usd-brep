@@ -435,8 +435,9 @@ void bind_types(py::module_& m)
         }, py::arg("relative_accuracy") = 1.0e-3,
            "Enclosed volume in cubic modeling units. The Brep should be a "
            "closed manifold solid; behaviour on sheet bodies is undefined. "
-           "``relative_accuracy`` is clamped to ``[1e-8, 1e-1]``; non-finite "
-           "values raise ``RuntimeError``.")
+           "``relative_accuracy`` is passed to the kernel; values below "
+           "``1e-8`` are not recommended because roundoff can prevent "
+           "convergence. Non-finite values raise ``RuntimeError``.")
         .def("area", [](SmBrep& self, double accuracy) {
             double area = 0.0;
             CHECK_STATUS(SmApiBrepComputeArea(&self, accuracy, area));
@@ -444,9 +445,10 @@ void bind_types(py::module_& m)
         }, py::arg("relative_accuracy") = 1.0e-3,
            "Total surface area in square modeling units: the sum of "
            "``Face.area()`` over every face, with the same "
-           "``relative_accuracy`` range. Works on sheet bodies and open "
-           "shells, which ``mass_properties()`` rejects. Non-finite "
-           "accuracy raises ``RuntimeError``.\n"
+           "``relative_accuracy`` guidance. Works on sheet bodies and open "
+           "shells, which ``mass_properties()`` rejects. Values below "
+           "``1e-8`` are not recommended; non-finite accuracy raises "
+           "``RuntimeError``.\n"
            "\n"
            "Wraps: SmApiBrepComputeArea")
         .def("relationship_to", [](SmBrep& self, SmBrep& other) {
@@ -515,9 +517,10 @@ void bind_types(py::module_& m)
            "requested accuracy.\n"
            "\n"
            "Args:\n"
-           "    relative_accuracy: Integration accuracy, clamped to\n"
-           "        ``[1e-4, 1e-1]`` (the kernel's reliable envelope); a\n"
-           "        non-finite value raises ``RuntimeError``.\n"
+           "    relative_accuracy: Integration accuracy passed to the kernel.\n"
+           "        Values below ``1e-8`` are not recommended because\n"
+           "        roundoff can prevent convergence; a non-finite value\n"
+           "        raises ``RuntimeError``.\n"
            "    density: Uniform mass density; ``mass = density * volume``.\n"
            "        Must be a valid number ``>= 1e-12`` (``SM_EFF_ZERO``);\n"
            "        zero, negative, sub-epsilon, or non-finite values raise\n"
@@ -527,7 +530,8 @@ void bind_types(py::module_& m)
            "        world axes). When ``None`` (default) the result is\n"
            "        centroidal -- the centroid is recovered first and the\n"
            "        inertia is taken about it (two integration passes). Pass an\n"
-           "        explicit origin for a single pass about that point.\n"
+           "        explicit origin for a single pass, about the bounding-box\n"
+           "        midpoint and shifted exactly to the origin.\n"
            "\n"
            "Returns:\n"
            "    dict with keys ``area`` and ``volume`` (floats), ``mass``\n"
@@ -712,7 +716,9 @@ void bind_types(py::module_& m)
         }, py::arg("relative_accuracy") = 1.0e-3,
            "Surface area of this face within its trim boundary, in square "
            "modeling units. Positive regardless of face orientation. "
-           "``relative_accuracy`` clamped to ``[1e-4, 1e-1]``.")
+           "``relative_accuracy`` is passed to the kernel; values below "
+           "``1e-8`` are not recommended because roundoff can prevent "
+           "convergence.")
         // -- Topology accessors -------------------------------------------
         .def("surface", &SmFace::GetSurface, py::return_value_policy::reference,
              "Underlying NURBS / analytic surface this face is trimmed from. "
@@ -930,8 +936,9 @@ void bind_types(py::module_& m)
            "Pure: returns tuple; inputs unchanged.\n"
            "\n"
            "Area centroid of this face within its trim boundary, as\n"
-           "``(x, y, z)``. ``relative_accuracy`` clamped to ``[1e-4, 1e-1]``,\n"
-           "same as ``area()``.\n"
+           "``(x, y, z)``. ``relative_accuracy`` is passed to the kernel;\n"
+           "values below ``1e-8`` are not recommended because roundoff can\n"
+           "prevent convergence.\n"
            "\n"
            "Wraps: SmApiFaceComputeCentroid")
         .def("brep", &SmFace::GetBrep, py::return_value_policy::reference,

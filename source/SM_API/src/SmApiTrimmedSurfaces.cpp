@@ -226,6 +226,8 @@ SmBoolean bDebugMe = FALSE ;
     SmBrep* pBrep = new (*SmApiGetOrCreateContext()) SmBrep();
     SmRegion* pRegion = pBrep->GetInfiniteRegion();
 
+    // Not used: CreatePlanarFacesWith3DCurves ignores this argument and uses
+    // pBrep->GetTolerance() instead.
     double dTol = 0.01;
 
     SmTArray<SmFace*> sNewfaces;

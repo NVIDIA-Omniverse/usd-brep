@@ -575,10 +575,12 @@ SmStatus SmDatabaseIO::ReadLong(long & rLong)
         else
         { llTemp = llLong; }
 
-        if ( llTemp > LONG_MAX )
-        { SER( SM_ERR ); }
+        // The file stores 64 bits, but long is 32 bits on Windows. A value that does not fit is
+        // bad input, so report it the same way on every platform instead of truncating it.
+        if ( llTemp > LONG_MAX || llTemp < LONG_MIN )
+        { SER_MSG( SM_ERR_INVALID_INPUT, _T("SmDatabaseIO::ReadLong: stored value does not fit in a long") ); }
         else
-        { rLong = (ULONG)llTemp; }
+        { rLong = (long)llTemp; }
     }
     else
     {
@@ -608,8 +610,8 @@ SmStatus SmDatabaseIO::ReadLong(ULONG & rLong)
         else 
         { temp = llLong; }
 
-        if ( temp > ULONG_MAX )
-        { SER( SM_ERR ); }
+        if ( temp > ULONG_MAX ) // only possible where ULONG is 32 bits, as on Windows
+        { SER_MSG( SM_ERR_INVALID_INPUT, _T("SmDatabaseIO::ReadLong: stored value does not fit in a ULONG") ); }
         else
         { rLong = (ULONG)temp; }
     }

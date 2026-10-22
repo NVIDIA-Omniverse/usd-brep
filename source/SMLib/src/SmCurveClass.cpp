@@ -181,6 +181,60 @@ ULONG SmTouchData::GetConnectedTouches
 } // end SmTouchData::GetConnectedTouches
 
 /*******************************************************************//**
+PURPOSE: Filter a consumer's working list to transverse crossings.
+
+NOTES: Endpoint seam interpretation belongs to the consumer. This method
+       removes unused seam images, pole/lamina ends, coincident runs and
+       same-side touches.
+       Keep the original encounter list when other interpretations are needed.
+***********************************************************************/
+SmStatus SmTouchData::RemoveNonCrossings
+ (SmTArray<SmTouchData> &rTouches) // i/o: consumer-owned arrival/departure pairs
+{
+  ULONG lCount = rTouches.GetSize();
+  if(lCount == 0) { return SM_SUCCESS; }
+  AERN(smos_IsEven(lCount),SM_ERR_ASSERT_FAILURE);
+
+  // Normalize endpoint directions: poles/lamina are outside, while an unused
+  // seam image matches its inward neighbor and does not create a crossing.
+  for(ULONG lEnd=0; lEnd<2; ++lEnd)
+    {
+      ULONG lIndex = lEnd == 0 ? 0 : lCount-1;
+      SmCrvDirOnFaceType &reDir = rTouches[lIndex].m_eLoopDir;
+      if(reDir == SM_CD_POLE || reDir == SM_CD_POLE_NO_VERTEX || reDir == SM_CD_LAMINA)
+        { reDir = SM_CD_OUT; }
+      else if(reDir == SM_CD_SEAM_NO_EDGEUSE)
+        { reDir = rTouches[lEnd == 0 ? 1 : lCount-2].m_eLoopDir; }
+    }
+
+  // Join X/ON ... ON/Y into X/Y without counting the coincident interval.
+  ULONG lWrite = 1;
+  for(ULONG lRead=1; lRead+1<lCount; lRead+=2)
+    {
+      if(rTouches[lRead].m_eLoopDir != SM_CD_ON && rTouches[lRead+1].m_eLoopDir != SM_CD_ON)
+        {
+          rTouches[lWrite++] = rTouches[lRead];
+          rTouches[lWrite++] = rTouches[lRead+1];
+        }
+    }
+  rTouches[lWrite++] = rTouches[lCount-1];
+  lCount = lWrite;
+  lWrite = 0;
+  // Keep only arrival/departure changes; discard same-side tangencies,
+  // struts, cracks, and entirely coincident touches.
+  for(ULONG lRead=0; lRead<lCount; lRead+=2)
+    {
+      if(rTouches[lRead].m_eLoopDir != rTouches[lRead+1].m_eLoopDir)
+        {
+          rTouches[lWrite++] = rTouches[lRead];
+          rTouches[lWrite++] = rTouches[lRead+1];
+        }
+    }
+  rTouches.SetSize(lWrite);
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
 PURPOSE: Return WindingCount for given TouchList
 
 NOTES: WindingCount = number of unmatched in/out out/in and out/in in/out
@@ -254,6 +308,7 @@ const                     //      FALSE=pretty print all values
                  : m_eLoopDir == SM_CD_OUT             ? _T("Out   ")
                  : m_eLoopDir == SM_CD_POLE            ? _T("Pole  ")
                  : m_eLoopDir == SM_CD_POLE_NO_VERTEX  ? _T("PoleNoVertex")
+                 : m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE ? _T("SeamNoEdgeuse")
                  : m_eLoopDir == SM_CD_SEAM            ? _T("Seam  ")
                  : m_eLoopDir == SM_CD_LAMINA          ? _T("Lamina")
                  : _T("UnExpected")                    
@@ -270,6 +325,7 @@ const                     //      FALSE=pretty print all values
                  : m_eLoopDir == SM_CD_OUT             ? _T("Out")
                  : m_eLoopDir == SM_CD_POLE            ? _T("Pole")
                  : m_eLoopDir == SM_CD_POLE_NO_VERTEX  ? _T("PoleNoVertex")
+                 : m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE ? _T("SeamNoEdgeuse")
                  : m_eLoopDir == SM_CD_SEAM            ? _T("Seam")
                  : m_eLoopDir == SM_CD_LAMINA          ? _T("Lamina")
                  : _T("UnExpected"), 
@@ -285,6 +341,7 @@ const                     //      FALSE=pretty print all values
                               : m_eLoopDir == SM_CD_OUT             ? _T("Out")
                               : m_eLoopDir == SM_CD_POLE            ? _T("Pole") 
                               : m_eLoopDir == SM_CD_POLE_NO_VERTEX  ? _T("PoleNoVertex")
+                              : m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE ? _T("SeamNoEdgeuse")
                               : m_eLoopDir == SM_CD_SEAM            ? _T("Seam")
                               : m_eLoopDir == SM_CD_LAMINA          ? _T("Lamina")
                               : _T("UnExpected"), 
@@ -356,6 +413,7 @@ void SmTouchData::DumpTouchList
                  : rTouchList[ii].m_eLoopDir == SM_CD_ON               ? 2
                  : rTouchList[ii].m_eLoopDir == SM_CD_OUT              ? 3
                  : rTouchList[ii].m_eLoopDir == SM_CD_LAMINA           ? 6
+                 : rTouchList[ii].m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE  ? 4
                  : rTouchList[ii].m_eLoopDir == SM_CD_SEAM             ? 4
                  : rTouchList[ii].m_eLoopDir == SM_CD_POLE             ? 4
                  : rTouchList[ii].m_eLoopDir == SM_CD_POLE_NO_VERTEX   ? 14
@@ -368,16 +426,17 @@ void SmTouchData::DumpTouchList
 
       // departing TouchDir
       rTouchList[ii+1].Dump(bNoDetails) ;
-      lCnt +=      rTouchList[ii+1].m_eLoopDir == SM_CD_UNINIT         ? 6
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_NONE           ? 4
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_IN             ? 2
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_ON             ? 2
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_OUT            ? 3
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_LAMINA         ? 6
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_SEAM           ? 4
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_POLE           ? 4
-                 : rTouchList[ii+1].m_eLoopDir == SM_CD_POLE_NO_VERTEX ? 14
-                 :                                                       6 ;
+      lCnt +=      rTouchList[ii+1].m_eLoopDir == SM_CD_UNINIT          ? 6
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_NONE            ? 4
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_IN              ? 2
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_ON              ? 2
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_OUT             ? 3
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_LAMINA          ? 6
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE ? 4
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_SEAM            ? 4
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_POLE            ? 4
+                 : rTouchList[ii+1].m_eLoopDir == SM_CD_POLE_NO_VERTEX  ? 14
+                 :                                                        6 ;
 
       // departure ending
       if(   bNoDetails 
@@ -4860,6 +4919,17 @@ SmCurveClassification::SmCurveClassification()
 {
 } // end SmCurveClassification empty constructor
 
+// UV curve for a copy of crOther whose curve is cpCurve: when crOther's UV curve is owned by its
+// SmCrvOnSurf, which the copy deep copied, use the copied SmCrvOnSurf's own UV curve.
+static const SmCurve * sm_CopiedUVCurve1(const SmCurveClassification & crOther, const SmCurve * cpCurve)
+{
+  const SmCurve * cpSrcCurve = crOther.GetCurve() ;
+  if(   cpCurve != cpSrcCurve && cpCurve != NULL && cpSrcCurve != NULL && cpSrcCurve->IsKindOf(SmCrvOnSurf_TYPE)
+     && ((const SmCrvOnSurf *)cpSrcCurve)->GetUVCurve() == crOther.GetAnyUVCurve1())
+    { return ((const SmCrvOnSurf *)cpCurve)->GetUVCurve() ; }
+  return crOther.GetAnyUVCurve1() ;
+}
+
 /*******************************************************************//**
 PURPOSE: copy constructor for SmCurveClassification object
 
@@ -4888,7 +4958,7 @@ SmCurveClassification::SmCurveClassification
                         || (crOther.m_cpCurve == NULL && m_cpCurve == NULL),
                         _T("SmCurveClass::operator=: m_cpCurve deep copy failed - this is a bug")) ;
 
-  m_cpUVCurve1            = crOther.m_cpUVCurve1 ;
+  m_cpUVCurve1            = sm_CopiedUVCurve1(crOther, m_cpCurve) ;
   m_bIsCurveCurrent       = crOther.m_bIsCurveCurrent ;
   m_cpSurface1            = crOther.m_cpSurface1 ;
   m_cpSurface2            = crOther.m_cpSurface2 ;
@@ -5040,7 +5110,7 @@ SmCurveClassification & SmCurveClassification::operator=
                         || (crOther.m_cpCurve == NULL && m_cpCurve == NULL),
                         _T("SmCurveClass::operator=: m_cpCurve deep copy failed - this is a bug")) ;
 
-  m_cpUVCurve1            = crOther.m_cpUVCurve1 ;
+  m_cpUVCurve1            = sm_CopiedUVCurve1(crOther, m_cpCurve) ;
   m_bIsCurveCurrent       = crOther.m_bIsCurveCurrent ;
   m_cpSurface1            = crOther.m_cpSurface1 ;
   m_cpSurface2            = crOther.m_cpSurface2 ;
@@ -9238,7 +9308,7 @@ SmStatus SmCurveClassification::IntersectUVDiscontinuties
       pSolutions         =   ii == 0                     ? aSolutions[0]
                            : ii == sKnotsU.GetSize() - 1 ? aSolutions[1]
                            : ii == sKnotsU.GetSize()     ? aSolutions[2]
-                           : ii == sKnotsV.GetSize() + sKnotsV.GetSize() - 1 ? aSolutions[3]
+                           : ii == sKnotsU.GetSize() + sKnotsV.GetSize() - 1 ? aSolutions[3]
                            : &sTheseSolutions ;
 
 #ifdef SM_DEBUG_CODE
@@ -9651,7 +9721,7 @@ SmStatus SmCurveClassification::Intersect3DDiscontinuties
       pSolutions         =   ii == 0                     ? aSolutions[0]
                            : ii == sKnotsU.GetSize() - 1 ? aSolutions[1]
                            : ii == sKnotsU.GetSize()     ? aSolutions[2]
-                           : ii == sKnotsV.GetSize() + sKnotsV.GetSize() - 1 ? aSolutions[3]
+                           : ii == sKnotsU.GetSize() + sKnotsV.GetSize() - 1 ? aSolutions[3]
                            : &sTheseSolutions ;
 #ifdef SM_DEBUG_CODE
 SmBoolean bDebugMe = FALSE;
@@ -10068,8 +10138,8 @@ SmStatus SmCurveClassification::Intersect3DDiscontinuities
           dEndU   = sDisconts.m_sParamsU[sDisconts.m_sParamsU.GetSize()-1] ;
           dStartV = sDisconts.m_sParamsV[0] ;                                   
           dEndV   = sDisconts.m_sParamsV[sDisconts.m_sParamsV.GetSize()-1] ;                 
-          dStartW = sDisconts.m_sParamsV[kk] ;
-          dEndW   = sDisconts.m_sParamsV[kk] ;
+          dStartW = sDisconts.m_sParamsW[kk] ;
+          dEndW   = sDisconts.m_sParamsW[kk] ;
           sX.Set(1,0,0) ;
           sY.Set(0,1,0) ;
           sUVScale.Set(dEndU - dStartU, dEndV - dStartV) ;
@@ -10107,11 +10177,11 @@ SmStatus SmCurveClassification::Intersect3DDiscontinuities
       pSolutions =   ii == 0                                    ? aSolutions[0]
                    : ii == sDisconts.m_sParamsU.GetSize() - 1   ? aSolutions[1]
                    : ii == sDisconts.m_sParamsU.GetSize()       ? aSolutions[2]
-                   : ii ==   sDisconts.m_sParamsV.GetSize() 
+                   : ii ==   sDisconts.m_sParamsU.GetSize() 
                            + sDisconts.m_sParamsV.GetSize() - 1 ? aSolutions[3]
-                   : ii ==   sDisconts.m_sParamsV.GetSize() 
+                   : ii ==   sDisconts.m_sParamsU.GetSize() 
                            + sDisconts.m_sParamsV.GetSize()     ? aSolutions[4]
-                   : ii ==   sDisconts.m_sParamsV.GetSize() 
+                   : ii ==   sDisconts.m_sParamsU.GetSize() 
                            + sDisconts.m_sParamsV.GetSize() 
                            + sDisconts.m_sParamsW.GetSize() - 1 ? aSolutions[5]
                    : &sTheseSolutions ;
@@ -11255,75 +11325,240 @@ ULONG SmCurveClassification::FindVertexObjects
 } // end SmCurveClassification::FindVertexObjects
 
 /*******************************************************************//**
-PURPOSE: return number of times times ClassifyCrv crosses rLoop 
-         in UVSpace. A valid loop is crossed an even number of times.
+PURPOSE: Find which periodic sides an edgeuse occupies from its connected curves.
 
-NOTES: 
- 1.) This method is used as part of the healer and as
-     such does NOT use Dropped LoopBndry UVTrimCurves.
-     Construction of those are known to fail when the
-     Brep has SeamCrossing problems.
-
- 2.) One loop crossing happens every time
-     the ClassifyCrv moves from one side to the other
-     of a LoopBndry.  That's moving between In and Out of 
-     Area_Loops and between Above and Below for NoArea_Loops.
-       o. Area_Loops will have an even number of loop crossings.
-       o. NoArea_Loops will have an odd number of loop crossings.
-
-     Loop crossings are computed from the list of 
-     ClassifyCrv/LoopBndry XSects.  However not all XSects are
-     loop crossings. This algorithm counts the number of times
-     a ClassifyCrv moves from one side of a LoopBndry to another.
-
-       o. Strut and crack crossings are NOT LoopCrossings
-       o. Vertex-loop hits are NOT LoopCrossings.
-          They are zero-length cracks: arrive and depart stay on the
-          same side of the loop. Vertex-loops are inner loops, so
-          they should only exist as IN/IN raw touch pairs.
-       o. ClassifyCrvs coincident to LoopBndries are NOT LoopCrossings
-       o. Tangent intersections that enter and exit on the same
-          side of the LoopBndry as they move away from the tangency
-          are NOT LoopCrossing.
-       o. A Closed ClassifyCrv crossing a Seam is one crossing, not
-          two even when the crossing happens at the end points
-          of the ClassifyCrv yielding two XSections mapping to either
-          side of the seam rather than just one XSection.
-          
-     Partial Coincidence can spread a loop crossing over a CrvClassify
-     interval, eg. a TangentXSect coming in from one side of the LoopBndry
-     leading into a Coincident CrvClassify segment that ends in a
-     2nd Tangent XSect exiting into the other side of the LoopBndry
-     all counts as just one LoopCrossing. In this algorithm the 
-     end-point intersections of this example are called a crossing
-     pair.
-
-   3. Assumes CrvClassification->m_cpFace->Surface is at least G1
+NOTES: Follow both ends through segmented seam edges until a curve leaves the
+       seam. This uses geometry and connectivity, independently of loop winding
+       and optional UV trims. A loop entirely on the seam has no geometric anchor;
+       its directed edgeuse then defines the occupied side.
 ***********************************************************************/
-SmStatus SmCurveClassification::GetLoopCrossings
- (const SmTArray<SmLoop*> & crLoops,              // in : TgtLoops 
-  SmFaceProps             * pOptFaceProps,        // in : optional FaceProps, if already set by SmFaceProps::SetProps_Stage2() - saves time
-                                                  //                          else calls SmFaceProps::SetProps_Stage2().
-                                                  //      Null to ignore
-  SmTArray<ULONG>         * pCrossingCounts,      // out: One crossing count for each TgtLoop
-  SmTArray<SmTouchData>   * pOptRawTouchDirList,  // out: optional list of raw ClassifyCrv/Loop touches described by arrive/depart pair values as [arrive/depart ...]
-                                                  //      Arrive/Depart eLoopDir vals oneof:[SM_CD_ IN ON OUT LAMINA SEAM POLE POLE_NO_VERTEX], SEAM entries may be duplicated
-                                                  //      Null to ignore
-  SmTArray<SmTouchData>   * pOptDoneTouchDirList) // out: optional list of processed ClassifyCrv/Loop touches from which the LoopTouchCnts are computed
-                                                  //      Arrive/Depart eLoopDir vals oneof:[SM_CD_ IN ON OUT], when RawTouch starts/stops on a Seam, DoneTouch is a cyclic list
-                                                  //      Null to ignore
-const                     
-{                
-  // direct optional input and output
-  SmFaceProps           sFaceProps(GetContext()), * pFaceProps        = pOptFaceProps ? pOptFaceProps : &sFaceProps ; 
-  SmTArray<SmTouchData> sRawTouchDirList,         * pRawTouchDirList  = pOptRawTouchDirList  ? pOptRawTouchDirList  : &sRawTouchDirList ;  
-  SmTArray<SmTouchData> sDoneTouchDirList,        * pDoneTouchDirList = pOptDoneTouchDirList ? pOptDoneTouchDirList : &sDoneTouchDirList ;
-  
-  // init rtn and output
-  pRawTouchDirList->ReSet() ;       
-  pDoneTouchDirList->ReSet() ; 
-  pCrossingCounts->SetSize(crLoops.GetSize()) ;
-  pCrossingCounts->SetAll(0) ;
+static SmStatus sm_FindEdgeuseSeamSides
+ (SmEdgeuse      *pEdgeuse,    // in : boundary occurrence on the upward faceuse
+  double          dParameter,  // in : parameter of the encounter on its edge
+  SmSurface      *pSurface,    // in : supporting surface
+  SmSurfParamType eDirection,  // in : periodic parameter being crossed
+  double          dTolerance,  // in : 3D distance below which a sample stays on the seam
+  ULONG          &rlSides)     // out: bit 1 = minimum side, bit 2 = maximum side; zero = unanchored
+{
+  rlSides = 0;
+  SmExtent2d   sDomain        = pSurface->GetNaturalUVDomain();
+  const ULONG  lSampleCount   = 6;
+  const double adFractions[lSampleCount] = { 1e-4, 1e-3, 1e-2, .1, .5, .9 };
+  // Start close to the encounter, then look farther along a coincident run.
+  // Use a 3D seam neighborhood rather than a UV tolerance near a pole.
+  for(ULONG lDirection=0; lDirection<2; ++lDirection)
+    {
+      SmEdgeuse      *pCurrent = pEdgeuse;
+      SmBoolean       bFound   = FALSE;
+      SmPoint2d       sUVGuess;
+      const SmPoint2d *pUVGuess = NULL;
+      do
+        {
+          SmEdge    *pEdge       = pCurrent->GetEdge();
+          SmCurve   *pCurve      = pEdge->GetCurve();
+          SmExtent1d sInterval   = pEdge->GetInterval();
+          SmBoolean  bIncreasing = (pCurrent->GetOrientation() == SM_OT_SAME) == (lDirection == 0);
+          double     dStart = pCurrent == pEdgeuse ? dParameter
+                           : bIncreasing ? sInterval.GetMin() : sInterval.GetMax();
+          double     dEnd = bIncreasing ? sInterval.GetMax() : sInterval.GetMin();
+          for(ULONG lSample=0; dStart != dEnd && lSample<lSampleCount; ++lSample)
+            {
+              SmPoint3d sPoint, sSeamPoint, sSurfacePoint;
+              SmPoint2d sUV;
+              SmBoolean bSuccess, bMultiple;
+              double    dGap;
+              SER(pCurve->EvaluatePoint(dStart+adFractions[lSample]*(dEnd-dStart),sPoint));
+              SER(pSurface->DropPoint
+                (sPoint,      // in : connected boundary sample
+                 sDomain,     // in : full surface domain
+                 pUVGuess,    // in : previous successful sample, if available
+                 bSuccess,    // out: projection succeeded
+                 sUV,         // out: projected sample
+                 dGap,        // out: distance to surface
+                 bMultiple)); // out: multiple projection locations
+              if(!bSuccess) { return SM_ERR; }
+              sUVGuess = sUV;
+              pUVGuess = &sUVGuess;
+              SmPoint2d sSeamUV = sUV;
+              if(eDirection == SM_SP_U) { sSeamUV.x = sDomain.GetUMin(); }
+              else                     { sSeamUV.y = sDomain.GetVMin(); }
+              SER(pSurface->EvaluatePoint(sSeamUV,sSeamPoint));
+              SER(pSurface->EvaluatePoint(sUV,sSurfacePoint));
+              if(sSurfacePoint.DistanceBetween(sSeamPoint) <= dTolerance) { continue; }
+              double dPosition = eDirection == SM_SP_U ? sUV.x : sUV.y;
+              double dMiddle   = eDirection == SM_SP_U ? .5*(sDomain.GetUMin()+sDomain.GetUMax())
+                                                      : .5*(sDomain.GetVMin()+sDomain.GetVMax());
+              rlSides |= dPosition < dMiddle ? 1UL : 2UL;
+              bFound = TRUE;
+              break;
+            }
+          if(bFound) { break; }
+          pCurrent = lDirection == 0 ? pCurrent->GetCCWEdgeuse() : pCurrent->GetCWEdgeuse();
+          NER(pCurrent);
+        }
+      while(pCurrent != pEdgeuse);
+    }
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: Distinguish a seam boundary occurrence from its unused periodic image.
+
+NOTES: Preserve the point classification and loop association even when the
+       edge exists only on the other UV side. Vertex encounters inspect incident
+       edgeuses; a vertex loop has none. No face containment or UV trims are used.
+***********************************************************************/
+static SmStatus sm_ClassifySeamEdgeuse
+ (const SmCurveClassification &crClassification, // in : sample and its boundary intersections
+  SmTouchData                 &rTouch,           // i/o: outward endpoint direction
+  SmBoolean                    bFirst,           // in : minimum end of the sample
+  SmFaceProps                 &rFaceProps)       // in : surface properties and tolerance
+{
+  if(rTouch.m_eLoopDir != SM_CD_SEAM) { return SM_SUCCESS; }
+  SmFace         *pFace    = rFaceProps.m_pFace;
+  SmSurface      *pSurface = pFace->GetSurface();
+  const SmCurve  *pSample  = crClassification.GetCurve();
+  SmExtent2d      sDomain  = pSurface->GetNaturalUVDomain();
+  SmPoint2d       sUV;
+  SmPoint3d       asSample[2];
+  SmVector2d      sDirection;
+  SmSurfParamType eSeam;
+  SER(pSample->Evaluate(rTouch.m_dParam,1,TRUE,asSample));
+  if(pSample->IsKindOf(SmCrvOnSurf_TYPE))
+    {
+      if(bFirst) { SER(crClassification[0].GetMinUV(sUV)); }
+      else       { SER(crClassification[crClassification.GetSize()-1].GetMaxUV(sUV)); }
+    }
+  else
+    {
+      // A model-space sample has no defining UV branch. Its inward tangent
+      // selects the image at this end; an unconstrained drop may choose either.
+      SmVector3d sInward = bFirst ? asSample[1] : -asSample[1];
+      SmBoolean  bSuccess, bMultiple;
+      double     dGap;
+      SER(pSurface->DropPoint
+        (asSample[0],    // in : sample endpoint
+         sDomain,        // in : full surface domain
+         NULL,           // in : no UV guess
+         bSuccess,       // out: projection succeeded
+         sUV,            // out: endpoint on the occupied sample side
+         dGap,           // out: distance to surface
+         bMultiple,      // out: multiple projection locations
+         SM_SO_MINIMIZE, // in : allow a boundary minimum
+         &sInward));     // in : direction into this end of the sample
+      if(!bSuccess) { return SM_ERR; }
+    }
+  SER(pSurface->DropVectors
+    (sUV,           // in : sample endpoint on the surface
+     TRUE,          // in : use the positive U derivative at a knot
+     TRUE,          // in : use the positive V derivative at a knot
+     1,             // in : one vector
+     &asSample[1],  // in : sample tangent in model space
+     &sDirection)); // out: sample tangent in parameter space
+  if(!pSurface->IsOnSeam(sUV,NULL,&eSeam)) { return SM_ERR; }
+  if(eSeam == SM_SP_BOTH)
+    {
+      double dU = smos_Fabs(sDirection.x)/sDomain.GetUInterval().GetLength();
+      double dV = smos_Fabs(sDirection.y)/sDomain.GetVInterval().GetLength();
+      // A sample along one seam leaves only the other. A diagonal corner
+      // encounter must match both periodic sides on the same edgeuse.
+      if(dU > 0.0 && dV <= SM_EFF_ZERO*dU)      { eSeam = SM_SP_U; }
+      else if(dV > 0.0 && dU <= SM_EFF_ZERO*dV) { eSeam = SM_SP_V; }
+    }
+
+  SmTArray<SmEdgeuse*> sUses;
+  SmTArray<double>     sParameters;
+  SmEdge             *pEdge   = rTouch.m_pPtClassify->GetEdgeObject();
+  SmVertex           *pVertex = rTouch.m_pPtClassify->GetVertexObject();
+  if(pEdge)
+    {
+      pEdge->GetEdgeuses(sUses,NULL,pFace->GetUpwardFaceuse());
+      sParameters.SetSize(sUses.GetSize());
+      sParameters.SetAll(rTouch.m_pPtClassify->GetTParam());
+    }
+  else if(pVertex)
+    {
+      SmTArray<SmVertexuse*> sVertexuses;
+      pVertex->GetVertexusesOfFace(pFace,sVertexuses,pFace->GetUpwardFaceuse());
+      for(ULONG lVertex=0; lVertex<sVertexuses.GetSize(); ++lVertex)
+        {
+          SmVertexuse *pVertexuse = sVertexuses[lVertex];
+          if(pVertexuse->GetVertexuseType() != SmEdgeuse_TYPE) { continue; }
+          SmEdgeuse *pUse = pVertexuse->GetEdgeuse();
+          double     dParameter;
+          SER(pVertexuse->ComputeTPoint(dParameter));
+          sUses.Add(pUse);
+          sParameters.Add(dParameter);
+          pUse = pUse->GetCWEdgeuse();
+          SER(pUse->GetMate()->GetVertexuse()->ComputeTPoint(dParameter));
+          sUses.Add(pUse);
+          sParameters.Add(dParameter);
+        }
+    }
+  SmXSectTol3d sTolerance = SmTol::GetXSectTol3d(rFaceProps.m_sZoneTol3d,rFaceProps.m_sZoneTol3d);
+  for(ULONG lUse=0; lUse<sUses.GetSize(); ++lUse)
+    {
+      SmEdgeuse *pUse = sUses[lUse];
+      if(!pUse->IsConnectedTo(rTouch.m_pConnectedTo)) { continue; }
+      SmBoolean bBounds = TRUE;
+      for(ULONG lDirection=0; lDirection<2 && bBounds; ++lDirection)
+        {
+          SmSurfParamType eDirection = lDirection == 0 ? SM_SP_U : SM_SP_V;
+          if(eSeam != SM_SP_BOTH && eSeam != eDirection) { continue; }
+          double dCoordinate = lDirection == 0 ? sUV.x : sUV.y;
+          double dMiddle     = lDirection == 0 ? .5*(sDomain.GetUMin()+sDomain.GetUMax())
+                                              : .5*(sDomain.GetVMin()+sDomain.GetVMax());
+          ULONG  lWantedSide = dCoordinate < dMiddle ? 1UL : 2UL;
+          ULONG  lSides;
+          SER(sm_FindEdgeuseSeamSides
+            (pUse,              // in : connected boundary occurrence
+             sParameters[lUse], // in : encounter parameter on its edge
+             pSurface,          // in : supporting surface
+             eDirection,        // in : periodic parameter being crossed
+             sTolerance,        // in : 3D seam neighborhood
+             lSides));          // out: occupied UV sides
+          if(lSides == 0)
+            {
+              // An entire seam loop has no off-seam anchor; its left side is
+              // defined by the directed edgeuse. Retain tangential encounters.
+              SmPoint3d  asEdge[2];
+              SmVector3d sNormal;
+              SER(pUse->GetEdge()->GetCurve()->Evaluate(sParameters[lUse],1,TRUE,asEdge));
+              SER(pSurface->EvaluateNormal(sUV,TRUE,TRUE,sNormal));
+              if(pUse->GetOrientation() == SM_OT_OPPOSITE) { asEdge[1] = -asEdge[1]; }
+              double dSide = sNormal.TripleProduct(asEdge[1],asSample[1])*(bFirst ? 1.0 : -1.0);
+              bBounds = dSide >= 0.0;
+            }
+          else
+            { bBounds = (lSides & lWantedSide) != 0; }
+        }
+      if(bBounds) { return SM_SUCCESS; }
+    }
+  rTouch.m_eLoopDir = SM_CD_SEAM_NO_EDGEUSE;
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: Collect the ordered encounters of ClassifyCrv with the target loops.
+
+NOTES: Retains every arrival/departure pair, including tangent, coincident,
+       vertex-loop, pole and seam encounters. Opposite seam endpoints remain
+       distinct records at their original parameters. SM_CD_SEAM_NO_EDGEUSE
+       marks an unused periodic image without discarding its 3D connection.
+       Consumers decide which encounters are crossings; this method does not
+       assign containment.
+       Uses defining geometry without requiring UV trim curves during healing.
+***********************************************************************/
+SmStatus SmCurveClassification::GetLoopTouches
+ (const SmTArray<SmLoop*> &crLoops,       // in : target loops
+  SmFaceProps            *pOptFaceProps, // i/o: optional Stage 2 face properties; computed if needed
+  SmTArray<SmTouchData>   &rTouches)      // out: ordered arrival/departure pairs, retaining seam endpoints
+const
+{
+  SmFaceProps             sFaceProps(GetContext());
+  SmFaceProps            *pFaceProps = pOptFaceProps ? pOptFaceProps : &sFaceProps;
+  SmTArray<SmTouchData>   *pRawTouchDirList = &rTouches;
+  rTouches.ReSet();
 
   // no work - no TgtLoops
   if(crLoops.GetSize() == 0)
@@ -11338,7 +11573,7 @@ const
     } // end pOptFaceProps existence check
 
   // locals
-  ULONG ii, i0, i1, i2, jj, kk, ll ;
+  ULONG ii, i0, i1, jj, kk, ll ;
   SmVector2d      sU(1,0) ; 
 
   // Tgt Face and Surface Props
@@ -11410,14 +11645,14 @@ const
                                }
           else                 { if(ii==1) { eClassifyCrv_OnSeam = eFoundSeamDir ; }  // Save First SmpPtUV classify
                                  else      { SM_ASSERT_MSG(eClassifyCrv_OnSeam == eFoundSeamDir, // Expect all SmpPtUV Classifies to be the same
-                                                           _T("SmCurveClassification::GetLoopCrossings: Found a ClassifyCrv that fails to consistently drop to one Seam or the other - review case")) ;
+                                                           _T("SmCurveClassification::GetLoopTouches: Found a ClassifyCrv that fails to consistently drop to one Seam or the other - review case")) ;
                                            }
                                }
         } // end iter every SmpPt
     } // end pSurface is a periodic surface - when ClassifyCurve is a SeamCrv set eClassifyCrv_OnSeam check
 
   SM_ASSERT_MSG(eClassifyCrv_OnSeam == SM_SP_NEITHER || eClassifyCrv_OnSeam == SM_SP_U || eClassifyCrv_OnSeam == SM_SP_V,
-              _T("SmCurveClassification::GetLoopCrossings: code looking for ClassifyCrvs coin with SurfSeams Failed - this is a bug")) ;
+              _T("SmCurveClassification::GetLoopTouches: code looking for ClassifyCrvs coin with SurfSeams Failed - this is a bug")) ;
 
 #ifdef SM_DEBUG_CODE
 SmBoolean bDebugMe = FALSE;
@@ -11497,7 +11732,7 @@ SmBoolean bDebugMe = FALSE;
           // when Surface has poles - remember if TouchList first/last is on Pole
           if(pFaceProps->m_lPoles != SM_SS_NONE)
             {
-              SM_ASSERT_MSG(pClassifyCrv->GetDim() == 3, _T("SmCurveClassification::GetLoopCrossings: Assumption pClassifyCrv Dim:[3] is wrong - algorithm needs extension")) ; 
+              SM_ASSERT_MSG(pClassifyCrv->GetDim() == 3, _T("SmCurveClassification::GetLoopTouches: Assumption pClassifyCrv Dim:[3] is wrong - algorithm needs extension")) ;
               lTouch_1stOnPole  =    ( (pFaceProps->m_sPolePoints[0].IsInitialized() && sTouch_1stPN[0].DistanceBetween(pFaceProps->m_sPolePoints[0]) < pFaceProps->m_sZoneTol3d) ? SM_SS_UMIN : 0 )
                                    + ( (pFaceProps->m_sPolePoints[1].IsInitialized() && sTouch_1stPN[0].DistanceBetween(pFaceProps->m_sPolePoints[1]) < pFaceProps->m_sZoneTol3d) ? SM_SS_VMIN : 0 )
                                    + ( (pFaceProps->m_sPolePoints[2].IsInitialized() && sTouch_1stPN[0].DistanceBetween(pFaceProps->m_sPolePoints[2]) < pFaceProps->m_sZoneTol3d) ? SM_SS_UMAX : 0 )
@@ -11552,7 +11787,7 @@ SmBoolean bDebugMe = FALSE;
                                                        //    : NULL to ignore, default:[NULL]
               pSurface->DropVectors(sTouch_LastUV[0], TRUE, TRUE, 1, &sTouch_LastPN[1], &sTouch_LastUV[1]) ;
 
-              SM_ASSERT_MSG(bSuccess1st && bSuccessLast, _T("SmCurveClassification::GetLoopCrossings: Warning - 1st and/or last Drop points failed to drop")) ;
+              SM_ASSERT_MSG(bSuccess1st && bSuccessLast, _T("SmCurveClassification::GetLoopTouches: Warning - 1st and/or last Drop points failed to drop")) ;
            } // end scope - get 1st/last Touch_UV pos and dir
 
           // 2d Tols at RawTouchDirList Start/Stop
@@ -11607,7 +11842,6 @@ SmBoolean bDebugMe = FALSE;
 
               // ClassifyCrv is a degenerate UVpoint - it should have no crossings
               pRawTouchDirList->ReSet() ;
-              pDoneTouchDirList->ReSet() ;
               return(SM_SUCCESS) ;
             } // end degen ClassifyCrv chk
 
@@ -11766,7 +12000,7 @@ SmBoolean bDebugMe = FALSE;
                             || (   (lTouch_Cnt == 2)
                                 && (eTouch_1stType == SM_EP_START || eTouch_1stType == SM_EP_END || eTouch_1stType == SM_EP_INSIDE)
                                 && (eTouch_1stType == eTouch_LastType)),
-                            _T("SmCurveClassification::GetLoopCrossings: Found a OneTouch case where the eTouch_1stType and eTouch_LastType vals are not consistent - review case")) ;
+                            _T("SmCurveClassification::GetLoopTouches: Found a OneTouch case where the eTouch_1stType and eTouch_LastType vals are not consistent - review case")) ;
               SmExtentPointType eOneTouchTgtType =    (lTouch_Cnt == 2)  // just one raw touch with 2 TouchDirs per Touch inside pRawTouchDirList
                                                    ? eTouch_1stType 
                                                    : SM_EP_BOTH ;
@@ -11917,7 +12151,7 @@ SmBoolean bDebugMe = FALSE;
                                     && (sThisTouch_Vertexuses[0]->IsConnectedTo(pUpperFaceuse))
                                     && (sThisTouch_Vertexuses.GetSize() <= 1 || sThisTouch_Vertexuses[1]->IsConnectedTo(pUpperFaceuse))
                                     && (sThisTouch_Vertexuses.GetSize() <= 2 || sThisTouch_Vertexuses[2]->IsConnectedTo(pUpperFaceuse)),
-                                    _T("SmCurveClassification::GetLoopCrossings: Fetched PtClassify->Vertex->Vertexuse not connected to TgtLoop - fix this bug")) ;
+                                    _T("SmCurveClassification::GetLoopTouches: Fetched PtClassify->Vertex->Vertexuse not connected to TgtLoop - fix this bug")) ;
 
                       // no work - no Vertexuses connected to Face->TgtLoop - move onto next PtClassify
                       if(sThisTouch_Vertexuses.GetSize() == 0)
@@ -12005,7 +12239,7 @@ SmBoolean bDebugMe = FALSE;
                           SM_ASSERT_MSG(   !SM_IS_ZERO(dSectorAngDeg - 360.0)
                                         || !SM_IS_ZERO(dBegSectorAngRad - dEndSectorAngRad)
                                         || sThisTouch_SectorIvlRad[jj].IsFullPeriod(),
-                                        _T("SmCurveClassification::GetLoopCrossings: SectorIvl is not FULL for a struct end vertex as expected - review case.")) ;
+                                        _T("SmCurveClassification::GetLoopTouches: SectorIvl is not FULL for a struct end vertex as expected - review case.")) ;
 
 #ifdef SM_DEBUG_CODE
                           if (bDebugMe) 
@@ -12031,7 +12265,6 @@ SmBoolean bDebugMe = FALSE;
 
                               SM_DUMP_AND_ASSERT_VALID(this) ; // Pretty print CurvClassification
                               SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                              SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ;
                               sThisTouch_UVSectorIO[jj].Dump() ; // Pretty print sector data
                               smos_sprintf(sDbgBuff, _T("\n  SectorAngDeg: Beg:[%7.7lf], End:[%7.7lf], Ivl[%7.7lf]"), 
                                          SM_RAD2DEG(dBegSectorAngRad), 
@@ -12165,7 +12398,6 @@ SmBoolean bDebugMe = FALSE;
 
                                   SM_DUMP_AND_ASSERT_VALID(this) ;
                                   SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                                  SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ; 
 
                                   // draw case
                                   smgfx_Erase() ;
@@ -12205,7 +12437,6 @@ SmBoolean bDebugMe = FALSE;
 
                               SM_DUMP_AND_ASSERT_VALID(this) ; // Pretty print CurvClassification
                               SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                              SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ;
                               sThisTouch_UVSectorIO[jj].Dump() ; // Pretty print sector data
                               smos_sprintf(sDbgBuff, _T("\n  eThisSector_ArriveType:[%s]"),
                                            eThisSector_ArriveType == SM_CD_UNINIT ? _T("SM_CD_UNINIT")
@@ -12270,7 +12501,7 @@ SmBoolean bDebugMe = FALSE;
                                         || (   eThisSector_DepartType == SM_CD_IN                                                   // only 1 'in' sector per departure
                                             && (rThisTouch_DepartType == SM_CD_OUT || rThisTouch_DepartType == SM_CD_UNINIT))   
                                         || (eThisSector_DepartType == SM_CD_OUT),                                                   // any number of 'out' of sectors per departure
-                                        _T("SmCurveClassification::GetLoopCrossings: Vector departing at Vertex classifies more than once to a VertexSector - fix this bug")) ; 
+                                        _T("SmCurveClassification::GetLoopTouches: Vector departing at Vertex classifies more than once to a VertexSector - fix this bug")) ;
 
                           SM_ASSERT_MSG(   (   rThisTouch_ArriveType == SM_CD_POLE_NO_VERTEX                                        // arrival at SurfNaturalBndry already classified
                                             || rThisTouch_ArriveType == SM_CD_POLE
@@ -12284,7 +12515,7 @@ SmBoolean bDebugMe = FALSE;
                                         || (   eThisSector_ArriveType == SM_CD_IN                                                   // only 1 'in' sector per arrival
                                             && (rThisTouch_ArriveType == SM_CD_OUT || rThisTouch_ArriveType == SM_CD_UNINIT))   
                                         || (eThisSector_ArriveType == SM_CD_OUT),                                                   // any number of 'out' of sectors per arrival
-                                        _T("SmCurveClassification::GetLoopCrossings: Vector arriving at Vertex classifies more than once to a VertexSector - fix this bug")) ; 
+                                        _T("SmCurveClassification::GetLoopTouches: Vector arriving at Vertex classifies more than once to a VertexSector - fix this bug")) ;
 
 #ifdef SM_DEBUG_CODE
                           if (bDebugMe) 
@@ -12295,7 +12526,6 @@ SmBoolean bDebugMe = FALSE;
 
                               SM_DUMP_AND_ASSERT_VALID(this) ; // Pretty print CurvClassification
                               SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                              SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ;
                               sThisTouch_UVSectorIO[jj].Dump() ; // Pretty print sector data
                               smos_sprintf(sDbgBuff, _T("\n  eThisSector_ArriveType:[%s]"),
                                            eThisSector_ArriveType == SM_CD_UNINIT ? _T("SM_CD_UNINIT")
@@ -12390,7 +12620,7 @@ SmBoolean bDebugMe = FALSE;
                                               // check state - Params are in Curve Domains
                                               SM_ASSERT_MSG(   sCrvClassification_Interval.ContainsValue(dSmpClassifyCrvParam)
                                                             && sTgtIvl.ContainsValue(dSmpEdgeuseParam),
-                                                            _T("SmCurveClassification::GetLoopCrossings - sampling params have fallen outside of the curve domains - needs debug")) ;
+                                                            _T("SmCurveClassification::GetLoopTouches - sampling params have fallen outside of the curve domains - needs debug")) ;
                                   
                                               // TgtEdgeuse and ClassifyCrv Samples
 
@@ -12430,7 +12660,6 @@ SmBoolean bDebugMe = FALSE;
 
                                                   SM_DUMP_AND_ASSERT_VALID(this) ;
                                                   SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                                                  SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ; 
 
                                                   // draw case
                                                   smgfx_Erase() ;
@@ -12473,7 +12702,6 @@ SmBoolean bDebugMe = FALSE;
 
                               SM_DUMP_AND_ASSERT_VALID(this) ; // Pretty print CurvClassification
                               SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                              SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ;
                               sThisTouch_UVSectorIO[jj].Dump() ; // Pretty print sector data
                               smos_sprintf(sDbgBuff, _T("\n  eThisSector_ArriveType:[%s]"),
                                            eThisSector_ArriveType == SM_CD_UNINIT ? _T("SM_CD_UNINIT")
@@ -12519,8 +12747,6 @@ SmBoolean bDebugMe = FALSE;
                         } // end iter jj - every sVertexuse classifying arrive/depart ClassifyCrv dirs in/out/on states
 
                       // When Arrive/Depart classifies to no Sectors - mark it as Out
-                      SM_ASSERT_MSG(rThisTouch_ArriveType != SM_CD_UNINIT, _T("SmCurveClassification::GetLoopCrossings: CrvClassify Arrive failed to classify at Vertex - needs review")) ; 
-                      SM_ASSERT_MSG(rThisTouch_DepartType != SM_CD_UNINIT, _T("SmCurveClassification::GetLoopCrossings: CrvClassify Depart failed to classify at Vertex - needs review")) ; 
                       if(rThisTouch_ArriveType == SM_CD_UNINIT) { rThisTouch_ArriveType = SM_CD_OUT ; }
                       if(rThisTouch_DepartType == SM_CD_UNINIT) { rThisTouch_DepartType = SM_CD_OUT ; }
 
@@ -12557,7 +12783,6 @@ SmBoolean bDebugMe = FALSE;
 
                       SM_DUMP_AND_ASSERT_VALID(this) ;
                       SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                      SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ; 
 
                       // draw case
                       smgfx_Erase() ;
@@ -12635,11 +12860,10 @@ SmBoolean bDebugMe = FALSE;
                      
                           double    dCrossMagUV    = sClassifyCrv_UVTan.Cross(sThisTouch_EdgeuseUVTan) ;
                           SmBoolean bConsistentMag = (dCrossMag3d * dCrossMagUV) > 0.0 ;
-                          SM_ASSERT_MSG(bConsistentMag == TRUE, _T("SmCurveClassification::GetLoopCrossings: orientation geometry is in error - check this section")) ;
+                          SM_ASSERT_MSG(bConsistentMag == TRUE, _T("SmCurveClassification::GetLoopTouches: orientation geometry is in error - check this section")) ;
                      
                           SM_DUMP_AND_ASSERT_VALID(this) ;
                           SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                          SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ; 
                      
                           // draw case
                           smgfx_Erase() ;
@@ -12681,13 +12905,13 @@ SmBoolean bDebugMe = FALSE;
                                     || (eEdgeuseArriveType == SM_CD_OUT)                                                                                   // any number of SM_CD_OUTs
                                     || (   eEdgeuseArriveType == SM_CD_POLE || eEdgeuseArriveType == SM_CD_POLE_NO_VERTEX 
                                         || eEdgeuseArriveType == SM_CD_SEAM || eEdgeuseArriveType == SM_CD_LAMINA),       // or off the end of the ClassifyCrv 
-                                    _T("SmCurveClassification::GetLoopCrossings: Vector arriving at Edge classifies more than once to an Edgeuse - fix this bug")) ; 
+                                    _T("SmCurveClassification::GetLoopTouches: Vector arriving at Edge classifies more than once to an Edgeuse - fix this bug")) ;
                       SM_ASSERT_MSG(   (eEdgeuseDepartType == SM_CD_ON && (rThisTouch_DepartType == SM_CD_OUT || rThisTouch_DepartType == SM_CD_UNINIT))   // only 1 'on' per arrival
                                     || (eEdgeuseDepartType == SM_CD_IN && (rThisTouch_DepartType == SM_CD_OUT || rThisTouch_DepartType == SM_CD_UNINIT))   // only 1 'in' per arrival
                                     || (eEdgeuseDepartType == SM_CD_OUT)                                                                                   // any number of SM_CD_OUTs
                                     || (   eEdgeuseDepartType == SM_CD_POLE || eEdgeuseDepartType == SM_CD_POLE_NO_VERTEX 
                                         || eEdgeuseDepartType == SM_CD_SEAM || eEdgeuseDepartType == SM_CD_LAMINA),       // or off the end of the ClassifyCrv 
-                                    _T("SmCurveClassification::GetLoopCrossings: Vector departing at Edge classifies more than once to an Edgeuse - fix this bug")) ; 
+                                    _T("SmCurveClassification::GetLoopTouches: Vector departing at Edge classifies more than once to an Edgeuse - fix this bug")) ;
                   
                       // accumulate ThisArrive and ThisDepart types
                       if(   (rThisTouch_ArriveType == SM_CD_UNINIT)          // if this is(   the 1st Edgeuse Classification of a NonBoundary ArriveTouch
@@ -12729,7 +12953,6 @@ SmBoolean bDebugMe = FALSE;
 
                               SM_DUMP_AND_ASSERT_VALID(this) ;
                               SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; 
-                              SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ; 
 
                               // draw case
                               smgfx_Erase() ;
@@ -12772,9 +12995,9 @@ SmBoolean bDebugMe = FALSE;
                                     }
                                   
                                   SM_ASSERT_MSG(sThisTouch_EdgeIvl.ContainsValue(dSmpEdgeuseParam + (lSmpCnt-1) * dSmpEdgeuseStep),
-                                                _T("SmCurveClassification::GetLoopCrossings - Divergence sampling runs out of EdgeIvl - needs debugging")) ;
+                                                _T("SmCurveClassification::GetLoopTouches - Divergence sampling runs out of EdgeIvl - needs debugging")) ;
                                   SM_ASSERT_MSG(sCrvClassification_Interval.ContainsValue(dSmpClassifyCrvParam + (lSmpCnt - 1) * dSmpClassifyCrvStep),
-                                                _T("SmCurveClassification::GetLoopCrossings - Divergence sampling runs out of ClassifyCrvIvl - needs debugging")) ;
+                                                _T("SmCurveClassification::GetLoopTouches - Divergence sampling runs out of ClassifyCrvIvl - needs debugging")) ;
 
                                   // walk from ClassifyCrv/Edge_XSect along ClassifyCrv and Sector Edgeuse until ClassifyCrv diverges into or outof the loop
                                   for(ll=0;ll<lSmpCnt;ll++,dSmpEdgeuseParam+=dSmpEdgeuseStep, dSmpClassifyCrvParam+=dSmpClassifyCrvStep)
@@ -12783,7 +13006,7 @@ SmBoolean bDebugMe = FALSE;
                                       // check state - Params are in Curve Domains
                                       SM_ASSERT_MSG(   sCrvClassification_Interval.ContainsValue(dSmpClassifyCrvParam)
                                                     && sThisTouch_EdgeIvl.ContainsValue(dSmpEdgeuseParam),
-                                                    _T("SmCurveClassification::GetLoopCrossings - sampling params have fallen outside of the curve domains - needs debug")) ;
+                                                    _T("SmCurveClassification::GetLoopTouches - sampling params have fallen outside of the curve domains - needs debug")) ;
                                   
                                       // locals
                                       SmPoint3d   sSmpClassifyCrvPN[2] ;
@@ -12823,15 +13046,13 @@ SmBoolean bDebugMe = FALSE;
                     } // end iter jj, every Edgeuse classifying ClassifyCrv approach/Departure in/on/out status
 
                   // When Arrive/Depart classifies to no Sectors - mark it as Out
-                  SM_ASSERT_MSG(rThisTouch_ArriveType != SM_CD_UNINIT, _T("SmCurveClassification::GetLoopCrossings: CrvClassify Arrive failed to classify at Edge - needs review")) ; 
-                  SM_ASSERT_MSG(rThisTouch_DepartType != SM_CD_UNINIT, _T("SmCurveClassification::GetLoopCrossings: CrvClassify Depart failed to classify at Edge - needs review")) ; 
                   if(rThisTouch_ArriveType == SM_CD_UNINIT) { rThisTouch_ArriveType = SM_CD_OUT ; }
                   if(rThisTouch_DepartType == SM_CD_UNINIT) { rThisTouch_DepartType = SM_CD_OUT ; }
 
                 } // end EdgeTouch branch
               else // problem branch                                                                                                     
                 {
-                  SM_DBG_WARN(_T("SmCurveClassification::GetLoopCrossings: Found a TgtLoop-Connected PtClassify->Object not a Vertex or an Edge - Fix bug")) ;
+                  SM_DBG_WARN(_T("SmCurveClassification::GetLoopTouches: Found a TgtLoop-Connected PtClassify->Object not a Vertex or an Edge - Fix bug")) ;
 
                 } // end not a VertexTouch or EdgeTouch error branch
             } // end scope - VertexTouch, EdgeTouch, and ErrorTouch branches to compute (within iter every Touch [i0,i1]):
@@ -12850,190 +13071,123 @@ SmBoolean bDebugMe = FALSE;
  //                                 ::m_pPtClassify     = associated ClassifyCrv PtClassify       for this TouchDir
  //                                 ::m_pConnectedTo    = associated Loop connected to PtClassify for this TouchDir
  
- // Next: process pRawTouchDirList into pDoneTouchDirList
-
-#ifdef SM_DEBUG_CODE
-  if (bDebugMe) 
-    { 
-      ULONG di ;
-      SmBrep *pBrep   = GetBrep() ;
-
-      // PrettyPrint CurveClassification and pRawTouchDirList
-      SM_DUMP_AND_ASSERT_VALID(this) ; 
-      SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList, FALSE) ; // FALSE = only dump Arrive/Depart Data - report is a one-line list
-                                                                        // TRUE  = dump all touch data - report is one-line per touch list
-      // Draw Brep, Loop, Face, and ClassifyCrv
-      smgfx_Erase() ;
-      smgfx_SetLook(1,2, 0,0,1) ; if(pBrep) pBrep->Draw(TRUE) ; sm_GraphicsLoop() ;
-      smgfx_SetLook(2,3, 1,0,1) ; for(di=0;di<crLoops.GetSize();di++) { if(crLoops[di]) crLoops[di]->Draw(3,FALSE,NULL,FALSE) ; sm_GraphicsLoop() ; }
-      smgfx_SetLook(1,2, 0,0,0) ; if(pFace) pFace->DrawUV() ; sm_GraphicsLoop() ; 
-      smgfx_SetLook(3,4, .3,.3,.3) ; if(pSurface) pSurface->DrawSeams() ; sm_GraphicsLoop() ; 
-      smgfx_SetLook(3,4, 1,0,0) ; if(pClassifyCrv) pClassifyCrv->DrawParams() ; sm_GraphicsLoop() ;
-      sm_GraphicsLoop();
+  if(rTouches.GetSize() > 0)
+    {
+      SER(sm_ClassifySeamEdgeuse(*this, rTouches[0],                    TRUE,  *pFaceProps)); // If first Touch on seam, classify if on an Edgeuse
+      SER(sm_ClassifySeamEdgeuse(*this, rTouches[rTouches.GetSize()-1], FALSE, *pFaceProps)); // If last Touch  on seam, classify if on an Edgeuse
     }
-#endif // SM_DEBUG_CODE
+  return SM_SUCCESS;
+} // end SmCurveClassification::GetLoopTouches
 
-    { // Begin Scope - process RawTouchDirList into DoneTouchDirList
+/*******************************************************************//**
+PURPOSE: Count the times ClassifyCrv crosses each target LoopBndry,
+         treating a closed curve's seam endpoints as one encounter.
 
-      // locals
-      ULONG lDoneCnt = pRawTouchDirList->GetSize() ;
-      SmBoolean bSeamCyclic = FALSE ;
+NOTES:
+ 1.) This method is used as part of the healer and as
+     such does NOT use Dropped LoopBndry UVTrimCurves.
+     Construction of those are known to fail when the
+     Brep has SeamCrossing problems.
 
-      // copy RawTouchDirList into DoneTouchDirList
-      pDoneTouchDirList->Append(*pRawTouchDirList) ; 
+ 2.) One loop crossing happens every time
+     the ClassifyCrv moves from one side to the other
+     of a LoopBndry. That's moving between In and Out of
+     Area_Loops and between Above and Below for NoArea_Loops.
+       o. A closed ClassifyCrv crosses an Area_Loop an even number
+          of times, including zero.
+       o. NoArea_Loops on periodic surfaces can have an odd number
+          of crossings; an odd count alone does not mean an invalid loop.
+       o. An open ClassifyCrv can cross an Area_Loop an odd number
+          of times when its endpoints are on opposite sides.
 
-      // Unexpected: the empty case already returned earlier and the list was populated
-      // since, so lDoneCnt should never be 0 here (lDoneCnt-1 indexes below).
-      if(lDoneCnt == 0)
+     Loop crossings are computed from the list of
+     ClassifyCrv/LoopBndry XSects. However not all XSects are
+     loop crossings. This algorithm counts the number of times
+     a ClassifyCrv moves from one side of a LoopBndry to another.
+
+       o. Strut and crack crossings are NOT LoopCrossings.
+       o. Vertex-loop hits are NOT LoopCrossings.
+          They are zero-length cracks: arrive and depart stay on the
+          same side of the loop. An inner vertex-loop has IN/IN touches.
+       o. ClassifyCrvs entirely coincident to LoopBndries are NOT LoopCrossings.
+       o. Tangent intersections that enter and exit on the same
+          side of the LoopBndry as they move away from the tangency
+          are NOT LoopCrossings.
+       o. A closed classification curve's two seam endpoint intersections
+          represent one encounter. That encounter counts as a loop
+          crossing only if its arrival and departure are on opposite
+          sides of the loop boundary. IN/IN and OUT/OUT are discarded;
+          IN/OUT and OUT/IN each count as one crossing.
+
+     Partial Coincidence can spread a loop crossing over a CrvClassify
+     interval, eg. a TangentXSect coming in from one side of the LoopBndry
+     leading into a Coincident CrvClassify segment that ends in a
+     2nd TangentXSect exiting into the other side of the LoopBndry
+     all counts as just one LoopCrossing. In this algorithm the
+     endpoint intersections of this example are called a crossing pair.
+
+ 3.) Assumes CrvClassification->m_cpFace->Surface is at least G1.
+
+ 4.) GetLoopTouches preserves the raw arrival/departure pairs at their
+     original parameters. SEAM and SEAM_NO_EDGEUSE describe the outward
+     directions at the sample endpoints, with or without a bounding edgeuse
+     on that periodic side. Interior directions are IN, ON or OUT.
+     GetLoopCrossings joins a closed sample's last arrival and first
+     departure, then filters tangencies and coincident intervals in a copy.
+     The raw list remains unchanged. An open sample ending on a seam is
+     not joined and warns that its crossing count may be unreliable.
+
+     UV containment consumes GetLoopTouches instead of this cyclic view:
+     it needs the separate encounters on the two sides of the UV domain.
+***********************************************************************/
+SmStatus SmCurveClassification::GetLoopCrossings
+ (const SmTArray<SmLoop*> & crLoops,              // in : target loops
+  SmFaceProps             * pOptFaceProps,        // i/o: optional Stage 2 face properties; computed if needed
+  SmTArray<ULONG>         * pCrossingCounts,      // out: periodic crossing count for each target loop
+  SmTArray<SmTouchData>   * pOptRawTouchDirList,  // out: optional complete arrival/departure pairs; seam endpoints remain distinct
+  SmTArray<SmTouchData>   * pOptDoneTouchDirList) // out: optional processed pairs used to compute the crossing counts
+const
+{
+  SmFaceProps            sFaceProps(GetContext());
+  SmFaceProps           *pFaceProps = pOptFaceProps ? pOptFaceProps : &sFaceProps;
+  SmTArray<SmTouchData>   sRawTouches, sCrossings;
+  SmTArray<SmTouchData>  &rTouches = pOptRawTouchDirList ? *pOptRawTouchDirList : sRawTouches;
+  SmTArray<SmTouchData>  &rCrossings = pOptDoneTouchDirList ? *pOptDoneTouchDirList : sCrossings;
+  rCrossings.ReSet();
+  pCrossingCounts->SetSize(crLoops.GetSize());
+  pCrossingCounts->SetAll(0);
+  SER(GetLoopTouches(crLoops,pFaceProps,rTouches));
+  ULONG lCount = rTouches.GetSize();
+  if(lCount == 0) { return SM_SUCCESS; }
+  rCrossings.Append(rTouches);
+
+  if(   rTouches[0].m_eLoopDir == SM_CD_SEAM || rTouches[lCount-1].m_eLoopDir == SM_CD_SEAM
+     || rTouches[0].m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE || rTouches[lCount-1].m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE)
+    {
+      SmXSectTol3d sXSectTol = SmTol::GetXSectTol3d(pFaceProps->m_sZoneTol3d,pFaceProps->m_sZoneTol3d);
+      if(SmTol::IsClosed(GetCurve(),&sXSectTol))
         {
-          ERR_MSG(_T("SmCurveClassification::GetLoopCrossings: unexpected empty RawTouchDirList before Done processing")) ;
-          return SM_ERR ;
-        }
-
-      // process DoneTouchDirList end cases
-      if(   pDoneTouchDirList->GetAt(0).m_eLoopDir          == SM_CD_SEAM
-         || pDoneTouchDirList->GetAt(lDoneCnt-1).m_eLoopDir == SM_CD_SEAM)
-        {
-          // raw Start/End entries map to 1 done entry
-          if(bClassifyCrv_Closed3d)
+          AERN(lCount >= 4 && (rTouches[lCount-1].m_eLoopDir == SM_CD_SEAM
+                           || rTouches[lCount-1].m_eLoopDir == SM_CD_SEAM_NO_EDGEUSE),SM_ERR_ASSERT_FAILURE);
+          // Join the last arrival and first departure; the pair may not be a crossing.
+          // Their original records remain in rTouches for other consumers.
+          rCrossings[0] = rTouches[lCount-2];
+          rCrossings.SetSize(lCount-2);
+          lCount = rCrossings.GetSize();
+          // A coincident interval can continue through the periodic join.
+          if(rCrossings[0].m_eLoopDir == SM_CD_ON && rCrossings[lCount-1].m_eLoopDir == SM_CD_ON)
             {
-              SM_ASSERT_MSG(   lDoneCnt > 1 
-                            && pDoneTouchDirList->GetAt(lDoneCnt-1).m_eLoopDir == SM_CD_SEAM,
-                            _T("SmCurveClassification::FindCrossingCount: RawTouchDirList Starts on a Seam but does end on 1 - fix bug in RawTouchDirList creation")) ; 
-
-              // 1st Done ArriveTouch = Last RawTouchArrive
-              pDoneTouchDirList->GetAt(0) = pDoneTouchDirList->GetAt(lDoneCnt-2) ;
-
-              // 1st Done DepartTouch = 1st Raw DepartTouch - no work needed
-
-              // Reduce number of DoneTouches by 1 by reducing DoneTouchDirList size by 2
-              lDoneCnt -= 2 ;
-              pDoneTouchDirList->SetSize(lDoneCnt) ;
-              bSeamCyclic = TRUE ;
-
-            } // end closed in 3d case
-          else // open ClassifyCrv touches loop on a Seam
-            {
-              SM_DBG_WARN(_T("SmCurveClassification::FindCrossingCount: ClassifyCrv is open but starts or starts on a Seam - Can't find a reliable TouchCount - review case - prob need a different ClassifyCrv")) ; 
+              rCrossings[0] = rCrossings[lCount-2];
+              rCrossings.SetSize(lCount-2);
             }
-        } // end Start or Stop on a Seam Special Case
-
-      // Unexpected: seam normalization above should not have emptied the touch list.
-      if(lDoneCnt == 0)
-        {
-          ERR_MSG(_T("SmCurveClassification::GetLoopCrossings: unexpected empty DoneTouchDirList after seam normalization")) ;
-          return SM_ERR ;
-        }
-
-      // Process Pole/Lamina Start cases
-      if(   pDoneTouchDirList->GetAt(0).m_eLoopDir == SM_CD_POLE 
-         || pDoneTouchDirList->GetAt(0).m_eLoopDir == SM_CD_POLE_NO_VERTEX 
-         || pDoneTouchDirList->GetAt(0).m_eLoopDir == SM_CD_LAMINA)
-        {
-          pDoneTouchDirList->GetAt(0).m_eLoopDir = SM_CD_OUT ; 
-        }
-
-      // Process Pole/Lamina Stop cases
-      if(   pDoneTouchDirList->GetAt(lDoneCnt-1).m_eLoopDir == SM_CD_POLE 
-         || pDoneTouchDirList->GetAt(lDoneCnt-1).m_eLoopDir == SM_CD_POLE_NO_VERTEX 
-         || pDoneTouchDirList->GetAt(lDoneCnt-1).m_eLoopDir == SM_CD_LAMINA)
-        {
-          pDoneTouchDirList->GetAt(lDoneCnt-1).m_eLoopDir = SM_CD_OUT ; 
-        }
-      
-      // remove internal TouchDepart/Arrive coincident sequences - compress X/On On/Y touches into X/Y touches
-      //  - this can leave On/On touches in the Done list which will be removed later
-      for(i1=1,i2=2,jj=1;jj<lDoneCnt-1;i1+=2,i2+=2)
-        {
-          // when entries are not a X/On On/Y sequence
-          if(   pDoneTouchDirList->GetAt(i1).m_eLoopDir != SM_CD_ON
-             && pDoneTouchDirList->GetAt(i2).m_eLoopDir != SM_CD_ON)
-            {
-              // keep these ThisTouchDepart to NextTouchArrive entries
-              pDoneTouchDirList->GetAt(jj++) = pDoneTouchDirList->GetAt(i1) ; 
-              pDoneTouchDirList->GetAt(jj++) = pDoneTouchDirList->GetAt(i2) ;
-            }
-          else // Discard the ThisTouchDepart On to NextTouchArrive On entries
-            {
-              lDoneCnt -= 2 ;
-            }
-        } // end iter - compress X/On On/Y touches to X/Y touches
-
-      // move the last TouchDepart value - using the exit values of the previous iteration
-      // when bSeamCyclic == TRUE remove EndCase FirstArrive_On LastDepart_On touches placing
-      //      LastArrive touch entry into the FirstArrive entry
-      if(   bSeamCyclic == TRUE
-         && lDoneCnt >= 2   
-         && pDoneTouchDirList->GetAt(0).m_eLoopDir  == SM_CD_ON 
-         && pDoneTouchDirList->GetAt(i1).m_eLoopDir == SM_CD_ON)
-        {
-          // compress EndCase [On/Y ... X/On] to [X/Y ...]
-          pDoneTouchDirList->GetAt(0) = pDoneTouchDirList->GetAt(lDoneCnt-2) ;
-          lDoneCnt -= 2 ;
         }
       else
-        { // Move the last TouchDepartValue to end of compressed DoneList
-          pDoneTouchDirList->GetAt(jj++) = pDoneTouchDirList->GetAt(i1) ;
-        }
- 
-      // tighten up the DoneTouchDirList size
-      pDoneTouchDirList->SetSize(lDoneCnt) ;
-
-      // for every touch - remove Strut, Crack, Tangent, Coincident touches
-      for(i0=0,i1=1,jj=0;jj<lDoneCnt;i0+=2,i1+=2)
-        {
-          // keep Touch Arrive != Depart cases
-          if(pDoneTouchDirList->GetAt(i0).m_eLoopDir != pDoneTouchDirList->GetAt(i1).m_eLoopDir)
-            {
-              pDoneTouchDirList->GetAt(jj++) = pDoneTouchDirList->GetAt(i0) ; 
-              pDoneTouchDirList->GetAt(jj++) = pDoneTouchDirList->GetAt(i1) ;
-            }
-          else // discard Touch Arrive == Depart cases
-            { 
-              lDoneCnt -= 2 ; 
-            }
-        } // end iter DoneTouchDirList removing Strut, Crack, and tangent touches
-
-      // tighten up the DoneTouchDirList size
-      pDoneTouchDirList->SetSize(lDoneCnt) ;
-
-    } // end scope - process RawTouchDirList into DoneTouchDirList
-
-#ifdef SM_DEBUG_CODE
-  if (bDebugMe) 
-    { 
-      ULONG di ;
-      SmBrep *pBrep   = GetBrep() ;
-
-      // PrettyPrint CurveClassification, pRawTouchDirList, pDoneTouchDirList
-      SM_DUMP_AND_ASSERT_VALID(this) ; 
-      SmTouchData::DumpTouchList(_T("Raw : "), *pRawTouchDirList,  FALSE) ; // FALSE = only dump Arrive/Depart Data - report is a one-line list
-      SmTouchData::DumpTouchList(_T("Done: "), *pDoneTouchDirList, FALSE) ; // TRUE  = dump all touch data - report is one-line per touch list
-
-      // Draw Brep, Loop, Face, and ClassifyCrv
-      smgfx_Erase() ;
-      smgfx_SetLook(1,2, 0,0,1) ; if(pBrep) pBrep->Draw(TRUE) ; sm_GraphicsLoop() ;
-      smgfx_SetLook(2,3, 1,0,1) ; for(di=0;di<crLoops.GetSize();di++) { if(crLoops[di]) crLoops[di]->Draw(3,FALSE,NULL,FALSE) ; sm_GraphicsLoop() ; }
-      smgfx_SetLook(1,2, 0,0,0) ; if(pFace) pFace->DrawUV() ; sm_GraphicsLoop() ; 
-      smgfx_SetLook(3,4, .3,.3,.3) ; if(pSurface) pSurface->DrawSeams() ; sm_GraphicsLoop() ; 
-      smgfx_SetLook(3,4, 1,0,0) ; this->Draw(FALSE) ; sm_GraphicsLoop() ;
-      sm_GraphicsLoop();
+        { SM_DBG_WARN(_T("SmCurveClassification::GetLoopCrossings: open sample ends on a seam; crossing count may be unreliable")); }
     }
-#endif // SM_DEBUG_CODE
-
-  // arrive here when pDoneTouchDirList contains a processed raw touch list - next count the crossings
-  pCrossingCounts->SetSize(crLoops.GetSize()) ;
-  for(ii=0;ii<crLoops.GetSize();ii++)
-    {
-      // Raw and Done TouchLists contain 2 entries (arr,dep) per Touch - divide rtn value by 2
-      ULONG lTouchCnt = SmTouchData::GetConnectedTouches(crLoops[ii], *pDoneTouchDirList, NULL) ;
-      pCrossingCounts->GetAt(ii) = lTouchCnt / 2 ;
-      
-    } // end iter every TgtLoop counting crossings
-      
-  // all done
-  return(SM_SUCCESS) ; 
-
+  SER(SmTouchData::RemoveNonCrossings(rCrossings));
+  for(ULONG lLoop=0; lLoop<crLoops.GetSize(); ++lLoop)
+    { (*pCrossingCounts)[lLoop] = SmTouchData::GetConnectedTouches(crLoops[lLoop],rCrossings)/2; }
+  return SM_SUCCESS;
       // example:  AreaLoops on OpenFaces crossed by ClassifyCrv
       //                       +---------------+         +---------------+          +---------------+
       //                       :   +======+    :         :        +======+          +===============+ 
@@ -13047,13 +13201,13 @@ SmBoolean bDebugMe = FALSE;
       //
       // example:  AreaLoops on ClosedFaces crossed by Closed ClassifyCrv
       //                       +...............+         +...............+             +...............+
-      //                       "   +======+    "         "        +======+             +===============+  Special case: The two seam crossings  
-      //                       "   |      |    "         "        |      "             "               "    are identified as one.  The OutCnt
-      //                       o---#------#----o         #--------#------#..>       <..#---------------#..> is zero. This ids as an AreaLoop
+      //                       "   +======+    "         "        +======+             +===============+  Special case: The two seam encounters
+      //                       "   |      |    "         "        |      "             "               "    are joined into IN/IN, then removed;
+      //                       o---#------#----o         #--------#------#..>       <..#---------------#..> the periodic crossing count is zero.
       //                       "   |      |    "         "        |      "             "               "
       //                       "   +======+    "         "        +======+             +===============+
       // ArriveDepartTypes     +...............+         +...............+             +...............+
-      //      OnTgtLoop   :   [(OUT,IN), (IN,OUT)]  [(SEAM,OUT) (OUT,IN), (IN,SEAM)]   [(SEAM,IN), (IN,SEAM)]:2nd entry is a repeat of the first and gets culled
+      //      OnTgtLoop   :   [(OUT,IN), (IN,OUT)]  [(SEAM,OUT) (OUT,IN), (IN,SEAM)]   [(SEAM,IN), (IN,SEAM)] => IN/IN => removed
       //                       => CrossingCnt = 2        => CrossingCnt = 2         => CrossingCnt = 0
       //
       // example:  No AreaLoops on ClosedFaces crossed by Closed ClassifyCrv
@@ -13072,11 +13226,11 @@ SmBoolean bDebugMe = FALSE;
       //                                  |                 |                        |
       //                                  +- NoAreaLoop     +- Closed ClassifyCrv    +- OPEN ClassifyCrv
       //      OnTgtLoop   :   [(OUT,IN)]                [(SEAM,IN), (OUT,SEAM)]     [(SEAM,IN), (OUT,SEAM)]
-      //                       => CrossingCnt = 1        => CrossingCnt = 1         => CrossingCnt = 1
-      //                                              (The 2 TouchPnts are         (only possible when 
-      //                                               the same and should          NoAreaLoop == Seam
-      //                                               be counted once)             The 2 touches have
-      //                                                                            to be counted as 1 crossing)
+      //                       => CrossingCnt = 1        => CrossingCnt = 1         => Unreliable: open seam ends
+      //                                              (The 2 TouchPnts are         (The open sample's
+      //                                               the same and should          seam endpoints are
+      //                                               be counted once)             not joined by this method;
+      //                                                                            a warning is reported.)
       //                                               The trick for these is arrive/depart patterns
       //                                               in a NoAreaLoop on a Closed surface its possible
       //                                               to cross into the face at one touch and arrive out of 
@@ -13117,13 +13271,14 @@ SmBoolean bDebugMe = FALSE;
       //              |               |
       //             Surface Pole Boundaries - this has two and a seam - it's a sphere
       //
-      //             [(POLE,IN), (IN,POLE)]
-      //              => CrossingCnt = 0
+      //             [(POLE,IN), (IN,POLE)] => [(OUT,IN), (IN,OUT)]
+      //              => CrossingCnt = 2; pole endpoints are normalized to OUT
       //
       // Many many more examples are possible.
 
 
 } // end SmCurveClassification::GetLoopCrossings
+
 
 /*******************************************************************//**
 PURPOSE: Get the Edges that intersect and/or are coincident to with classification curve,

@@ -2050,6 +2050,49 @@ static SmStatus my_test_drop_curve_near_seam()
     return allOkay ? SM_SUCCESS : SM_ERR;
 }
 
+// The component constructor sized the V knot copy by the U knot count, so a
+// surface with more V knots than U knots was built without its V knots.
+PT_EXPORT SmStatus my_test_bspline_surface_component_ctor()
+{
+    // Linear in U (4 knots), cubic in V (8 knots).
+    const ULONG n = 1, m = 3, r = 3, s = 7;
+    const short p = 1, q = 3;
+    double U[r + 1] = {0.0, 0.0, 1.0, 1.0};
+    double V[s + 1] = {0.0, 0.0, 0.0, 0.0, 2.0, 2.0, 2.0, 2.0};
+    gw_CPOINT row0[m + 1], row1[m + 1];
+    for (ULONG j = 0; j <= m; ++j)
+    {
+        row0[j].x = 0.0; row0[j].y = (double)j; row0[j].z = 0.0; row0[j].w = 1.0;
+        row1[j].x = 1.0; row1[j].y = (double)j; row1[j].z = 0.5; row1[j].w = 1.0;
+    }
+    gw_CPOINT* Pw[n + 1] = {row0, row1};
+
+    SmContext context;
+    SmBSplineSurface* surface = new (context) SmBSplineSurface(n, m, p, q, r, s, Pw, U, V);
+    SmObjDelete deleteSurface(surface);
+
+    const gw_SURFACE* nurb = surface->GetGwNurbPointer();
+    if (nurb == NULL || (ULONG)nurb->knu->m != r || (ULONG)nurb->knv->m != s)
+    {
+        return SM_ERR;
+    }
+    for (ULONG i = 0; i <= r; ++i)
+    {
+        if (nurb->knu->U[i] != U[i])
+        {
+            return SM_ERR;
+        }
+    }
+    for (ULONG j = 0; j <= s; ++j)
+    {
+        if (nurb->knv->U[j] != V[j])
+        {
+            return SM_ERR;
+        }
+    }
+    return SM_SUCCESS;
+}
+
 PT_EXPORT SmStatus my_test_drop_curve()
 {
   SER(my_test_drop_curve_near_seam());
@@ -3977,12 +4020,37 @@ PT_EXPORT SmStatus my_test_csi_nurb(void)
 } // end my_test_csi_nurb
 
 /***********************************************************************
+PURPOSE --- Optional outputs must not change the returned surface pole mask.
+***********************************************************************/
+static SmStatus my_test_poles_without_optional_outputs()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_poles_without_optional_outputs"));
+  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+    {
+      SmContext sContext;
+      SmSphere *pSphere = NULL;
+      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.0,pSphere));
+      SmObjDelete sCleanup(pSphere);
+      if(lSwap) { SER(pSphere->SwapUV()); }
+
+      ULONG lApprox   = SM_SS_NONE;
+      ULONG lExpected = lSwap ? SM_SS_UMIN | SM_SS_UMAX : SM_SS_VMIN | SM_SS_VMAX;
+      if(   pSphere->GetSingularities(NULL,NULL,&lApprox) != lExpected
+         || pSphere->GetSingularities() != lExpected)
+        { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
+/***********************************************************************
 PURPOSE ---
 
 USAGE NOTES ---
 ***********************************************************************/
 PT_EXPORT SmStatus my_test_surf_methods(void)
 {
+    SmStatus sResult = SM_SUCCESS;
+    PT_RUN(sResult, my_test_poles_without_optional_outputs());
     SmContext sContext;
 
     {
@@ -4028,7 +4096,7 @@ PT_EXPORT SmStatus my_test_surf_methods(void)
     }
 
 
-    return SM_SUCCESS;
+    return sResult;
 
 } // end my_test_surf_methods
 

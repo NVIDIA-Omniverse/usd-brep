@@ -83,6 +83,7 @@ namespace SMU_BrepConvert
     // SMLib to USD
 
     // Append vector of SmBreps to UsdBrepArray
+    // (edits rSmBreps temporarily; see BrepAppend_SMLibToUsdBrep)
     SMU_EXPORT SmStatus BrepAppend_SMLibToUsd
      (std::vector<SmBrep*>& rSmBreps,                       // i/o: in : 'from' SmBreps to convert to a UsdBrepArrayData
                                                             //      out: an SmSdfPathAttribute(UsdBrepArraypath) is added to each SmBrep_ii.
@@ -102,6 +103,8 @@ namespace SMU_BrepConvert
       pxr::SdfPathVector             * pOptPaths);          // in : optional SdfPathVector of UsdBrepArrayPaths to be added to each SmBrep_ii as an SMLib attribute
 
     // Append vector of SmBreps to UsdBrepArrayData
+    // Some analytic faces are SwapUV()'d during export and swapped back before returning;
+    // their edgeuses get new UV trim curves, so UV trim curve pointers held across this call dangle.
     SMU_EXPORT SmStatus BrepAppend_SMLibToUsdBrep
      (std::vector<SmBrep*>           & rSmBreps,            // i/o: target SmBreps to add to rArrays, (a SmSdfPathAttribute(UsdBrepArraypath) is added to each SmBrep_ii)
       UsdBrepData::UsdBrepArrayData & rArrays,             // i/o: UsdBrepArrayData augmented with rSmBreps data

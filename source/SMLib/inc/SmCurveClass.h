@@ -82,7 +82,7 @@ NOTES:
   3. TouchDirLists are just SmTArray<SmTouchData> organized as
       [ArriveTouchDir0 DepartTouchDir0 ArriveTouchDir1 DepartTouchDir2 ...  DepartTouchDirN]
 
-  4. TouchLists and Seams: The touchlist for a classifyCrv that starts and stops on a seam is handled in two ways:
+  4. TouchLists and Seams: GetLoopTouches retains both ends. GetLoopCrossings derives a periodic view:
        raw touch list:  The Seam Start/Stop touches are initially treated as a pair of touches one at diff ends of the param ivl
                         [ 0-Arr] Seam   (Param:[0.00000000]  <== note: param val says touch is at ivl beg
                            -Dep] Out/In (Param:[0.00000000]
@@ -103,7 +103,7 @@ class SM_EXPORT SmTouchData
  public:
   SmTopology            * m_pConnectedTo ;     // ptr to topology connected to PtClassify
   SmCrvDirOnFaceType      m_eLoopDir ;         // oneof: SM_CD_UNINIT SM_CD_IN   SM_CD_POLE    SM_CD_POLE_NO_VERTEX
-                                               //                     SM_CD_ON   SM_CD_SEAM  
+                                               //                     SM_CD_ON   SM_CD_SEAM SM_CD_SEAM_NO_EDGEUSE
                                                //                     SM_CD_OUT  SM_CD_LAMINA
   ULONG                   m_lLoopIndx ;        // associated Loops Index for this m_pConnectedTo obj
   double                  m_dParam ;           // associated ClassifyCrv param            for this TouchDir
@@ -119,6 +119,10 @@ class SM_EXPORT SmTouchData
   // count and extract all the touches for a given ConnectedTo object, rtn number of ConnectedTouches
   //             note:  lCrossingCnt = GetConnectedTouches() / 2 ;
   static ULONG GetConnectedTouches(SmTopology * pConnectedTo, SmTArray<SmTouchData> & rInTouchList, SmTArray<SmTouchData> * pOptOutTouchList=NULL) ;
+  // Filter an interpreted working copy; retain the original encounters separately.
+  static SmStatus RemoveNonCrossings
+    (SmTArray<SmTouchData> &rTouches); // i/o: consumer-owned arrival/departure pairs
+
   static ULONG GetWindingCount(SmTArray<SmTouchData> & rTouchList,     // in : single TgtLoop TouchList to review, ordered:[m_dParam]
                                SmOrientType          & reOrientType) ; // out: oneof: SM_OT_UPPERDOMAIN = TouchList has unmatched Out/In Touches
                                                                        //             SM_OT_LOWERDOMAIN = TouchList has unmatched In/Out Touches
@@ -543,18 +547,22 @@ public:
                             ULONG                lWorkFlag=3)               // in : lWorkFlag = orof 1(CoincidentEdges) & 2(XSectingEdges)
                            const ;
 
-  // count times ClassifyCrv crosses Loop in UVSpace: a valid loop is crossed an even number of times
-  SmStatus GetLoopCrossings(const SmTArray<SmLoop*> & crLoops,              // in : TgtLoops
-                            SmFaceProps             * pOptFaceProps,        // in : optional FaceProps, if already set by SmFaceProps::SetProps_Stage2() - saves time
-                                                                            //    :                   else calls SmFaceProps::SetProps_Stage2().
-                            SmTArray<ULONG>         * pCrossingCounts,      // out: One crossing count for each TgtLoop
-                            SmTArray<SmTouchData>   * pOptRawTouchDirList,  // out: Optional list of raw ClassifyCrv/Loop touches described by arrive/depart pair values as [arrive/depart ...]
-                                                                            //      Arrive/Depart eLoopDir vals oneof:[SM_CD_ IN ON OUT POLE SEAM LAMINA], SEAM entries may be duplicated
-                            SmTArray<SmTouchData>   * pOptDoneTouchDirList) // out: Optional list of processed ClassifyCrv/Loop touches from which the LoopTouchCnt is computed
-                                                                            //      Arrive/Depart eLoopDir vals oneof:[SM_CD_ IN ON OUT], Single SEAM entry - cyclic
+  // Collect encounters without joining seam endpoints or removing non-crossings.
+  SmStatus GetLoopTouches
+    (const SmTArray<SmLoop*> &crLoops,       // in : target loops
+     SmFaceProps            *pOptFaceProps, // i/o: optional Stage 2 face properties; computed if needed
+     SmTArray<SmTouchData>   &rTouches)      // out: ordered arrival/departure pairs, retaining seam endpoints
+    const;
+
+  // Derive periodic crossings while retaining the complete encounter list.
+  SmStatus GetLoopCrossings(const SmTArray<SmLoop*> & crLoops,              // in : target loops
+                            SmFaceProps             * pOptFaceProps,        // i/o: optional Stage 2 face properties; computed if needed
+                            SmTArray<ULONG>         * pCrossingCounts,      // out: periodic crossing count for each target loop
+                            SmTArray<SmTouchData>   * pOptRawTouchDirList,  // out: optional complete arrival/departure pairs; seam endpoints remain distinct
+                            SmTArray<SmTouchData>   * pOptDoneTouchDirList) // out: optional processed pairs used to compute the crossing counts
                            const ;
 
-   // Find the Interval containing parameter
+  // Find the Interval containing parameter
   SmStatus FindInterval(double               dParameter,           // in : target parameter value                                                                 
                         double               dLastParameter,       // in : previous call Param to prevent double classifications, SM_BIG_DOUBLE to ignore         
                         SmZoneTol3d          sObjZoneTol3d,        // in : SmTol::GetZoneTol3d(pAssocObj), always 3d Tol even when SrcCurve->Dim == 2             

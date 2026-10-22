@@ -6106,9 +6106,11 @@ PURPOSE: Try to fix a problem with a gap in the intersection loop
 NOTES:
 ***********************************************************************/
 SmStatus SmTopologyIntersector::CloseIntersectionLoop
-  (SmVertex  * pBrepVertex,          // in : target vertex from m_pBrep
-   SmBoolean & rbMadeNewTopology)    // out: TRUE =
-                                     //      FALSE=
+  (SmVertex  * pBrepVertex,                   // in : target vertex from m_pBrep
+   SmBoolean & rbMadeNewTopology,             // out: TRUE =
+                                              //      FALSE=
+   SmTArray< SmVertex* > & rDeletedVertices,  // out: vertices deleted by squeezes (either Brep)
+   SmTArray< SmEdge*   > & rDeletedEdges)     // out: edges deleted by squeezes (either Brep)
 {
   // check input
   NER(pBrepVertex);
@@ -6119,9 +6121,13 @@ SmStatus SmTopologyIntersector::CloseIntersectionLoop
 
   // init output
   rbMadeNewTopology = FALSE;
+  rDeletedVertices.ReSet();
+  rDeletedEdges.ReSet();
 
   // locals
   SM_PTR_ARRAY(sOCommonEdges,SmEdge,32);
+  SmTArray<SmVertex*> sDelVerts;
+  SmTArray<SmEdge*>   sDelEdges;
   ULONG ii, jj;
 
     { // scope to hold all edges connected to target vertex
@@ -6252,7 +6258,11 @@ SmBoolean bDebugMe = FALSE;
                   m_pOther->GetEdges(sOldEdges);
 
                   // intersect, insert, and relate target Edge with m_pOther brep
-                  SER(IIREdgeBrep(pBE,m_pOther,FALSE,TRUE));
+                  sDelVerts.ReSet();
+                  sDelEdges.ReSet();
+                  SER(IIREdgeBrep(pBE,m_pOther,FALSE,TRUE,&sDelEdges,&sDelVerts));
+                  rDeletedVertices.Append(sDelVerts);
+                  rDeletedEdges   .Append(sDelEdges);
 
                   // remember if  new edges were added to m_pOther
                   m_pOther->GetEdges(sNewEdges);
@@ -6334,7 +6344,11 @@ SmBoolean bDebugMe = FALSE;
                   m_pBrep->GetEdges(sOldEdges);
 
                   // intersect, insert, and relate target edge into this  m_pBrep
-                  SER(IIREdgeBrep(pOE,m_pBrep,TRUE,TRUE));
+                  sDelVerts.ReSet();
+                  sDelEdges.ReSet();
+                  SER(IIREdgeBrep(pOE,m_pBrep,TRUE,TRUE,&sDelEdges,&sDelVerts));
+                  rDeletedVertices.Append(sDelVerts);
+                  rDeletedEdges   .Append(sDelEdges);
                   m_pBrep->GetEdges(sNewEdges);
 
                   // remember if new topology was added to m_pBrep

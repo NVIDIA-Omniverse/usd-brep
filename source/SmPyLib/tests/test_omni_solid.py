@@ -6,9 +6,11 @@
 
 import copy
 import gc
+import hashlib
 import math
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -24,7 +26,7 @@ if sys.platform == "win32":
         if p and os.path.isdir(p):
             os.add_dll_directory(p)
 
-import _omni_solid as sm
+import usd_brep as sm
 
 
 def _inject_xform_ops(usda_text, prim_name, inject_lines):
@@ -203,7 +205,7 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
 
 
 def snapshot(curve):
@@ -406,6 +408,66 @@ class TestSkinPrimitiveGeometry(unittest.TestCase):
 
 
 # -----------------------------------------------------------------------
+#  create_skin_from_faces must reject degrees NLib cannot evaluate
+# -----------------------------------------------------------------------
+class TestSkinFromFacesDegree(unittest.TestCase):
+    # Runs in a subprocess: on the unfixed revision, degree 18 aborts the process.
+    _SKIN_FROM_FACES_SCRIPT = """
+import os
+import sys
+
+dll_directories = []
+if sys.platform == "win32":
+    for path in os.environ.get("PATH", "").split(";"):
+        if path and os.path.isdir(path):
+            dll_directories.append(os.add_dll_directory(path))
+
+import usd_brep as sm
+
+# The loft degree is lowered to len(faces) - 1, so 20 faces leave room for degree 19.
+faces = [sm.create_box((0, 0, float(z)), 2, 3, 0.5).faces()[0] for z in range(20)]
+try:
+    new_faces, brep = sm.create_skin_from_faces(faces, degree=int(sys.argv[1]))
+except RuntimeError as error:
+    print("RuntimeError: %s" % error)
+else:
+    for face in new_faces:
+        surface = face.surface()
+        (u0, v0), (u1, v1) = surface.uv_domain()
+        surface.derivatives(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+    print("lofted %d faces" % len(new_faces))
+"""
+
+    def _skin_from_faces_in_child(self, degree):
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", self._SKIN_FROM_FACES_SCRIPT, str(degree)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("create_skin_from_faces timed out at degree %d" % degree)
+        output = "child output:\n%s\n%s" % (completed.stdout, completed.stderr)
+        self.assertEqual(completed.returncode, 0, msg=output)
+        return completed.stdout, output
+
+    def test_accepts_max_supported_degree(self):
+        # Degree 17 (NL_MAXDEG) is the highest the NLib surface evaluators support.
+        stdout, output = self._skin_from_faces_in_child(17)
+        self.assertIn("lofted 4 faces", stdout, output)
+
+    def test_rejects_degree_outside_supported_range_without_crash(self):
+        # NLib sizes its surface basis-function stack arrays for degree 17, so a degree-18 loft
+        # overflowed the stack. Degree 0 is not a loft.
+        for degree in (18, 0):
+            with self.subTest(degree=degree):
+                stdout, output = self._skin_from_faces_in_child(degree)
+                self.assertIn("RuntimeError:", stdout, output)
+                self.assertIn("SmApiCreateSkinFromFaces failed: SM_ERR_INVALID_INPUT", stdout, output)
+
+
+# -----------------------------------------------------------------------
 #  create_offset_profile must not invalidate a source Face's borrowed edges
 # -----------------------------------------------------------------------
 class TestOffsetProfileInputOwnership(unittest.TestCase):
@@ -421,7 +483,7 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
 
 case = sys.argv[1]
 source = sm.create_planar_faces(sm.create_rectangle((0, 0, 0), 10.0, 10.0))
@@ -825,9 +887,33 @@ class TestTessellate(unittest.TestCase):
                 numpy_arrays[key], np.asarray(values, dtype=numpy_arrays[key].dtype)
             )
 
+    def test_faces_with_many_holes_connect_loops_as_before(self):
+        # Faces with 16 or more loops connect them through a grid of edge points. The meshes must
+        # match the ones from before the grid: these hashes were recorded with it switched off.
+        # The array's equal distances make the grid fall back to the full search for some holes;
+        # the strips' grids are one cell tall and one cell wide.
+        def rect(x0, y0, w, h):
+            p = [(x0, y0, 0.0), (x0 + w, y0, 0.0), (x0 + w, y0 + h, 0.0), (x0, y0 + h, 0.0)]
+            return [sm.create_line_segment(p[i], p[(i + 1) % 4]) for i in range(4)]
+
+        array = rect(0, 0, 60, 40) + [c for i in range(15) for c in rect(10 * (i % 5) + 8, 10 * (i // 5) + 8, 4, 4)]
+        strip_x = rect(0, 0, 16000, 20) + [c for i in range(15) for c in rect(1000 * i + 750, 8, 500, 4)]
+        strip_y = rect(0, 0, 20, 16000) + [c for i in range(15) for c in rect(8, 1000 * i + 750, 4, 500)]
+        for name, curves, expected in (("array", array, "e19461d9817f709b"),
+                                       ("strip_x", strip_x, "3db801433aebc314"),
+                                       ("strip_y", strip_y, "aeb3b07745010cad")):
+            with self.subTest(name):
+                mesh = sm.tessellate(sm.create_planar_faces(curves)).to_mesh_arrays()
+                stream, tris, k = mesh["faces"], [], 0
+                while k < len(stream):
+                    tris.append(tuple(sorted(tuple(round(c, 6) for c in mesh["points"][i])
+                                             for i in stream[k + 1:k + 1 + stream[k]])))
+                    k += stream[k] + 1
+                self.assertEqual(hashlib.sha256(repr(sorted(tris)).encode()).hexdigest()[:16], expected)
+
 
 class TestNativeBrepFileIo(unittest.TestCase):
-    _PART_READER_SCRIPT = """
+    _CHILD_PRELUDE = """
 import os
 import sys
 
@@ -837,8 +923,10 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
+"""
 
+    _PART_READER_SCRIPT = _CHILD_PRELUDE + """
 selector = {"none": None, "true": True, "false": False}[sys.argv[2]]
 reader = sm.Brep.read_from_file if sys.argv[3] == "class" else sm.read_brep_from_file
 try:
@@ -847,6 +935,42 @@ except RuntimeError as error:
     print(error)
 else:
     raise AssertionError("single-Brep reader unexpectedly accepted a part container")
+"""
+
+    _PART_GEOMETRY_SCRIPT = _CHILD_PRELUDE + """
+try:
+    curves, surfaces, _, _ = sm.read_part_from_file(sys.argv[1], ascii=sys.argv[2] == "ascii")
+except RuntimeError as error:
+    print("RuntimeError: %s" % error)
+else:
+    # Evaluate so geometry the reader should have rejected fails here. A curve is extruded
+    # first: the surface built from an over-degree curve is what overflows.
+    surface = surfaces[0] if surfaces else sm.create_extrude_surface(curves[0], (0.0, 0.0, 1.0))
+    (u0, v0), (u1, v1) = surface.uv_domain()
+    u, v = u0 + 0.3 * (u1 - u0), v0 + 0.5 * (v1 - v0)
+    surface.derivatives(u, v)
+    print("point %.12f %.12f %.12f" % surface.evaluate(u, v))
+"""
+
+    _PART_READ_MEMORY_SCRIPT = _CHILD_PRELUDE + """
+def mapped_kib():
+    # Linux only: mapped memory, which grows by the size of every NURB a failed read leaks.
+    with open("/proc/self/status") as file:
+        for line in file:
+            if line.startswith("VmSize:"):
+                return int(line.split()[1])
+
+
+before = mapped_kib()
+for _ in range(10):
+    try:
+        sm.read_part_from_file(sys.argv[1], ascii=sys.argv[2] == "ascii")
+    except RuntimeError as error:
+        result = "RuntimeError: %s" % error
+    else:
+        result = "read"
+print(result)
+print("mapped MiB growth %d" % ((mapped_kib() - before) // 1024))
 """
 
     def assert_part_rejected_without_crash(
@@ -924,6 +1048,236 @@ else:
             binary_path, (42_000_000, 10_000_000, 0, 0, 0)
         )
         return ascii_path, binary_path
+
+    @staticmethod
+    def write_part_file(path, ascii, binary_record, ascii_record, curve_count, surface_count, complete=True):
+        # A part file holding one stand-alone curve or surface, in database version 42. An incomplete
+        # file ends right after the record, as a truncated file would.
+        if not ascii:
+            # Longs are stored in 8 bytes, degrees and flags as 2-byte shorts.
+            data = struct.pack("<4q", 42_000_000 + curve_count, 10_000_000 + surface_count, 0, 0)
+            data += binary_record
+            if complete:
+                data += struct.pack("<2q", 0, 0)  # record and total attribute counts
+            with open(path, "wb") as file:
+                file.write(data)
+            return
+        lines = [
+            "//[Output Summary]",
+            "//   (1) %d Curves" % (42_000_000 + curve_count),
+            "//   (2) %d Surfaces" % (10_000_000 + surface_count),
+            "//   (3) 0 Boolean Tree Nodes",
+            "//   (4) 0 Breps",
+            "",
+        ]
+        lines += ascii_record
+        if complete:
+            lines += ["            0 ", "", "// Boolean Trees", "", "", "#" * 76, "0 // Total number of attributes"]
+        with open(path, "w", encoding="ascii") as file:
+            file.write("\n".join(lines + [""]))
+
+    @staticmethod
+    def clamped_knots(count, degree):
+        # A clamped knot vector for count control points: each end repeated degree + 1 times, with
+        # count - degree - 1 evenly spaced interior knots. Degree 0 with 2 points gives 0, 0.5, 1.
+        interior = count - degree - 1
+        if degree < 0 or interior < 0:
+            return [0.0] * count + [1.0] * count  # no valid vector; the reader rejects it first
+        return [0.0] * (degree + 1) + [(i + 1.0) / (interior + 1) for i in range(interior)] + [1.0] * (degree + 1)
+
+    @staticmethod
+    def write_surface_part_file(
+        path, u_degree, v_degree, ascii, counts=None, rational=0, control_points=None, knots=None
+    ):
+        # One surface: the flat 2 x 3 patch x = 2u, y = 3v, with each degree raised from 1 by evenly
+        # spaced control points (an exact elevation). counts sets other control point counts; the
+        # default knots are then only valid for counts of degree + 1. Passing control_points or knots
+        # writes that body instead and ends the file after it. The file stores counts as count - 1.
+        default_counts = counts is None
+        u_count, v_count = counts or (max(u_degree, 1) + 1, max(v_degree, 1) + 1)
+        complete = control_points is None and knots is None
+        if control_points is None:
+            control_points = [
+                (2.0 * i / max(u_count - 1, 1), 3.0 * j / max(v_count - 1, 1), 0.0)
+                for i in range(u_count)
+                for j in range(v_count)
+            ]
+        if knots is None and default_counts:
+            # Consistent with the degrees, so a degree-0 file differs from a valid one only in its degree.
+            knots = TestNativeBrepFileIo.clamped_knots(u_count, u_degree) + TestNativeBrepFileIo.clamped_knots(
+                v_count, v_degree)
+        elif knots is None:
+            knots = [0.0] * u_count + [1.0] * u_count + [0.0] * v_count + [1.0] * v_count
+        if rational == 1:
+            control_points = [cv + (1.0,) for cv in control_points]
+        coordinates = [c for cv in control_points for c in cv]
+        binary_record = struct.pack("<3q3h2q", 15002, u_count - 1, v_count - 1, u_degree, v_degree, rational, 0, 0)
+        binary_record += struct.pack("<%dd" % len(coordinates), *coordinates)
+        binary_record += struct.pack("<%dd" % len(knots), *knots)
+        ascii_record = [
+            "[Surface #0]",
+            "Object Type 15002",
+            "%d %d" % (u_count - 1, v_count - 1),
+            "%d %d" % (u_degree, v_degree),
+            "%d" % rational,
+            "0 BSplineSurface Knot Type Flag",
+            "0 BSplineSurfaceForm Flag",
+        ]
+        ascii_record += [" ".join("%.17g" % c for c in cv) for cv in control_points]
+        ascii_record += ["%.17g" % knot for knot in knots]
+        TestNativeBrepFileIo.write_part_file(path, ascii, binary_record, ascii_record, 0, 1, complete)
+
+    @staticmethod
+    def write_curve_part_file(path, degree, ascii, count=None, control_points=None, knots=None, rational=0):
+        # One 3D curve: the segment from (0, 0, 0) to (2, 0, 0) with its degree raised from 1 by
+        # evenly spaced control points (an exact elevation). count, control_points and knots work as
+        # in write_surface_part_file. Any nonzero rational flag writes a weight of 1 with each point.
+        default_count = count is None
+        if default_count:
+            count = max(degree, 1) + 1
+        complete = control_points is None and knots is None
+        if control_points is None:
+            control_points = [(2.0 * i / max(count - 1, 1), 0.0, 0.0) for i in range(count)]
+        if knots is None:
+            if default_count:
+                knots = TestNativeBrepFileIo.clamped_knots(count, degree)
+            else:
+                knots = [0.0] * count + [1.0] * count
+        if rational:
+            control_points = [cv + (1.0,) for cv in control_points]
+        coordinates = [c for cv in control_points for c in cv]
+        binary_record = struct.pack("<3q3h2q", 14033, 3, count - 1, degree, rational, 3, 0, 0)
+        binary_record += struct.pack("<%dd" % len(coordinates), *coordinates)
+        binary_record += struct.pack("<%dd" % len(knots), *knots)
+        ascii_record = [
+            "[Curve #0]",
+            "Object Type 14033",
+            "Curve Dim 3",
+            "%d" % (count - 1),
+            "%d" % degree,
+            "%d" % rational,
+            "3",
+            "0 Knot Type Enum",
+            "0 BSplineCurveForm Enum",
+        ]
+        ascii_record += [" ".join("%.17g" % c for c in cv) for cv in control_points]
+        ascii_record += ["%.17g" % knot for knot in knots]
+        TestNativeBrepFileIo.write_part_file(path, ascii, binary_record, ascii_record, 1, 0, complete)
+
+    def read_part_geometry_in_child(self, path, ascii, script=None):
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", script or self._PART_GEOMETRY_SCRIPT, path, "ascii" if ascii else "binary"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("part reader timed out")
+        output = "child output:\n%s\n%s" % (completed.stdout, completed.stderr)
+        self.assertEqual(completed.returncode, 0, msg=output)
+        return completed.stdout, output
+
+    def assert_child_point(self, stdout, output, expected):
+        match = re.search(r"point (\S+) (\S+) (\S+)", stdout)
+        self.assertIsNotNone(match, output)
+        for actual, expected_value in zip(map(float, match.groups()), expected):
+            self.assertAlmostEqual(actual, expected_value, places=9)
+
+    def assert_child_rejected(self, stdout, output):
+        self.assertIn("RuntimeError: SmApiReadPartFromFile failed", stdout, output)
+        self.assertIn("SM_ERR_INVALID_INPUT", stdout, output)
+
+    def test_read_part_accepts_geometry_at_max_supported_degree(self):
+        # Degree 17 is the highest the NLib surface evaluators support, in U and V.
+        with tempfile.TemporaryDirectory(prefix="smpy_native_part_") as tmpdir:
+            for ascii in (True, False):
+                with self.subTest(ascii=ascii, geometry="surface"):
+                    path = os.path.join(tmpdir, "surface17_%s.smp" % ascii)
+                    self.write_surface_part_file(path, 17, 17, ascii)
+                    stdout, output = self.read_part_geometry_in_child(path, ascii)
+                    self.assert_child_point(stdout, output, (0.6, 1.5, 0.0))
+
+                with self.subTest(ascii=ascii, geometry="curve"):
+                    path = os.path.join(tmpdir, "curve17_%s.smp" % ascii)
+                    self.write_curve_part_file(path, 17, ascii)
+                    stdout, output = self.read_part_geometry_in_child(path, ascii)
+                    # The extrusion runs along u and the curve along v.
+                    self.assert_child_point(stdout, output, (1.0, 0.0, 0.3))
+
+    def test_read_part_rejects_degree_outside_supported_range_without_crash(self):
+        # NLib sizes its surface basis-function stack arrays for degree 17, so a higher degree read
+        # from a file must be rejected rather than overflow the stack when evaluated. A curve above 17
+        # overflows the same way once it is extruded. Degree 0 cannot be differentiated.
+        surface_degrees = ((18, 1), (1, 18), (0, 1), (1, 0), (-1, 1))
+        with tempfile.TemporaryDirectory(prefix="smpy_native_part_") as tmpdir:
+            for ascii in (True, False):
+                for u_degree, v_degree in surface_degrees:
+                    with self.subTest(ascii=ascii, surface=(u_degree, v_degree)):
+                        path = os.path.join(tmpdir, "surface%d_%d_%s.smp" % (u_degree, v_degree, ascii))
+                        self.write_surface_part_file(path, u_degree, v_degree, ascii)
+                        self.assert_child_rejected(*self.read_part_geometry_in_child(path, ascii))
+
+                for degree in (18, 0):
+                    with self.subTest(ascii=ascii, curve=degree):
+                        path = os.path.join(tmpdir, "curve%d_%s.smp" % (degree, ascii))
+                        self.write_curve_part_file(path, degree, ascii)
+                        self.assert_child_rejected(*self.read_part_geometry_in_child(path, ascii))
+
+    def test_read_part_rejects_bad_nurbs_control_point_counts_without_crash(self):
+        # The control point counts and the rational flag come straight from the file. A flag other
+        # than 0 or 1 used to be read as rational. Before the counts were checked, a count
+        # of 0 crashed or hung the reader, -4 threw std::bad_alloc, 2^31 x 2^31 overflowed the
+        # allocation size and hung, and a curve of 2^61 points crashed; a count below degree + 1
+        # read, and every evaluation of it then failed. A file ending within the knots was read on
+        # past its end. Degree + 1 control points, the fewest allowed, read in the degree tests.
+        surface, curve = self.write_surface_part_file, self.write_curve_part_file
+        cases = {
+            "surface_u_count_0": lambda path, ascii: surface(path, 1, 1, ascii, counts=(0, 2), control_points=[]),
+            "surface_u_count_-4": lambda path, ascii: surface(path, 1, 1, ascii, counts=(-4, 2), control_points=[]),
+            "surface_u_count_below_order": lambda path, ascii: surface(path, 2, 1, ascii, counts=(2, 3)),
+            "surface_v_count_below_order": lambda path, ascii: surface(path, 1, 2, ascii, counts=(3, 2)),
+            "surface_counts_2^31": lambda path, ascii: surface(
+                path, 1, 1, ascii, counts=(2**31 + 1, 2**31 + 1), control_points=[], knots=[]),
+            "curve_count_-4": lambda path, ascii: curve(path, 1, ascii, count=-4, control_points=[], knots=[]),
+            "curve_count_below_order": lambda path, ascii: curve(path, 2, ascii, count=2),
+            "curve_count_2^61": lambda path, ascii: curve(path, 1, ascii, count=2**61 + 1, control_points=[], knots=[]),
+            "surface_ends_in_knots": lambda path, ascii: surface(
+                path, 1, 1, ascii, knots=[0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0]),
+            "curve_ends_in_knots": lambda path, ascii: curve(path, 1, ascii, knots=[0.0, 0.0, 1.0]),
+            "surface_rational_flag_2": lambda path, ascii: surface(path, 1, 1, ascii, rational=2),
+            "curve_rational_flag_2": lambda path, ascii: curve(path, 1, ascii, rational=2),
+        }
+        with tempfile.TemporaryDirectory(prefix="smpy_native_part_") as tmpdir:
+            for name, write in cases.items():
+                for ascii in (True, False):
+                    with self.subTest(case=name, ascii=ascii):
+                        path = os.path.join(tmpdir, "%s_%s.smp" % (name, ascii))
+                        write(path, ascii)
+                        self.assert_child_rejected(*self.read_part_geometry_in_child(path, ascii))
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "measures mapped memory in /proc/self/status")
+    def test_read_part_frees_nurbs_when_a_read_fails(self):
+        # Each file claims a 1101 x 1101 surface, a NURB of about 37 MiB, then fails: its rational
+        # flag is 2, or the file ends after the first control point. The reader used to leak the NURB
+        # on a bad flag, 370 MiB over the child's 10 reads. It never noticed the file ending: it hung
+        # on ASCII and read on past the end of a binary file.
+        cases = {
+            "rational_flag_2": dict(rational=2, control_points=[], knots=[]),
+            "ends_in_control_points": dict(control_points=[(0.0, 0.0, 0.0)], knots=[]),
+        }
+        with tempfile.TemporaryDirectory(prefix="smpy_native_part_") as tmpdir:
+            for name, body in cases.items():
+                for ascii in (True, False):
+                    with self.subTest(case=name, ascii=ascii):
+                        path = os.path.join(tmpdir, "%s_%s.smp" % (name, ascii))
+                        self.write_surface_part_file(path, 1, 1, ascii, counts=(1101, 1101), **body)
+                        stdout, output = self.read_part_geometry_in_child(
+                            path, ascii, self._PART_READ_MEMORY_SCRIPT)
+                        self.assert_child_rejected(stdout, output)
+                        growth = re.search(r"mapped MiB growth (-?\d+)", stdout)
+                        self.assertIsNotNone(growth, output)
+                        self.assertLess(int(growth.group(1)), 37, output)
 
     def test_write_and_read_brep_ascii(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
@@ -1090,14 +1444,7 @@ else:
 
     def test_read_part_file(self):
         repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-        path = os.path.join(
-            repo,
-            "TestFiles",
-            "bz_TestFiles",
-            "Regressions2009",
-            "10.Wilson",
-            "SmallBox.smp",
-        )
+        path = os.path.join(repo, "TestFiles", "pt_TestFiles", "loft-smlib.smp")
         if not os.path.isfile(path):
             self.skipTest("native SMLib part fixture is not present")
 
@@ -1109,7 +1456,7 @@ else:
         self.assertEqual(len(breps), 1)
         self.assertIsInstance(breps[0], sm.Brep)
         self.assertGreater(breps[0].face_count(), 0)
-        self.assertGreater(breps[0].volume(), 0.0)
+        self.assertGreater(breps[0].area(), 0.0)
 
     def test_brep_static_read_from_file(self):
         sphere = sm.create_sphere((0, 0, 0), 5)
@@ -1958,6 +2305,21 @@ class TestCurves(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "SM_ERR_INVALID_INPUT"):
             sm.convert_to_lines_and_arcs(sm.create_curve([(1, 1, 1)] * 4))
 
+    @staticmethod
+    def _lollipop_profile():
+        # Open cubic ending where a closed loop starts and ends: an open chain.
+        b = (4, 0, 0)
+        stem = sm.create_curve([(0, 0, 0), (1, 1, 0), (3, 1, 0), b])
+        loop = sm.create_curve_interp_points([b, (5, 1, 0), (4, 2, 0), (3, 1, 0), b])
+        return stem, loop
+
+    def test_order_curves_rejects_open_chain_ending_in_closed_curve(self):
+        # The closed curve's own start must not count as closing the chain.
+        stem, loop = self._lollipop_profile()
+        for curves in ([stem, loop], [loop, stem]):
+            with self.assertRaisesRegex(RuntimeError, "SM_ERR"):
+                sm.order_curves(curves)
+
 
 # -----------------------------------------------------------------------
 #  Surfaces
@@ -2126,6 +2488,87 @@ class TestBooleans(unittest.TestCase):
         a, b = self._two_boxes()
         r = sm.boolean(a, b, operation=sm.BooleanOp.UNION)
         self.assertIsInstance(r, sm.Brep)
+
+    def test_booleans_with_mirrored_copy_sharing_trimmed_coplanar_faces(self):
+        # Mirroring makes the copy NURBS; its planar faces must still match the
+        # original's planes (the union used to return the first operand).
+        def part():
+            return sm.boolean_union(sm.create_box((0, -5, 0), 30, 10, 6), sm.create_cylinder((0, 0, 0), 8, 6))
+
+        # Default accuracy (1e-3) is too coarse for _assert_volume.
+        part_volume = part().volume(relative_accuracy=1.0e-6)
+        cylinder_volume = math.pi * 8 * 8 * 6
+        for operation, expected_volume, expected_x in (
+            (sm.boolean_union, 2 * part_volume - cylinder_volume, (-30, 30)),
+            (sm.boolean_intersection, cylinder_volume, (-8, 8)),
+            (sm.boolean_difference, part_volume - cylinder_volume, (math.sqrt(8 * 8 - 5 * 5), 30)),
+        ):
+            with self.subTest(operation=operation.__name__):
+                result = operation(part(), sm.scale(part(), (-1, 1, 1)))
+                self.assertTrue(result.is_manifold_solid())
+                self._assert_volume(result, expected_volume)
+                lo, hi = result.bounding_box(tight=True)
+                self.assertAlmostEqual(lo[0], expected_x[0], places=4)
+                self.assertAlmostEqual(hi[0], expected_x[1], places=4)
+
+    def test_booleans_of_three_crossing_equal_radius_cylinders(self):
+        # The third cylinder cuts faces the first boolean already trimmed (an arm used to go
+        # missing); a z axis 1e-6 off puts those cuts just outside the trimmed faces' corners.
+        def cylinder(axis, x_offset=0.0):
+            c = sm.create_cylinder((x_offset, 0, -2), 1, 4)
+            if axis == "x":
+                sm.rotate(c, (0, 0, 0), (0, 1, 0), 90.0)
+            elif axis == "y":
+                sm.rotate(c, (0, 0, 0), (1, 0, 0), 90.0)
+            return c
+
+        tricylinder_volume = 8 * (2 - math.sqrt(2))
+        for order in ("xyz", "xzy", "yxz", "yzx", "zxy", "zyx"):
+            for z_offset in (0.0, 1.0e-6):
+                with self.subTest(order=order, z_offset=z_offset):
+                    a, b, c = (cylinder(axis, z_offset if axis == "z" else 0.0) for axis in order)
+                    union = sm.boolean_union(sm.boolean_union(a, b), c)
+                    self.assertTrue(union.is_manifold_solid())
+                    self._assert_volume(union, 12 * math.pi - 16 + tricylinder_volume)
+            with self.subTest(order=order, operation="drill"):
+                cube = sm.create_box((-1.5, -1.5, -1.5), 3, 3, 3)
+                for axis in order:
+                    cube = sm.boolean_difference(cube, cylinder(axis))
+                self.assertTrue(cube.is_manifold_solid())
+                self._assert_volume(cube, 27 - (9 * math.pi - 16 + tricylinder_volume))
+
+    def test_intersection_deleting_sphere_cut_tangent_to_a_face(self):
+        # Each part has a sphere cut tangent to a box face, which gives the spherical face a
+        # one-vertex loop. Deleting that face used to leave a disconnected wire in the main shell,
+        # and the boolean later freed that shell while faces still used it.
+        def part_with_dimple():
+            p = sm.create_box((0, 0, 0), 4.5, 3.5, 2.5)
+            p = sm.boolean_difference(p, sm.create_box((3.5, 0, 0.75), 1, 3, 2.5))
+            p = sm.boolean_difference(p, sm.create_box((3.25, 1, 1), 0.5, 2, 1))
+            boss = sm.rotate(sm.create_cylinder((0, 0, -0.75), 1.25, 1.5), (0, 0, 0), (1, 0, 0), 90.0)
+            p = sm.boolean_union(p, sm.translate(boss, (3.5, 0.5, 0.5)))
+            return sm.boolean_difference(p, sm.create_sphere((0.5, 2.5, 1.5), 1))
+
+        def part_with_pocket():
+            p = sm.create_box((0, 0, 0), 4, 2.5, 3)
+            p = sm.boolean_difference(p, sm.create_box((-0.25, 0.25, 1), 2.5, 2.5, 1))
+            p = sm.boolean_difference(p, sm.create_sphere((1.5, 2, 2.5), 0.5))
+            return sm.boolean_union(p, sm.create_cylinder((0.5, 2, -0.25), 1.25, 1.5))
+
+        cases = (
+            (part_with_dimple, lambda: sm.create_cylinder((2, 3, -1), 1.25, 2), (0.75, 1.75, 0, 3.25, 3.5, 1)),
+            (part_with_pocket, lambda: sm.create_sphere((0.5, 1.5, 2.5), 0.75), (0, 0.75, 2, 1.25, 2.25, 3)),
+        )
+        for part, tool, expected_bounds in cases:
+            with self.subTest(part=part.__name__):
+                part_volume = part().volume(relative_accuracy=1.0e-6)
+                difference_volume = sm.boolean_difference(part(), tool()).volume(relative_accuracy=1.0e-6)
+                intersection = sm.boolean_intersection(part(), tool())
+                self.assertTrue(intersection.is_manifold_solid())
+                self._assert_volume(intersection, part_volume - difference_volume)
+                lo, hi = intersection.bounding_box(tight=True)
+                for actual, expected in zip(lo + hi, expected_bounds, strict=True):
+                    self.assertAlmostEqual(actual, expected, places=6)
 
     def test_merge_breps_empty_raises_invalid_input(self):
         self._assert_merge_invalid_input([])
@@ -2529,6 +2972,62 @@ class TestSweeps(unittest.TestCase):
         self.assertIsInstance(r, sm.Brep)
         self.assertGreater(len(r.faces()), 0)
 
+    # Runs in a subprocess: on the unfixed revision the duplicate edge
+    # segfaults the process (use after free in FixChainCurvesList).
+    _DRAFT_SWEEP_DUPLICATE_EDGE_SCRIPT = r"""
+import os
+import sys
+
+if sys.platform == "win32":
+    for path in os.environ.get("PATH", "").split(";"):
+        if path and os.path.isdir(path):
+            os.add_dll_directory(path)
+
+import usd_brep as sm
+
+points = [(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0)]
+def square():
+    return [sm.create_line_segment(points[i], points[(i + 1) % 4]) for i in range(4)]
+
+plain = sm.draft_sweep(square(), 5.0, 5.0)
+curves = square()
+if sys.argv[1] == "reversed":
+    curves.insert(1, sm.create_line_segment(points[1], points[0]))
+else:
+    curves.insert(1, sm.create_line_segment(points[0], points[1]))
+duplicated = sm.draft_sweep(curves, 5.0, 5.0)
+print("faces %d %d" % (len(duplicated.faces()), len(plain.faces())))
+print("volume %.9f %.9f" % (duplicated.volume(), plain.volume()))
+"""
+
+    def _assert_draft_sweep_drops_duplicate_edge(self, case):
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", self._DRAFT_SWEEP_DUPLICATE_EDGE_SCRIPT, case],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("draft_sweep timed out in the %s case" % case)
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg="child output:\n%s\n%s" % (completed.stdout, completed.stderr),
+        )
+        lines = completed.stdout.split("\n")
+        faces = [int(v) for v in lines[0].split()[1:]]
+        volumes = [float(v) for v in lines[1].split()[1:]]
+        self.assertEqual(faces, [6, 6])
+        self.assertAlmostEqual(volumes[0], volumes[1], delta=1.0e-6)
+
+    def test_draft_sweep_drops_duplicate_edge(self):
+        self._assert_draft_sweep_drops_duplicate_edge("same")
+
+    def test_draft_sweep_drops_reversed_duplicate_edge(self):
+        self._assert_draft_sweep_drops_duplicate_edge("reversed")
+
     def test_pipe_sweep(self):
         pts = [(0, 0, 0), (5, 5, 0), (10, 0, 0), (15, 5, 0)]
         path = sm.create_curve(pts)
@@ -2683,6 +3182,15 @@ class TestSweeps(unittest.TestCase):
         r = sm.taper_extrude([circ], 10, 80.0, cap_ends=sm.CapEnds.BOTH)
         self.assertIsInstance(r, sm.Brep)
         self.assertGreater(len(r.faces()), 0)
+
+    def test_taper_extrude_caps_on_open_chain_ending_in_closed_curve(self):
+        # The start cap used to be built from a falsely closed loop, which
+        # crashed on a double delete of an input curve.
+        stem, loop = TestCurves._lollipop_profile()
+        uncapped = sm.taper_extrude([stem, loop], 1.0, 5.0, cap_ends=sm.CapEnds.NONE)
+        for caps in (sm.CapEnds.START, sm.CapEnds.BOTH):
+            r = sm.taper_extrude([stem, loop], 1.0, 5.0, cap_ends=caps)
+            self.assertEqual(len(r.faces()), len(uncapped.faces()))
 
     def test_taper_extrude_rejects_end_caps_kwarg(self):
         circ = sm.create_circle((0, 0, 0), 5)
@@ -3054,6 +3562,70 @@ class TestFillets(unittest.TestCase):
         sm.circular_fillet(box, 1.0)
         self.assertGreater(len(box.faces()), 6)
 
+    _SMALL_FILLET_SCRIPT = TestNativeBrepFileIo._CHILD_PRELUDE + """
+box = sm.create_box((0, 0, 0), 0.001, 0.001, 0.001)
+sm.circular_fillet(box, 0.0001)
+print(box.face_count(), box.is_manifold_solid(), repr(sm.compute_volume(box)))
+"""
+
+    def test_circular_fillet_small_box(self):
+        # This used to hang; a subprocess turns a regression into a timeout.
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", self._SMALL_FILLET_SCRIPT],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("circular_fillet on a 0.001 box timed out")
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg="child output:\n%s\n%s" % (completed.stdout, completed.stderr),
+        )
+        faces, manifold, volume = completed.stdout.split()
+        self.assertEqual((faces, manifold), ("26", "True"))
+        # Cube of side a with every edge and corner rounded to radius r.
+        a, r = 0.001, 0.0001
+        core = a - 2 * r
+        expected = (core**3 + 6 * core * core * r + 3 * core * math.pi * r * r
+                    + 4.0 / 3.0 * math.pi * r**3)
+        self.assertAlmostEqual(float(volume) / expected, 1.0, places=5)
+
+    # Every API that checks the minimum radius, called with radius r on Brep b.
+    _FILLET_CALLS = {
+        "circular_fillet": lambda b, r: sm.circular_fillet(b, r),
+        "chamfer_fillet": lambda b, r: sm.chamfer_fillet(b, r),
+        "fillet_edges": lambda b, r: sm.fillet_edges(b, b.edges(), radius=r),
+        "fillet_edges_per_edge": lambda b, r: sm.fillet_edges_per_edge(
+            b, b.edges(), [r] * 12, [sm.FilletXSect.CIRCULAR] * 12),
+        "variable_radius_fillet": lambda b, r: sm.variable_radius_fillet(
+            b, b.edges(), start_radius=r, end_radius=r),
+        "set_bevel_corners": lambda b, r: sm.set_bevel_corners(
+            b, edges=b.edges(), vertices=b.vertices()[:1], radius=r),
+    }
+
+    def test_fillet_radius_below_minimum_rejected(self):
+        # The minimum is 8x the Brep tolerance (1e-5).
+        for name, call in self._FILLET_CALLS.items():
+            with self.subTest(name):
+                box = sm.create_box((0, 0, 0), 0.01, 0.01, 0.01)
+                with self.assertRaisesRegex(RuntimeError, "SM_ERR_INVALID_INPUT"):
+                    call(box, 7.9e-5)
+                self.assertEqual((box.face_count(), box.edge_count()), (6, 12))
+
+    def test_fillet_radius_at_minimum_is_solid(self):
+        # At 6e-5 and 7e-5, set_bevel_corners and variable_radius_fillet gave a non-manifold
+        # solid of zero volume.
+        for name, call in self._FILLET_CALLS.items():
+            with self.subTest(name):
+                box = sm.create_box((0, 0, 0), 0.01, 0.01, 0.01)
+                call(box, 8e-5)
+                self.assertGreater(box.face_count(), 6)
+                self.assertTrue(box.is_manifold_solid())
+                self.assertGreater(box.volume(), 0.99e-6)
+
     def test_chamfer_fillet(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
         sm.chamfer_fillet(box, 1.0)
@@ -3065,6 +3637,17 @@ class TestFillets(unittest.TestCase):
         sm.fillet_edges(box, edges, radius=1.0, xsect_type=1, continuity=1)
         self.assertGreater(len(box.faces()), 6)
 
+    def test_fillet_edges_rejects_foreign_edges(self):
+        # Edges of another Brep are rejected before either Brep is modified.
+        a = sm.create_box((0, 0, 0), 10, 10, 10)
+        b = sm.create_box((20, 0, 0), 10, 10, 10)
+        with self.assertRaisesRegex(RuntimeError, "SM_ERR_INVALID_INPUT"):
+            sm.fillet_edges(b, a.edges()[:1], radius=1.0)
+        self.assertEqual((a.face_count(), a.edge_count()), (6, 12))
+        self.assertEqual((b.face_count(), b.edge_count()), (6, 12))
+        sm.fillet_edges(a, a.edges()[:1], radius=1.0)
+        self.assertEqual(a.face_count(), 7)
+
     def test_variable_radius_fillet(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
         edges = box.edges()[:1]
@@ -3072,13 +3655,53 @@ class TestFillets(unittest.TestCase):
                                   xsect_type=1, continuity=1)
         self.assertGreater(len(box.faces()), 6)
 
-    def test_remove_fillet(self):
+    def test_remove_fillet_restores_box(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
-        sm.circular_fillet(box, 1.0)
-        faces_filleted = len(box.faces())
-        self.assertGreater(faces_filleted, 6)
+        edge = box.edges()[0]
+        sm.fillet_edges(box, [edge], radius=2.0)
+        self.assertEqual(box.face_count(), 7)
         sm.remove_fillet(box)
-        self.assertIsInstance(box, sm.Brep)
+        self.assertEqual(box.face_count(), 6)
+        self.assertAlmostEqual(box.volume(relative_accuracy=1e-6), 1000.0, delta=1e-3)
+        self.assertTrue(box.is_manifold_solid())
+
+    def test_remove_fillet_leaves_unfilleted_brep_unchanged(self):
+        box = sm.create_box((0, 0, 0), 10, 10, 10)
+        sm.remove_fillet(box)
+        self.assertEqual(box.face_count(), 6)
+        self.assertAlmostEqual(box.volume(relative_accuracy=1e-6), 1000.0, delta=1e-3)
+
+    def test_remove_fillet_restores_rounded_corners(self):
+        # Fillets at rounded corners (GitHub usd-brep #6).
+        def vertical_and_top(box):
+            return [e for e in box.edges() if e.bounding_box()[1][2] - e.bounding_box()[0][2] > 1
+                    or e.bounding_box()[0][2] > 10 - 1e-6]
+        cases = (("every edge", lambda box: sm.circular_fillet(box, 1.0)),
+                 ("vertical and top edges", lambda box: sm.fillet_edges(box, vertical_and_top(box), radius=1.0)))
+        for name, round_edges in cases:
+            with self.subTest(name):
+                box = sm.create_box((0, 0, 0), 10, 10, 10)
+                round_edges(box)
+                self.assertGreater(box.face_count(), 6)
+                sm.remove_fillet(box)
+                self.assertEqual(box.face_count(), 6)
+                self.assertAlmostEqual(box.volume(relative_accuracy=1e-6), 1000.0, delta=1e-3)
+                self.assertTrue(box.is_manifold_solid())
+
+    def test_remove_fillet_keeps_a_face_between_fillets(self):
+        # A boss side between two fillets is not a corner.
+        def boss():
+            return sm.boolean_union(sm.create_box((-10, -10, 0), 20, 20, 4), sm.create_cylinder((0, 0, 4), 3, 5))
+        sharp = boss()
+        part = boss()
+        # The boss's foot and top circle edges.
+        rims = [e for e in part.edges()
+                if e.bounding_box()[0][2] == e.bounding_box()[1][2] in (4, 9) and e.bounding_box()[1][0] < 4]
+        sm.fillet_edges(part, rims, radius=1.0)
+        self.assertGreater(part.face_count(), sharp.face_count())
+        sm.remove_fillet(part)
+        self.assertEqual(part.face_count(), sharp.face_count())
+        self.assertAlmostEqual(part.volume(relative_accuracy=1e-6), sharp.volume(relative_accuracy=1e-6), delta=1e-3)
 
     def test_fillet_edges_per_edge(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
@@ -3195,6 +3818,16 @@ class TestOffsetShell(unittest.TestCase):
                 relative_error = abs(actual_volume - expected_volume) / expected_volume
                 self.assertLessEqual(relative_error, 1.0e-5)
 
+    def test_shell_brep_open_face_tangent_to_fillets(self):
+        # Each open top edge needs a strip closing the wall above the inset fillets.
+        box = sm.create_box((0, 0, 0), 50, 50, 30)
+        box = sm.fillet_edges(box, [e for e in box.edges() if e.bounding_box()[0][2] > 30 - 1e-6], radius=3)
+        result = sm.shell_brep(box, -2.0, faces_to_shell=[sm.find_face(box, (25, 25, 30))])
+        self.assertTrue(result.is_manifold_solid())
+        self.assertEqual(result.face_count(), 22)
+        # Analytic: the filleted box less its inset cavity (r = 1 fillets, plus 44 x 44 x 2 under the opening).
+        self.assertAlmostEqual(result.volume(relative_accuracy=1.0e-8), 15775.1740, delta=0.01)
+
     def test_shell_brep_failure_preserves_source(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
         source_before = self._owner_snapshot(box)
@@ -3215,6 +3848,136 @@ class TestOffsetShell(unittest.TestCase):
 
         self.assertEqual(self._owner_snapshot(box), source_before)
         self.assertEqual(self._owner_snapshot(other), other_before)
+
+    # Shells a box with its top edges filleted and its top face open, after
+    # allocating a seed-dependent amount of memory to move the heap layout.
+    _FILLETED_SHELL_SCRIPT = r"""
+import os
+import random
+import sys
+
+dll_directories = []
+if sys.platform == "win32":
+    for path in os.environ.get("PATH", "").split(";"):
+        if path and os.path.isdir(path):
+            dll_directories.append(os.add_dll_directory(path))
+
+import usd_brep as sm
+
+random.seed(int(sys.argv[1]))
+padding = [bytearray(random.randint(1, 3000)) for _ in range(random.randint(1, 2000))]
+box = sm.create_box((0, 0, 0), 50, 50, 30)
+top_edges = [e for e in box.edges() if e.bounding_box()[0][2] > 30 - 1e-6]
+box = sm.fillet_edges(box, top_edges, radius=3)
+top = sm.find_face(box, (25, 25, 30))
+try:
+    shell = sm.shell_brep(box, -2.0, faces_to_shell=[top])
+    print("result", shell.face_count(), shell.edge_count(), shell.vertex_count(),
+          shell.is_manifold_solid(), "%.6f" % shell.volume(relative_accuracy=1.0e-8))
+except RuntimeError as error:
+    print("result error", error)
+"""
+
+    def test_shell_brep_result_does_not_depend_on_heap_layout(self):
+        results = set()
+        for seed in range(1, 7):
+            completed = subprocess.run(
+                [sys.executable, "-c", self._FILLETED_SHELL_SCRIPT, str(seed)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+            results.update(line for line in completed.stdout.splitlines() if line.startswith("result"))
+        self.assertEqual(len(results), 1, msg=sorted(results))
+        self.assertNotIn("error", next(iter(results)))
+
+    # Runs in a subprocess: on the unfixed revision the final Boolean reads a
+    # vertex deleted while closing an intersection loop and the process crashes.
+    _SHELL_FLAT_CAVITY_SCRIPT = """
+import os
+import sys
+
+dll_directories = []
+if sys.platform == "win32":
+    for path in os.environ.get("PATH", "").split(";"):
+        if path and os.path.isdir(path):
+            dll_directories.append(os.add_dll_directory(path))
+
+import usd_brep as sm
+
+box = sm.create_box((0, 0, 0), 20, 30, 5)
+top = sm.find_face(box, (10, 15, 5))
+try:
+    sm.shell_brep(box, -5.0, faces_to_shell=[top])
+except RuntimeError:
+    pass
+print("source %d %.6f" % (box.face_count(), box.volume()))
+"""
+
+    def test_shell_brep_flat_cavity_does_not_crash(self):
+        # A wall as thick as the box height leaves a cavity of zero depth.
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", self._SHELL_FLAT_CAVITY_SCRIPT],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("shell_brep timed out at flat cavity collapse")
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg="child output:\n%s\n%s" % (completed.stdout, completed.stderr),
+        )
+        self.assertEqual(completed.stdout.split("\n")[0], "source 6 3000.000000")
+
+    # Runs in a subprocess: on the unfixed revision the merge frees a curve
+    # still used by a half-built edge and the process crashes.
+    _SHELL_COLLAPSE_SCRIPT = r"""
+import os
+import sys
+
+if sys.platform == "win32":
+    for path in os.environ.get("PATH", "").split(";"):
+        if path and os.path.isdir(path):
+            os.add_dll_directory(path)
+
+import usd_brep as sm
+
+box = sm.create_box((0, 0, 0), 20, 30, 10)
+top = sm.find_face(box, (10, 15, 10))
+try:
+    sm.shell_brep(box, -10.0, faces_to_shell=[top])
+    print("succeeded")
+except RuntimeError as error:
+    print("raised: %s" % error)
+print("source %d %.6f %d" % (box.face_count(), box.volume(), box.is_manifold_solid()))
+"""
+
+    def test_shell_brep_exact_cavity_collapse_fails_cleanly(self):
+        # A wall as thick as half the box width and the full height leaves a
+        # cavity of zero width and depth.
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", self._SHELL_COLLAPSE_SCRIPT],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("shell_brep timed out at exact cavity collapse")
+
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg="child output:\n%s\n%s" % (completed.stdout, completed.stderr),
+        )
+        lines = completed.stdout.split("\n")
+        self.assertTrue(lines[0].startswith("raised: SmApiShellBrepFull failed: SM_ERR (1001)."), lines[0])
+        self.assertEqual(lines[1], "source 6 6000.000000 1")
 
 
 # -----------------------------------------------------------------------
@@ -3705,7 +4468,7 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
 
 
 def close(actual, expected, tolerance=1.0e-7):
@@ -4114,7 +4877,7 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
 
 def refused(operation):
     try:
@@ -4460,6 +5223,26 @@ class TestQueries(unittest.TestCase):
         r = sm.brep_relationship(a, b)
         self.assertEqual(r["relationship"], "b_contains_a")
 
+    def test_brep_relationship_cones_separate(self):
+        # Side-by-side cones with coplanar caps.
+        a = sm.create_cone((0, 0, 0), 0.07, 0.05, 0.45)
+        b = sm.create_cone((0.165, 0, 0), 0.07, 0.05, 0.45)
+        r = sm.brep_relationship(a, b)
+        self.assertEqual(r["relationship"], "separate")
+        self.assertAlmostEqual(r["distance"], 0.025, delta=1.0e-6)
+
+    def test_brep_relationship_cylinder_box_interpenetrating(self):
+        # Only the box edges that cross the cylinder have points in the overlap.
+        a = sm.create_cylinder((0, 0, -0.225), 0.07, 0.45)
+        b = sm.create_box((0.05, -0.15, -0.125), 0.4, 0.3, 0.25)
+        self.assertEqual(sm.brep_relationship(a, b)["relationship"], "interpenetrating")
+
+    def test_brep_relationship_stacked_cylinders_touching(self):
+        # Shared cap: points on the common boundary are not inside.
+        a = sm.create_cylinder((0, 0, 0), 1, 2)
+        b = sm.create_cylinder((0, 0, 2), 1, 2)
+        self.assertEqual(sm.brep_relationship(a, b)["relationship"], "touching")
+
     def test_brep_relationship_method_matches_free_function(self):
         a = sm.create_box((0, 0, 0), 10, 10, 10)
         b = sm.create_box((3, 3, 3), 2, 2, 2)
@@ -4560,9 +5343,9 @@ class TestQueries(unittest.TestCase):
                 mp = box.mass_properties(density=ok)
                 self.assertAlmostEqual(mp["mass"], ok * mp["volume"], delta=ok)
 
-    def test_mass_properties_invalid_accuracy_raises(self):
-        # Non-finite accuracy is rejected before the clamp (NaN would slip past
-        # both comparisons); finite out-of-range values still clamp and succeed.
+    def test_mass_properties_rejects_only_non_finite_accuracy(self):
+        # Non-finite accuracy is rejected. Finite values outside the recommended
+        # range are passed through to the kernel rather than clamped.
         box = sm.create_box((0, 0, 0), 10, 10, 10)
         for bad in (float("nan"), float("inf"), float("-inf")):
             with self.subTest(relative_accuracy=bad):
@@ -4573,6 +5356,38 @@ class TestQueries(unittest.TestCase):
             with self.subTest(relative_accuracy=ok):
                 mp = box.mass_properties(relative_accuracy=ok)
                 self.assertAlmostEqual(mp["volume"], 1000.0, delta=1.0)
+
+    def test_mass_properties_volume_error_is_controlled(self):
+        # A thin half shell's volume needs its own error control to meet the default accuracy.
+        shell = sm.create_cylindrical_box((0, 0, 0), 3.0, 1.6, 1.7, 0.0, 180.0)
+        exact = 0.5 * math.pi * (1.7**2 - 1.6**2) * 3.0
+        mp = shell.mass_properties()
+        self.assertLess(abs(mp["volume"] - exact) / exact, 1e-2)
+
+    def test_face_properties_reject_non_finite_accuracy(self):
+        box = sm.create_box((0, 0, 0), 10, 10, 10)
+        face = box.faces()[0]
+        for accuracy in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(relative_accuracy=accuracy):
+                with self.assertRaises(RuntimeError) as area_error:
+                    face.area(relative_accuracy=accuracy)
+                self.assertIn("SM_ERR_INVALID_INPUT", str(area_error.exception))
+                with self.assertRaises(RuntimeError) as centroid_error:
+                    face.centroid(relative_accuracy=accuracy)
+                self.assertIn("SM_ERR_INVALID_INPUT", str(centroid_error.exception))
+
+    def test_mass_properties_honours_accuracy_below_1e4(self):
+        # Accuracy used to be raised to 1e-4, which left a sphere's volume 2.2e-4 off.
+        sphere = sm.create_sphere((0, 0, 0), 3.0)
+        exact = 4.0 / 3.0 * math.pi * 27.0
+        mp = sphere.mass_properties(relative_accuracy=1e-7)
+        self.assertLess(abs(mp["volume"] - exact) / exact, 1e-6)
+
+    def test_brep_area_honours_accuracy_below_1e4(self):
+        # Accuracy used to be raised to 1e-4, which left a sphere's area 6.7e-5 off.
+        sphere = sm.create_sphere((0, 0, 0), 3.0)
+        exact = 4.0 * math.pi * 9.0
+        self.assertLess(abs(sphere.area(relative_accuracy=1e-7) - exact) / exact, 1e-6)
 
     def test_brep_area_box(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
@@ -4818,6 +5633,18 @@ class TestTopologyAccessors(unittest.TestCase):
         mn, mx = face.bounding_box()
         self.assertEqual(len(mn), 3)
         self.assertEqual(len(mx), 3)
+
+    def test_face_area_across_trim_curve_knots(self):
+        # A circular trim curve has interior knots. Integrating across them used
+        # to miss the requested accuracy: a disk was 2% off at accuracy 1e-1.
+        radius = 5.0
+        disk = sm.create_planar_circle((0, 0, 0), radius).faces()[0]
+        expected = math.pi * radius**2
+        for accuracy in (1.0e-1, 1.0e-3):
+            with self.subTest(relative_accuracy=accuracy):
+                area = disk.area(relative_accuracy=accuracy)
+                # The kernel integrates to accuracy / 10.
+                self.assertLessEqual(abs(area - expected) / expected, accuracy / 10.0)
 
     def test_face_area(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
@@ -5390,7 +6217,7 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
 
 try:
     sm.usd.import_breps(sys.argv[1], heal=False)
@@ -5410,10 +6237,51 @@ if sys.platform == "win32":
         if path and os.path.isdir(path):
             dll_directories.append(os.add_dll_directory(path))
 
-import _omni_solid as sm
+import usd_brep as sm
 
 sm.usd.tessellate_file(sys.argv[1], sys.argv[2])
 """
+
+    # Raw: the regular expressions' backslashes are invalid escapes in a normal string.
+    _IMPORT_AND_EVALUATE_SCRIPT = r"""
+import os
+import sys
+
+dll_directories = []
+if sys.platform == "win32":
+    for path in os.environ.get("PATH", "").split(";"):
+        if path and os.path.isdir(path):
+            dll_directories.append(os.add_dll_directory(path))
+
+import re
+
+import usd_brep as sm
+
+try:
+    breps = sm.usd.import_breps(sys.argv[1], heal=False)
+except RuntimeError as error:
+    print("RuntimeError: %s" % error)
+else:
+    # Count the UV trims that were imported, by re-exporting before anything can rebuild a
+    # dropped one; export keeps only trims that exist.
+    reexport_path = sys.argv[1] + ".reexport.usda"
+    sm.usd.export_brep(breps[0], reexport_path, shrink_face_domains=False)
+    with open(reexport_path, encoding="utf-8") as file:
+        orders = re.search(r"brep:curveUv:nurb:order = \[([^\]]*)\]", file.read())
+    uv_trims = sum(1 for order in re.findall(r"\d+", orders.group(1)) if order != "0") if orders else 0
+
+    # Evaluate every face, and a surface extruded from every edge curve, so geometry the
+    # importer should have rejected fails here.
+    for brep in breps:
+        surfaces = [face.surface() for face in brep.faces()]
+        surfaces += [sm.create_extrude_surface(edge.curve(), (0.3, 0.0, 1.0)) for edge in brep.edges()]
+        for surface in surfaces:
+            (u0, v0), (u1, v1) = surface.uv_domain()
+            surface.derivatives(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+    print("imported %d faces, volume %.9f, %d UV trims" % (breps[0].face_count(), breps[0].volume(), uv_trims))
+"""
+
+    _USDA_NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 
     def _face_range_attrs(self, path):
         with open(path) as fh:
@@ -5820,6 +6688,294 @@ sm.usd.tessellate_file(sys.argv[1], sys.argv[2])
                     self.assertIs(imported_box.brep, report.breps[0])
                     self._assert_center(report.breps[0], (21, 2, 3))
 
+    def _edit_usda_array(self, usda_text, name, edit, tuple_size=1):
+        pattern = r"(?m)^([ \t]*uniform \S+ %s = \[)([^\]\r\n]*)\]" % re.escape(name)
+        match = re.search(pattern, usda_text)
+        self.assertIsNotNone(match, "export did not author %s" % name)
+        values = [float(value) for value in re.findall(self._USDA_NUMBER, match.group(2))]
+        if tuple_size > 1:
+            values = [tuple(values[i:i + tuple_size]) for i in range(0, len(values), tuple_size)]
+        values = edit(values)
+        if tuple_size > 1:
+            body = ", ".join("(%s)" % ", ".join("%.17g" % c for c in value) for value in values)
+        else:
+            body = ", ".join("%.17g" % value for value in values)
+        return usda_text[:match.start(2)] + body + usda_text[match.end(2):]
+
+    def _linear_control_points(self, start, end, count):
+        return [tuple(s + (e - s) * i / (count - 1) for s, e in zip(start, end)) for i in range(count)]
+
+    def _set_first_bilinear_surface_order(self, usda_text, u_order, v_order):
+        # Degree-elevate face 0, a bilinear patch with U-major 2x2 control points, without
+        # changing its shape: evenly spaced rows between the elevated edges.
+        prefix = "brep:surface:nurb"
+        usda_text = self._edit_usda_array(usda_text, prefix + ":uOrder", lambda v: [u_order] + v[1:])
+        usda_text = self._edit_usda_array(usda_text, prefix + ":vOrder", lambda v: [v_order] + v[1:])
+        usda_text = self._edit_usda_array(usda_text, prefix + ":uVertexCount", lambda v: [u_order] + v[1:])
+        usda_text = self._edit_usda_array(usda_text, prefix + ":vVertexCount", lambda v: [v_order] + v[1:])
+        usda_text = self._edit_usda_array(
+            usda_text, prefix + ":weights", lambda v: [1.0] * (u_order * v_order) + v[4:])
+        usda_text = self._edit_usda_array(
+            usda_text, prefix + ":uKnots", lambda v: [v[0]] * u_order + [v[3]] * u_order + v[4:])
+        usda_text = self._edit_usda_array(
+            usda_text, prefix + ":vKnots", lambda v: [v[0]] * v_order + [v[3]] * v_order + v[4:])
+
+        def elevate(cvs):
+            v0_edge = self._linear_control_points(cvs[0], cvs[2], u_order)
+            v1_edge = self._linear_control_points(cvs[1], cvs[3], u_order)
+            rows = [self._linear_control_points(a, b, v_order) for a, b in zip(v0_edge, v1_edge)]
+            return [cv for row in rows for cv in row] + cvs[4:]
+
+        return self._edit_usda_array(usda_text, prefix + ":controlVertices", elevate, tuple_size=3)
+
+    def _set_first_linear_curve_order(self, usda_text, prefix, order, dimension):
+        # Degree-elevate the first packed curve, a line with 2 control points, without changing its shape.
+        usda_text = self._edit_usda_array(usda_text, prefix + ":order", lambda v: [order] + v[1:])
+        usda_text = self._edit_usda_array(usda_text, prefix + ":vertexCount", lambda v: [order] + v[1:])
+        usda_text = self._edit_usda_array(usda_text, prefix + ":weights", lambda v: [1.0] * order + v[2:])
+        usda_text = self._edit_usda_array(
+            usda_text, prefix + ":knots", lambda v: [v[0]] * order + [v[3]] * order + v[4:])
+        return self._edit_usda_array(
+            usda_text,
+            prefix + ":controlVertices",
+            lambda v: self._linear_control_points(v[0], v[1], order) + v[2:],
+            tuple_size=dimension,
+        )
+
+    def _export_nurbs_box_usda(self, path, with_uv_curves=False):
+        box = sm.create_box((0, 0, 0), 2, 3, 4)
+        sm.turn_to_nurbs(box)
+        if with_uv_curves:
+            # Exports keep only UV trims that already exist; a trim-aware query builds them.
+            for face in box.faces():
+                (u0, v0), (u1, v1) = face.uv_domain()
+                face.classify_uv(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+        sm.usd.export_brep(box, path)
+        with open(path, encoding="utf-8") as file:
+            return file.read()
+
+    def _import_and_evaluate_in_child(self, path):
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", self._IMPORT_AND_EVALUATE_SCRIPT, path],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            self.fail("USD import timed out")
+        output = "child output:\n%s\n%s" % (completed.stdout, completed.stderr)
+        self.assertEqual(completed.returncode, 0, msg=output)
+        return completed.stdout, output
+
+    def _assert_imported_box(self, stdout, output, uv_trims=None):
+        match = re.search(r"imported (\d+) faces, volume (%s), (\d+) UV trims" % self._USDA_NUMBER, stdout)
+        self.assertIsNotNone(match, output)
+        self.assertEqual(int(match.group(1)), 6)
+        self.assertAlmostEqual(float(match.group(2)), 2 * 3 * 4, places=6)
+        if uv_trims is not None:
+            self.assertEqual(int(match.group(3)), uv_trims, output)
+
+    @staticmethod
+    def _add_nurbs_wire_edge(usda_text):
+        # A wire edge from corner (0, 0, 0) to corner (2, 3, 4) across the box's solid region, on a
+        # NURBS line. Nothing in the Python API makes a wire edge, so author it in the exported box.
+        positions = re.search(r"brep:vertexPoint:point:position = \[([^\]]*)\]", usda_text).group(1)
+        corners = [tuple(float(c) for c in point.split(",")) for point in re.findall(r"\(([^)]*)\)", positions)]
+        replacements = (
+            ('"BrepCurve3dNurbAPI:edge3dNurb"', '"BrepCurve3dNurbAPI:edge3dNurb", "BrepCurve3dNurbAPI:wireEdge3dNurb"'),
+            ("uint[] shell:wireEdgeCount = [0, 0]", "uint[] shell:wireEdgeCount = [0, 1]"),
+            ("token[] wireEdge:curveType = []", 'token[] wireEdge:curveType = ["BrepCurve3dNurbAPI"]'),
+            ("double[] wireEdge:range = []", "double[] wireEdge:range = [0, 1]"),
+            ("int2[] wireEdge:vertexIndices = []", "int2[] wireEdge:vertexIndices = [(%d, %d)]"
+             % (corners.index((0.0, 0.0, 0.0)), corners.index((2.0, 3.0, 4.0)))),
+            ("        uniform double[] wireEdge:range", "\n".join([
+                "        uniform point3d[] brep:wireEdge3dNurb:curve3d:nurb:controlVertices = [(0, 0, 0), (2, 3, 4)]",
+                "        uniform double[] brep:wireEdge3dNurb:curve3d:nurb:knots = [0, 0, 1, 1]",
+                "        uniform uint[] brep:wireEdge3dNurb:curve3d:nurb:order = [2]",
+                "        uniform uint[] brep:wireEdge3dNurb:curve3d:nurb:vertexCount = [2]",
+                "        uniform double[] brep:wireEdge3dNurb:curve3d:nurb:weights = [1, 1]",
+                "        uniform double[] wireEdge:range",
+            ])),
+        )
+        for old, new in replacements:
+            if usda_text.count(old) != 1:
+                raise AssertionError("export did not author %s once" % old)
+            usda_text = usda_text.replace(old, new)
+        return usda_text
+
+    def test_import_accepts_nurbs_at_max_supported_order(self):
+        # Order 18 (degree 17) is the highest the NLib surface evaluators support.
+        with tempfile.TemporaryDirectory(prefix="smpy_nurbs_max_order_") as tmpdir:
+            path = os.path.join(tmpdir, "order18.usda")
+            usda = self._export_nurbs_box_usda(path, with_uv_curves=True)
+            usda = self._set_first_bilinear_surface_order(usda, 18, 18)
+            usda = self._set_first_linear_curve_order(usda, "brep:edge3dNurb:curve3d:nurb", 18, 3)
+            usda = self._set_first_linear_curve_order(usda, "brep:curveUv:nurb", 18, 2)
+            with open(path, "w", encoding="utf-8", newline="") as file:
+                file.write(usda)
+
+            stdout, output = self._import_and_evaluate_in_child(path)
+            self._assert_imported_box(stdout, output, uv_trims=24)
+
+    def test_import_rejects_nurbs_order_outside_supported_range_without_crash(self):
+        # NLib sizes its surface basis-function stack arrays for degree 17, so higher orders must
+        # be rejected at import instead of overflowing the stack on the first evaluation. A curve
+        # above order 18 overflows the same way once it is extruded. Order 1 (degree 0) cannot be
+        # differentiated, and order 0 or a huge order must be caught before it sizes anything.
+        def set_u_order(order):
+            return lambda usda: self._edit_usda_array(usda, "brep:surface:nurb:uOrder", lambda v: [order] + v[1:])
+
+        cases = (
+            ("surface_u_order_19", lambda usda: self._set_first_bilinear_surface_order(usda, 19, 2),
+             "NURBS surface U order 19 is outside the supported range 2 to 18."),
+            ("surface_v_order_19", lambda usda: self._set_first_bilinear_surface_order(usda, 2, 19),
+             "NURBS surface V order 19 is outside the supported range 2 to 18."),
+            ("surface_order_0", set_u_order(0),
+             "NURBS surface U order 0 is outside the supported range 2 to 18."),
+            ("surface_order_1", set_u_order(1),
+             "NURBS surface U order 1 is outside the supported range 2 to 18."),
+            ("surface_order_4000000000", set_u_order(4000000000),
+             "NURBS surface U order 4000000000 is outside the supported range 2 to 18."),
+            ("edge_curve_order_19", lambda usda: self._set_first_linear_curve_order(
+                usda, "brep:edge3dNurb:curve3d:nurb", 19, 3),
+             "NURBS curve order 19 is outside the supported range 2 to 18."),
+            ("edge_curve_order_1", lambda usda: self._edit_usda_array(
+                usda, "brep:edge3dNurb:curve3d:nurb:order", lambda v: [1] + v[1:]),
+             "NURBS curve order 1 is outside the supported range 2 to 18."),
+        )
+        with tempfile.TemporaryDirectory(prefix="smpy_nurbs_order_") as tmpdir:
+            source_usda = self._export_nurbs_box_usda(os.path.join(tmpdir, "box.usda"))
+            for name, edit, expected_message in cases:
+                with self.subTest(case=name):
+                    path = os.path.join(tmpdir, "%s.usda" % name)
+                    with open(path, "w", encoding="utf-8", newline="") as file:
+                        file.write(edit(source_usda))
+
+                    stdout, output = self._import_and_evaluate_in_child(path)
+                    self.assertIn("RuntimeError:", stdout, output)
+                    self.assertIn(expected_message, stdout, output)
+
+    def test_import_drops_unusable_uv_trim_curves_without_shifting_later_trims(self):
+        # An unusable UV trim is discarded like other unusable trims, and SMLib rebuilds it from the
+        # 3D edge. The schema packs vertexCount control vertices and vertexCount + order knots for
+        # every record, and the reader must skip exactly that, or every later trim is read from the
+        # wrong place. Each edited record below is packed that way. Only (0, 0) means "no trim".
+        prefix = "brep:curveUv:nurb"
+
+        def degree_zero(usda):
+            # The same 2 control points with degree 0 take 3 knots.
+            usda = self._edit_usda_array(usda, prefix + ":order", lambda v: [1] + v[1:])
+            return self._edit_usda_array(usda, prefix + ":knots", lambda v: [v[0], 0.5 * (v[0] + v[3]), v[3]] + v[4:])
+
+        def order_zero_with_vertices(usda):
+            # 2 control vertices and 2 + 0 knots.
+            usda = self._edit_usda_array(usda, prefix + ":order", lambda v: [0] + v[1:])
+            return self._edit_usda_array(usda, prefix + ":knots", lambda v: [v[0], v[3]] + v[4:])
+
+        def no_vertices(usda):
+            # No control vertices or weights, and 0 + 2 knots.
+            usda = self._edit_usda_array(usda, prefix + ":vertexCount", lambda v: [0] + v[1:])
+            usda = self._edit_usda_array(usda, prefix + ":controlVertices", lambda v: v[2:], tuple_size=2)
+            usda = self._edit_usda_array(usda, prefix + ":weights", lambda v: v[2:])
+            return self._edit_usda_array(usda, prefix + ":knots", lambda v: [v[0], v[3]] + v[4:])
+
+        # The box has 24 trims. Dropping the first must keep the other 23. A record too large to
+        # be packed leaves nothing after it readable, so those trims are all rebuilt instead.
+        cases = {
+            "order_19": (lambda usda: self._set_first_linear_curve_order(usda, prefix, 19, 2), 23),
+            "order_1": (degree_zero, 23),
+            "order_0_with_vertices": (order_zero_with_vertices, 23),
+            "vertex_count_0": (no_vertices, 23),
+            "order_4294967295": (lambda usda: self._edit_usda_array(
+                usda, prefix + ":order", lambda v: [4294967295] + v[1:]), 0),
+        }
+        with tempfile.TemporaryDirectory(prefix="smpy_uv_curve_order_") as tmpdir:
+            for name, (edit, uv_trims) in cases.items():
+                with self.subTest(case=name):
+                    path = os.path.join(tmpdir, "%s.usda" % name)
+                    usda = edit(self._export_nurbs_box_usda(path, with_uv_curves=True))
+                    with open(path, "w", encoding="utf-8", newline="") as file:
+                        file.write(usda)
+
+                    stdout, output = self._import_and_evaluate_in_child(path)
+                    self._assert_imported_box(stdout, output, uv_trims=uv_trims)
+
+    def test_import_rejects_packed_nurbs_arrays_shorter_than_their_counts_without_crash(self):
+        # The 3D edge, wire edge and surface readers took control vertices and knots from the packed
+        # arrays without checking that the arrays held them. A short control vertex array imported
+        # values from past its end (the box's volume came out 23.15 or 18 instead of 24), and a
+        # vertex count of 4e9, or 65536 x 65536 surface vertices (a product that wrapped to 0),
+        # crashed the import.
+        edit, add_wire = self._edit_usda_array, self._add_nurbs_wire_edge
+        surface, edge, wire = (
+            "brep:surface:nurb:", "brep:edge3dNurb:curve3d:nurb:", "brep:wireEdge3dNurb:curve3d:nurb:")
+        clamped_65536 = [0.0, 0.0] + [i / 65535.0 for i in range(1, 65535)] + [1.0, 1.0]
+
+        def wrapping_surface(usda):
+            usda = edit(usda, surface + "uVertexCount", lambda v: [65536] + v[1:])
+            usda = edit(usda, surface + "vVertexCount", lambda v: [65536] + v[1:])
+            usda = edit(usda, surface + "uKnots", lambda v: clamped_65536 + v[4:])
+            return edit(usda, surface + "vKnots", lambda v: clamped_65536 + v[4:])
+
+        cases = {
+            "surface_control_vertices_short": (
+                lambda usda: edit(usda, surface + "controlVertices", lambda v: v[:-1], tuple_size=3),
+                "NURBS surface needs 4 control vertices from index 20, but the array holds only 23."),
+            "surface_u_knots_short": (
+                lambda usda: edit(usda, surface + "uKnots", lambda v: v[:-1]),
+                "NURBS surface needs 4 U knots from index 20, but the array holds only 23."),
+            "surface_v_knots_short": (
+                lambda usda: edit(usda, surface + "vKnots", lambda v: v[:-1]),
+                "NURBS surface needs 4 V knots from index 20, but the array holds only 23."),
+            "surface_vertex_count_wraps": (
+                wrapping_surface,
+                "NURBS surface needs 4294967296 control vertices from index 0, but the array holds only 24."),
+            "surface_u_vertex_count_0": (
+                lambda usda: edit(usda, surface + "uVertexCount", lambda v: [0] + v[1:]),
+                "NURBS surface U has fewer control vertices (0) than its order (2)."),
+            "edge_control_vertices_short": (
+                lambda usda: edit(usda, edge + "controlVertices", lambda v: v[:-1], tuple_size=3),
+                "NURBS curve needs 2 control vertices from index 22, but the array holds only 23."),
+            "edge_knots_short": (
+                lambda usda: edit(usda, edge + "knots", lambda v: v[:-1]),
+                "NURBS curve needs 4 knots from index 44, but the array holds only 47."),
+            "edge_vertex_count_4e9": (
+                lambda usda: edit(usda, edge + "vertexCount", lambda v: [4000000000] + v[1:]),
+                "NURBS curve needs 4000000000 control vertices from index 0, but the array holds only 24."),
+            "edge_vertex_count_1": (
+                lambda usda: edit(usda, edge + "vertexCount", lambda v: [1] + v[1:]),
+                "NURBS curve has fewer control vertices (1) than its order (2)."),
+            "wire_control_vertices_short": (
+                lambda usda: edit(add_wire(usda), wire + "controlVertices", lambda v: v[:-1], tuple_size=3),
+                "NURBS curve needs 2 control vertices from index 0, but the array holds only 1."),
+            "wire_knots_short": (
+                lambda usda: edit(add_wire(usda), wire + "knots", lambda v: v[:-1]),
+                "NURBS curve needs 4 knots from index 0, but the array holds only 3."),
+            "wire_vertex_count_4e9": (
+                lambda usda: edit(add_wire(usda), wire + "vertexCount", lambda v: [4000000000]),
+                "NURBS curve needs 4000000000 control vertices from index 0, but the array holds only 2."),
+        }
+        with tempfile.TemporaryDirectory(prefix="smpy_packed_nurbs_") as tmpdir:
+            source_usda = self._export_nurbs_box_usda(os.path.join(tmpdir, "box.usda"))
+
+            # The authored wire edge itself imports, so the wire cases fail on their edits alone.
+            with self.subTest(case="wire_edge"):
+                path = os.path.join(tmpdir, "wire_edge.usda")
+                with open(path, "w", encoding="utf-8", newline="") as file:
+                    file.write(add_wire(source_usda))
+                self._assert_imported_box(*self._import_and_evaluate_in_child(path))
+                self.assertEqual(sm.usd.import_breps(path, heal=False)[0].edge_count(), 13)
+
+            for name, (edit_case, message) in cases.items():
+                with self.subTest(case=name):
+                    path = os.path.join(tmpdir, "%s.usda" % name)
+                    with open(path, "w", encoding="utf-8", newline="") as file:
+                        file.write(edit_case(source_usda))
+                    stdout, output = self._import_and_evaluate_in_child(path)
+                    self.assertIn("RuntimeError:", stdout, output)
+                    self.assertIn(message, stdout, output)
+
     def test_copy_and_export_preserve_nurbs_representation(self):
         factories = [
             ("box", lambda: sm.create_box((0, 0, 0), 4, 5, 6)),
@@ -5867,6 +7023,17 @@ sm.usd.tessellate_file(sys.argv[1], sys.argv[2])
             sm.usd.export_brep(brep, path)
             with self.assertRaises(RuntimeError):
                 sm.usd.append_breps([brep, None], path)
+
+    def test_export_create_cylinder_as_cylinder_surface(self):
+        with tempfile.TemporaryDirectory(prefix="smpy_cylinder_export_") as tmpdir:
+            path = os.path.join(tmpdir, "cylinder.usda")
+            sm.usd.export_brep(sm.create_cylinder((1, 2, 3), 2.0, 5.0), path)
+            with open(path, encoding="utf-8") as file:
+                usda = file.read()
+            imported = sm.usd.import_breps(path)[0]
+        self.assertIn("BrepSurfaceCylinderAPI", usda)
+        self.assertNotIn("BrepSurfaceConeAPI", usda)
+        self.assertAlmostEqual(imported.volume(relative_accuracy=1.0e-8), math.pi * 4.0 * 5.0, places=5)
 
     def test_export_preserves_scaled_unbounded_plane_range(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -6227,7 +7394,8 @@ class TestDiscoverability(unittest.TestCase):
         self.assertIsNotNone(b)
 
     def test_module_docstring_lists_categories(self):
-        doc = sm.__doc__ or ""
+        # The compiled module's docstring; usd_brep has its own short one.
+        doc = (sys.modules.get("usd_brep._omni_solid") or sys.modules["_omni_solid"]).__doc__ or ""
         self.assertIn("API by category", doc)
         for name in ("primitives", "curves", "booleans", "sweeps", "fillets"):
             self.assertIn(name, doc)
@@ -6363,6 +7531,13 @@ class TestSurfaceMethods(unittest.TestCase):
     def test_planar_surface_is_planar(self):
         srf = self._flat_surface()
         self.assertTrue(srf.is_planar(1e-3))
+
+    def test_nurbs_box_faces_are_planar_at_tight_tolerance(self):
+        # IsPlanar ignores the zone-tolerance padding.
+        box = sm.turn_to_nurbs(sm.create_box((0, 0, 0), 30, 10, 6))
+        self.assertTrue(all(face.surface().is_planar(1e-9) for face in box.faces()))
+        sphere = sm.turn_to_nurbs(sm.create_sphere((0, 0, 0), 8))
+        self.assertFalse(any(face.surface().is_planar(1e-6) for face in sphere.faces()))
 
     def test_is_periodic_u_v_returns_bool(self):
         srf = self._flat_surface()

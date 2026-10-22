@@ -2059,6 +2059,9 @@ SmApiStatus SmApiFilletEdges
     if( !pBrep || rEdges.GetSize() < 1 )
         return SM_ERR_INVALID_INPUT;
 
+    if( !SmFilletExecutive::IsRadiusSupported( dRadius, pBrep->GetTolerance() ) )
+        return SM_ERR_INVALID_INPUT;
+
     const SmContext* pContext = SmApiGetOrCreateContext();
 
     SmFilletSurfaceGeneratorType eFSGType = SM_FSG_CIRCULAR;
@@ -2107,6 +2110,10 @@ SmApiStatus SmApiFilletEdgesPerEdge
     if( rRadii.GetSize() != rEdges.GetSize() || rXSectTypes.GetSize() != rEdges.GetSize() )
         return SM_ERR_INVALID_INPUT;
 
+    for( ULONG i = 0; i < rRadii.GetSize(); i++ )
+        if( !SmFilletExecutive::IsRadiusSupported( rRadii[i], pBrep->GetTolerance() ) )
+            return SM_ERR_INVALID_INPUT;
+
     const SmContext* pContext = SmApiGetOrCreateContext();
 
     SmTArray<SmFilletSolverType> sRadiusTypes;
@@ -2150,6 +2157,10 @@ SmApiStatus SmApiVariableRadiusFillet
 )
 {
     if( !pBrep || rEdges.GetSize() < 1 )
+        return SM_ERR_INVALID_INPUT;
+
+    if(    !SmFilletExecutive::IsRadiusSupported( dStartRadius, pBrep->GetTolerance() )
+        || !SmFilletExecutive::IsRadiusSupported( dEndRadius,   pBrep->GetTolerance() ) )
         return SM_ERR_INVALID_INPUT;
 
     const SmContext* pContext = SmApiGetOrCreateContext();
@@ -2311,6 +2322,9 @@ SmApiStatus SmApiSetBevelCorners
 )
 {
     if( !pBrep || rEdges.GetSize() < 1 )
+        return SM_ERR_INVALID_INPUT;
+
+    if( !SmFilletExecutive::IsRadiusSupported( dRadius, pBrep->GetTolerance() ) )
         return SM_ERR_INVALID_INPUT;
 
     const SmContext* pContext = SmApiGetOrCreateContext();

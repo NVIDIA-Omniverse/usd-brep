@@ -84,7 +84,7 @@ SmBSplineSurface::SmBSplineSurface
   // copy knot values from target surface to new surface.
   // okay to use smos_MemCpy on base (double) objects.
   SE(smos_MemCpy(pNewSur->knu->U, U, sizeof(gw_REAL) * ((size_t)r + (size_t)1), sizeof(gw_REAL) * ((size_t)r + (size_t)1)));
-  SE(smos_MemCpy(pNewSur->knv->U, V, sizeof(gw_REAL) * ((size_t)s + (size_t)1), sizeof(gw_REAL) * ((size_t)r + (size_t)1)));
+  SE(smos_MemCpy(pNewSur->knv->U, V, sizeof(gw_REAL) * ((size_t)s + (size_t)1), sizeof(gw_REAL) * ((size_t)s + (size_t)1)));
 
   // copy control point values from target surface to new surface one row at a time
   for (ULONG i=0; i<=n; i++) 
@@ -5219,9 +5219,14 @@ SmBoolean bDebugMe = FALSE ;
   sCPts.Transpose(lNumVCpts);
   sWeights.Transpose(lNumVCpts);
   
-  // Transpose Surface definition
-  SER(SetCanonical(lVDegree,lUDegree,sCPts,eBSForm,sVMult,sUMult,
-                   sVKnots,sUKnots,eKnotType,&sWeights));
+  // Transpose Surface definition; on failure, restore the bit
+  SmStatus eStatus = SetCanonical(lVDegree,lUDegree,sCPts,eBSForm,sVMult,sUMult,
+                                  sVKnots,sUKnots,eKnotType,&sWeights);
+  if (eStatus != SM_SUCCESS)
+    {
+      ToggleSwapUVBit() ;
+      SER(eStatus);
+    }
 
 #ifdef SM_DEBUG_CODE
   if(bDebugMe)
@@ -6377,16 +6382,17 @@ SmStatus SmBSplineSurface::ReadFromDB
   SER(  (   rpNewSurface == NULL
          || rpNewSurface->IsKindOf(SmBSplineSurface_TYPE)) ? SM_SUCCESS : SM_ERR) ;
 
-  // init output object
-  SmBSplineSurface *pBSplineSurface =   (rpNewSurface == NULL)
-                                      ? new (crContext) SmBSplineSurface()
-                                      : (SmBSplineSurface *)rpNewSurface ;
+  // init output object - a new one is made only once the whole surface has been read,
+  // so a read that fails part way has none to free
+  SmBSplineSurface *pBSplineSurface = (SmBSplineSurface *)rpNewSurface ;
 
   // file type
   SmFileType eType = rDB.GetFileType();
 
   // locals
   gw_REAL    wx, wy, wz, w;
+  const TCHAR *cpReadFailedMsg = _T("NURBS surface data ends early or holds text that is not a number.") ;
+  SM_REF1(cpReadFailedMsg) ; // release builds drop SER_MSG messages
 
   // Get parameters from the top 
   gw_INDEX   i, j, n, m ;
@@ -6422,6 +6428,53 @@ SmStatus SmBSplineSurface::ReadFromDB
           SER(rDB.ReadLong(lBSplineSurfaceForm));
         }
     }
+  SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
+
+  // NLib's surface evaluators (e.g. N_SrfBasisDerivs) size their basis-function stack
+  // arrays by NL_MAXDEG, so a higher degree overflows the stack on the first evaluation.
+  // A degree-0 surface reads, but its derivatives fail and its normal is zero. The degrees
+  // come straight from the file, so reject anything outside [1, NL_MAXDEG].
+  if (p < 1 || p > NL_MAXDEG || q < 1 || q > NL_MAXDEG)
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage,
+                 _T("NURBS surface degree (U %d, V %d) is outside the supported range 1 to %d."),
+                 (int)p,
+                 (int)q,
+                 NL_MAXDEG);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+
+  // The counts come straight from the file too, as highest indices. Each direction needs
+  // at least degree + 1 control points, and the NURB is one block whose byte size is a
+  // ULONG, so reject counts that would overflow it before they size anything.
+  const ULONG lMaxCPoints = ULONG_MAX / (4 * sizeof(gw_CPOINT)) ;
+  if (n < p || m < q)
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage,
+                 _T("NURBS surface control point counts (U %lld, V %lld) are fewer than degree + 1 (U %d, V %d)."),
+                 (long long)n + 1,
+                 (long long)m + 1,
+                 (int)p + 1,
+                 (int)q + 1);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+  if ((ULONG)n >= lMaxCPoints || (ULONG)m >= lMaxCPoints / ((ULONG)n + 1))
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage,
+                 _T("NURBS surface control point counts (U %lld, V %lld) are too large."),
+                 (long long)n + 1,
+                 (long long)m + 1);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
+  if (rat != NL_NO && rat != NL_YES)
+    {
+      TCHAR sMessage[SM_TBLOCK_SIZE];
+      SM_SPRINTF(sMessage, _T("NURBS surface rational flag %d is neither %d nor %d."), (int)rat, NL_NO, NL_YES);
+      SER_MSG(SM_ERR_INVALID_INPUT, sMessage);
+    }
 
   // surface knot counts
   gw_INDEX r = n+p+1;
@@ -6431,6 +6484,9 @@ SmStatus SmBSplineSurface::ReadFromDB
   gw_SURFACE *sur = sm_AllocateNurbSurface(n,m,p,q,r,s);
   if(sur == NULL) 
     { SER(SM_ERR) ; }
+
+  // frees the NURB on every failure below, until the surface takes it
+  SmMemDelete sNurbCleanup(sur) ;
 
   // surface locals
   gw_CPOINT  **Pw;
@@ -6456,6 +6512,7 @@ SmStatus SmBSplineSurface::ReadFromDB
                                                     //   rFileIn.read((char*)&wy,sizeof(gw_REAL));
                                                     //   rFileIn.read((char*)&wz,sizeof(gw_REAL));
                                                   }
+                           SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
                            N_CPtFromWxWyWz(wx,wy,wz,NL_NOW,&Pw[i][j]);
                          } // end iter every conrol point i
                      } // end iter every control point j
@@ -6479,12 +6536,13 @@ SmStatus SmBSplineSurface::ReadFromDB
                                                     // rFileIn.read((char*)&wz,sizeof(gw_REAL));
                                                     // rFileIn.read((char*)&w,sizeof(gw_REAL));
                                                   }
+                           SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
                            N_CPtFromWxWyWz(wx,wy,wz,w,&Pw[i][j]);
                          } // end iter every conrol point i
                      } // end iter every control point j
                  } break ;
 
-      // Wrong type
+      // Wrong type - rejected with the header above
       default : { SER(SM_ERR) ; }
     }
 
@@ -6497,6 +6555,7 @@ SmStatus SmBSplineSurface::ReadFromDB
       else /* Binary */      { SER(rDB.ReadDouble(U[i]));
                                //  rFileIn.read((char*)&U[i],sizeof(gw_REAL));
                              }
+      SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
     }    
 
   // for every V knot
@@ -6508,13 +6567,17 @@ SmStatus SmBSplineSurface::ReadFromDB
       else /* Binary */      { SER(rDB.ReadDouble(V[j]));
                                // rFileIn.read((char*)&V[j],sizeof(gw_REAL));
                              }
+      SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, cpReadFailedMsg) ;
     }
   
   // output locals  
   SmKnotType            eKnotType           = (SmKnotType) lKnotType ;             
   SmBSplineSurfaceForm  eBSplineSurfaceForm = (SmBSplineSurfaceForm) lBSplineSurfaceForm ;
 
-  // set output
+  // set output - the surface now owns the NURB
+  if (pBSplineSurface == NULL)
+    { pBSplineSurface = new (crContext) SmBSplineSurface() ; }
+  sNurbCleanup.Clear() ;
   pBSplineSurface->m_pNurb               = sur ;
   pBSplineSurface->m_bNurbIsBorrowed     = FALSE ; 
   pBSplineSurface->m_bOutOfBoundsEnabled = FALSE ;

@@ -17,6 +17,7 @@
 #include <SmApiBrep.h>
 #include <SmBSplineCurve.h>
 #include <SmBrep.h>
+#include <SmCylinder.h>
 #include <SmPlane.h>
 #include <SmCurve.h>
 #include <SmLine.h>
@@ -395,6 +396,98 @@ SmStatus TestSmCreateLinearSweepCylinder()
 
 
 //*************************************************************************
+// Sweep rCurves dDist along rDir and check for a manifold solid of volume
+// dExpectedVolume (1e-5 relative); optionally report an SmCylinder face.
+//*************************************************************************
+
+static SmStatus CheckLinearSweepSolid( const SmTArray<SmCurve*>& rCurves, const SmVector3d& rDir, double dDist,
+                                       double dExpectedVolume, SmBoolean* pOptHasCylinder = NULL )
+{
+    SmBrep* pResult = NULL;
+    SER( SmApiCreateLinearSweep(rCurves, rDir, dDist, TRUE, pResult) );
+    SmObjDelete sResultCleanup(pResult);
+
+    SmBoolean bIsManifoldSolid = FALSE;
+    SER( SmApiBrepIsManifoldSolid(pResult, bIsManifoldSolid) );
+    double dVolume = 0.0;
+    SER( SmApiBrepComputeVolume(pResult, 1.0e-6, dVolume) );
+    if( !bIsManifoldSolid || fabs(dVolume - dExpectedVolume) > dExpectedVolume * 1.0e-5 )
+        return SM_ERR;
+
+    if( pOptHasCylinder )
+    {
+        *pOptHasCylinder = FALSE;
+        SmTArray<SmFace*> sFaces;
+        SER( SmApiGetFaces(pResult, sFaces) );
+        for( ULONG ii = 0; ii < sFaces.GetSize(); ii++ )
+            if( sFaces[ii]->GetSurface()->IsKindOf(SmCylinder_TYPE) )
+                *pOptHasCylinder = TRUE;
+    }
+    return SM_SUCCESS;
+}
+
+//*************************************************************************
+// Oblique, non-unit, near-axial and negative linear sweeps give closed solids.
+//*************************************************************************
+
+SmStatus TestSmCreateLinearSweepOblique()
+{
+    SmApiCreateContext();
+
+    // 2x2 square swept 3 along non-unit (1,0,1): volume 4*3*cos45.
+    SmTArray<SmBSplineCurve*> sSquare;
+    SER( SmApiCreateRectangle(SmPoint3d(0.0, 0.0, 0.0), 2.0, 2.0, sSquare) );
+    SmObjsDelete<SmBSplineCurve*> sSquareCleanup(&sSquare);
+
+    SmTArray<SmCurve*> sCurvesToSweep;
+    for( ULONG ii = 0; ii < sSquare.GetSize(); ii++ )
+        sCurvesToSweep.Add( sSquare[ii] );
+
+    SER( CheckLinearSweepSolid(sCurvesToSweep, SmVector3d(1.0, 0.0, 1.0), 3.0, 12.0 * sqrt(0.5)) );
+
+    // r=5 circle swept 10: along its axis an SmCylinder, 0.3 deg off it a
+    // closed oblique cylinder.
+    SmBSplineCurve* pCircle = NULL;
+    SER( SmApiCreateArc(SmPoint3d(0.0, 0.0, 0.0), 5.0, 0.0, 360.0, pCircle) );
+    SmObjDelete sCircleCleanup(pCircle);
+    SmTArray<SmCurve*> sCircleToSweep;
+    sCircleToSweep.Add( pCircle );
+
+    const double dCircleVolume = SM_PI * 25.0 * 10.0;
+    SmBoolean bHasCylinder = FALSE;
+    SER( CheckLinearSweepSolid(sCircleToSweep, SmVector3d(0.0, 0.0, 2.0), 10.0, dCircleVolume, &bHasCylinder) );
+    if( !bHasCylinder )
+        return SM_ERR;
+
+    const double dTiltRad = 0.3 * SM_PI / 180.0;
+    SER( CheckLinearSweepSolid(sCircleToSweep, SmVector3d(sin(dTiltRad), 0.0, cos(dTiltRad)), 10.0,
+                               dCircleVolume * cos(dTiltRad)) );
+
+    // Long sweep at a tiny angle: the cap is ~9e-4 off a right cylinder.
+    const double dLongTiltRad = 5.0e-5 * SM_PI / 180.0;
+    SER( CheckLinearSweepSolid(sCircleToSweep, SmVector3d(sin(dLongTiltRad), 0.0, cos(dLongTiltRad)), 1000.0,
+                               dCircleVolume * 100.0 * cos(dLongTiltRad)) );
+
+    // Negative distances sweep against the direction.
+    const double dObliqueRad = 30.0 * SM_PI / 180.0;
+    SER( CheckLinearSweepSolid(sCircleToSweep, SmVector3d(0.0, 0.0, 1.0), -10.0, dCircleVolume) );
+    SER( CheckLinearSweepSolid(sCircleToSweep, SmVector3d(sin(dObliqueRad), 0.0, cos(dObliqueRad)), -10.0,
+                               dCircleVolume * cos(dObliqueRad)) );
+    SER( CheckLinearSweepSolid(sCurvesToSweep, SmVector3d(1.0, 0.0, 1.0), -3.0, 12.0 * sqrt(0.5)) );
+
+    // Repeated sweeps ignore the magnitude: 2 steps of 1 reach z = 2.
+    SmBrep* pRepeated = NULL;
+    SER( SmApiCreateLinearSweepWithRepetitions(sCurvesToSweep, SmVector3d(0.0, 0.0, 2.0), 1.0, 2, FALSE, pRepeated) );
+    SmObjDelete sRepeatedCleanup(pRepeated);
+    SmPoint3d sMin, sMax;
+    SER( SmApiBrepBoundingBox(pRepeated, TRUE, sMin, sMax) );
+    if( fabs(sMin.z) > 1.0e-3 || fabs(sMax.z - 2.0) > 1.0e-3 )
+        return SM_ERR;
+
+    return SM_SUCCESS;
+}
+
+//*************************************************************************
 // 
 //*************************************************************************
 
@@ -428,9 +521,74 @@ SmStatus TestSmCreateDraftSweep()
 
     SmBrep* pResult = NULL;
     SmStatus stat = SmApiCreateDraftSweep(sCurvesToSweep, dHeight, dAngle, 1, 3, pResult);
-    
+
 
     return( stat );
+}
+
+
+//*************************************************************************
+// Sweep an XY-plane profile 3 capped steps of 1 along rDir: check it is a valid solid.
+//*************************************************************************
+
+static SmStatus CheckCappedRepeatedSweep( const SmTArray<SmCurve*>& rCurves, const SmVector3d& rDir,
+                                          double dProfileArea, ULONG lExpectedFaces )
+{
+    SmBrep* pResult = NULL;
+    SER( SmApiCreateLinearSweepWithRepetitions(rCurves, rDir, 1.0, 3, TRUE, pResult) );
+    SmObjDelete sResultCleanup(pResult);
+
+    SmBoolean bIsManifoldSolid = FALSE;
+    SER( SmApiBrepIsManifoldSolid(pResult, bIsManifoldSolid) );
+    double dVolume = 0.0;
+    SER( SmApiBrepComputeVolume(pResult, 1.0e-6, dVolume) );
+    SmTArray<SmFace*> sFaces;
+    SER( SmApiGetFaces(pResult, sFaces) );
+
+    const double dExpectedVolume = dProfileArea * 3.0 * rDir.z;
+    if( !bIsManifoldSolid || fabs(dVolume - dExpectedVolume) > dExpectedVolume * 1.0e-5
+        || sFaces.GetSize() != lExpectedFaces || !pResult->AssertValid(NULL, SM_LEVEL_2) )
+        return SM_ERR;
+
+    return SM_SUCCESS;
+}
+
+//*************************************************************************
+// Capped sweeps with repetitions: one band of sides per step, two caps.
+//*************************************************************************
+
+SmStatus TestSmCreateLinearSweepRepeatedCapped()
+{
+    SmApiCreateContext();
+
+    SmTArray<SmBSplineCurve*> sSquare;
+    SER( SmApiCreateRectangle(SmPoint3d(0.0, 0.0, 0.0), 2.0, 2.0, sSquare) );
+    SmObjsDelete<SmBSplineCurve*> sSquareCleanup(&sSquare);
+    SmBSplineCurve *pInner = NULL, *pOuter = NULL, *pOther = NULL;
+    SER( SmApiCreateArc(SmPoint3d(0.0, 0.0, 0.0), 1.0, 0.0, 360.0, pInner) );
+    SmObjDelete sInnerCleanup(pInner);
+    SER( SmApiCreateArc(SmPoint3d(0.0, 0.0, 0.0), 2.0, 0.0, 360.0, pOuter) );
+    SmObjDelete sOuterCleanup(pOuter);
+    SER( SmApiCreateArc(SmPoint3d(5.0, 0.0, 0.0), 1.0, 0.0, 360.0, pOther) );
+    SmObjDelete sOtherCleanup(pOther);
+
+    SmTArray<SmCurve*> sSquareProfile, sAnnulus, sTwoCircles;
+    for( ULONG ii = 0; ii < sSquare.GetSize(); ii++ )
+        sSquareProfile.Add( sSquare[ii] );
+    sAnnulus.Add( pOuter );
+    sAnnulus.Add( pInner );
+    sTwoCircles.Add( pInner );
+    sTwoCircles.Add( pOther );
+
+    const SmVector3d aDirs[] = { SmVector3d(0.0, 0.0, 1.0), SmVector3d(sqrt(0.5), 0.0, sqrt(0.5)) };
+    for( const SmVector3d& rDir : aDirs )
+    {
+        SER( CheckCappedRepeatedSweep(sSquareProfile, rDir, 4.0, 4 * 3 + 2) );
+        SER( CheckCappedRepeatedSweep(sAnnulus, rDir, 3.0 * SM_PI, 2 * 3 + 2) );
+        SER( CheckCappedRepeatedSweep(sTwoCircles, rDir, 2.0 * SM_PI, 2 * 3 + 4) );
+    }
+
+    return SM_SUCCESS;
 }
 
 
@@ -749,6 +907,10 @@ SmStatus TestSmPrimitives()
         return( stat );
 
     stat = TestSmCreateLinearSweepCylinder();
+    if( stat != SM_SUCCESS )
+        return( stat );
+
+    stat = TestSmCreateLinearSweepOblique();
     if( stat != SM_SUCCESS )
         return( stat );
 

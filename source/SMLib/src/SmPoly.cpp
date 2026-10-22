@@ -15196,6 +15196,45 @@ SmBoolean bDebugMe = FALSE;
 #endif // 0
 
 /*******************************************************************//**
+PURPOSE: Inlined crBox.ContainsPoint3d(crPoint) with no tolerance.
+***********************************************************************/
+static inline SmBoolean sm_ContainsPoint3d(const SmExtent3d & crBox, const SmPoint3d & crPoint)
+{
+  const SmPoint3d sMin = crBox.GetMin(), sMax = crBox.GetMax();
+  return (   crPoint.x < sMin.x || crPoint.y < sMin.y || crPoint.z < sMin.z
+          || crPoint.x > sMax.x || crPoint.y > sMax.y || crPoint.z > sMax.z) ? FALSE : TRUE;
+}
+
+/*******************************************************************//**
+PURPOSE: TRUE when the corner-angle test in FindVerticesInTriangle() would certainly
+         reject the test point, decided without trig. FALSE means undecided.
+
+NOTES: 2D input only (z = 0, crNormal = +/-Z). With a = crToStart, e = crToOther and
+  t = crToTest, the point is outside the corner when det(a,t) < 0, or when det(a,t) > 0
+  and det(e,t) > 0. A 1e-4 margin on the sine keeps this in agreement with the angle test.
+***********************************************************************/
+static inline SmBoolean sm_IsClearlyOutsideCorner
+ (const SmVector3d & crNormal,   // in : unit triangle normal
+  const SmVector3d & crToStart,  // in : corner to the 1st triangle neighbor (angle start)
+  const SmVector3d & crToOther,  // in : corner to the 2nd triangle neighbor
+  const SmVector3d & crToTest)   // in : corner to the test point
+{
+  const double dSign = crNormal.z;   // caller guarantees crNormal = (0,0,+/-1)
+  const double dA2 = crToStart.x*crToStart.x + crToStart.y*crToStart.y;
+  const double dE2 = crToOther.x*crToOther.x + crToOther.y*crToOther.y;
+  const double dT2 = crToTest.x *crToTest.x  + crToTest.y *crToTest.y;
+  if (dA2 < 1.0e-12 || dE2 < 1.0e-12 || dT2 < 1.0e-12)
+    { return FALSE; }
+  const double dAT = dSign * (crToStart.x*crToTest.y - crToStart.y*crToTest.x);
+  if (dAT*dAT <= 1.0e-8 * dA2 * dT2)
+    { return FALSE; }                   // too close to the start ray to decide here
+  if (dAT < 0.0)
+    { return TRUE; }                    // negative angle
+  const double dET = dSign * (crToOther.x*crToTest.y - crToOther.y*crToTest.x);
+  return (dET > 0.0 && dET*dET > 1.0e-8 * dE2 * dT2) ? TRUE : FALSE;  // beyond the corner angle
+}
+
+/*******************************************************************//**
 PURPOSE: Find vertices of this face inside of a triangle defined
     by three points.
 
@@ -15331,16 +15370,41 @@ SmBoolean bDebugMe = FALSE;
       // get AngRad(P2,P0,P1) and AngRad(P1,P2,P0) at Triangle corners P0 and P2
       SER(sCross.CCWAngleBetween(sP0P1,sP0P2,dTriAngRad1));
       SER(sCross.CCWAngleBetween(sP2P0,sP2P1,dTriAngRad2));
+      const SmBoolean b2DTriangle = (   sCross.x == 0.0 && sCross.y == 0.0
+                                     && sP0.z == 0.0 && sP1.z == 0.0 && sP2.z == 0.0) ? TRUE : FALSE;
 
       // for every sObject - find sObject->StartPoint nearest to P0P1 inside Triangle 
       for(ii=0;ii<sObjects.GetSize();ii++)
          {
-          SmPolyEdge * pETest = SM_CAST_PTR(SmPolyEdge,sObjects[ii]);
+          // sObjects holds only PolyEdges (the PolyFace vertex tree, or GetPolyEdges())
+          SmPolyEdge * pETest = static_cast<SmPolyEdge*>(sObjects[ii]);
+
+          // skip marked PolyEdges
+          // GWC Concern3: This method is skipping Marked objects without incrementing the 
+          //               project Mark nor the object mark.
+          //               That could be intended.  But it looks like a bug.
+          //               need to review all calls to this method to see if those methods
+          //               are depending on marks - marks are always a bother. 
+          if(pETest->IsMarked(eMarkType))  
+            { continue; }
+
+          // skip PolyEdges not belonging to this PolyFace
+          //   - GWC: this method is being used to help facet SmPolyFace
+          //       it's only interested in conflicts on this SmPolyFace
+          //     GWC Concern4.  Facets get sliced off this 
+          //       polyface iteratively. So potential conflicts with
+          //       previously made facets won't be seen.  If this
+          //       function works perfectly - no such conflicts should
+          //       be possible.  Are there failure cases where this would be a problem? 
+          // (these two checks reject most candidates, so they come before the point is loaded)
+          if(pETest->GetPolyFace() != this)  
+            { continue; }
+
                        sPTest = pETest->GetStartPoint() ;
 
           // when 1st iter, InputPointSpace only check
           if(iter==0) { // skip points not close to sTriBBox in InputPointSpace
-                        if(!sTriBBox.ContainsPoint3d(sPTest))  
+                        if(!sm_ContainsPoint3d(sTriBBox, sPTest))  
                           { continue; }
                       }
           else        { // work in 3D space
@@ -15364,26 +15428,6 @@ SmBoolean bDebugMe = FALSE;
             }
 #endif // SM_DEBUG_CODE
 
-          // skip marked PolyEdges
-          // GWC Concern3: This method is skipping Marked objects without incrementing the 
-          //               project Mark nor the object mark.
-          //               That could be intended.  But it looks like a bug.
-          //               need to review all calls to this method to see if those methods
-          //               are depending on marks - marks are always a bother. 
-          if(pETest->IsMarked(eMarkType))  
-            { continue; }
-
-          // skip PolyEdges not belonging to this PolyFace
-          //   - GWC: this method is being used to help facet SmPolyFace
-          //       it's only interested in conflicts on this SmPolyFace
-          //     GWC Concern4.  Facets get sliced off this 
-          //       polyface iteratively. So potential conflicts with
-          //       previously made facets won't be seen.  If this
-          //       function works perfectly - no such conflicts should
-          //       be possible.  Are there failure cases where this would be a problem? 
-
-          if(pETest->GetPolyFace() != this)  
-            { continue; }
 
           // skip points coincident with P0  (probably is P0 from the pVertexTree)          
           if(sP0PT.LengthSquared() < dTol*dTol)        
@@ -15395,6 +15439,13 @@ SmBoolean bDebugMe = FALSE;
 
           // skip points coincident with P2  (probably is P2 from the pVertexTree)
           if(sP2PT.LengthSquared() < dTol*dTol) 
+            { continue; }
+
+          // 2D input: skip points clearly outside corner P0 or P2 without the trig below
+          if (   b2DTriangle
+              && sPTest.z == 0.0
+              && (   sm_IsClearlyOutsideCorner(sCross, sP0P1, sP0P2, sP0PT)
+                  || sm_IsClearlyOutsideCorner(sCross, sP2P0, sP2P1, sP2PT)))
             { continue; }
 
           // Corner angles only after the cheap skips above, which reject most candidates.
@@ -15511,8 +15562,10 @@ SmStatus SmPolyFace::FindClosestPointToLoop
                                                    //      NULL    = Find closest point to any PolyLoopEdge
    SmPolyEdge *& rpPolyLoopEdge,                   // out: PolyLoopEdge closest to NeighborLoopEdge
    SmPolyEdge *& rpOtherPolyLoopEdge,              // out: NeighborLoop->PolyEdge with start-pt closest to PolyLoopEdge
-   SmTArray<SmPolyEdge*> * pOptNonDegenPolyEdges)  // out: Optional array of nondegenerate polyedges from this face.
-   const                                           //    : NULL to ignore. Default is NULL.                                
+   SmTArray<SmPolyEdge*> * pOptNonDegenPolyEdges,  // out: Optional array of nondegenerate polyedges from this face.
+                                                   //    : NULL to ignore. Default is NULL.                                
+   const SmTArray<SmExtent3d> * pOptNonDegenEdgeBoxes) // in : Optional 3D extent of each pOptNonDegenPolyEdges edge.
+   const                                           //    : NULL to ignore. Default is NULL.
 {
   // initialize outputs
   rpPolyLoopEdge      = NULL;
@@ -15528,7 +15581,7 @@ SmStatus SmPolyFace::FindClosestPointToLoop
   SM_PTR_ARRAY(sClosePolyFaceEdges,   SmPolyEdge, 256) ;   // SmTArray<SmPolyEdge *>
   SM_OBJ_ARRAY(sClosePolyFaceDistsSq, double,     256) ;   // SmTArray<double>       = dist**2 from edge start point to 3d extent for each sFaceEdge entry
 
-  SmTArray<SmPolyEdge*> sAllNonDegenPolyFaceEdges;
+  SmTArray<SmPolyEdge*> sAllNonDegenPolyFaceEdges;   // filled only when pOptNonDegenPolyEdges is NULL
 
 #ifdef SM_DEBUG_CODE
 SmBoolean bDebugMe0  = FALSE;
@@ -15613,13 +15666,13 @@ SmBoolean bDebugMe00 = FALSE;
     
   // collect all of this SmPolyFace's SmPolyEdges into sAllPolyFaceEdges 
   this->GetPolyEdges( sAllPolyFaceEdges );
-  if(pOptNonDegenPolyEdges)
-  {
-    sAllNonDegenPolyFaceEdges = *pOptNonDegenPolyEdges;
-  }
-  else
+  // use the caller's array without copying it
+  SmTArray<SmPolyEdge*> * pNonDegenPolyFaceEdges = pOptNonDegenPolyEdges;
+  if(pNonDegenPolyFaceEdges == NULL)
   {
      this->GetNonDegeneratePolyEdges(sAllNonDegenPolyFaceEdges);
+     pNonDegenPolyFaceEdges = &sAllNonDegenPolyFaceEdges;
+     pOptNonDegenEdgeBoxes  = NULL;
   }
   
   // this->GetNonDegeneratePolyEdges( sAllPolyFaceEdges );  [B434]
@@ -15768,7 +15821,7 @@ SmBoolean bDebugMe = FALSE;
                       SER(IntersectSegment(sPLE_Pnt,sFEPnt,
                                            GetTolerance()/1000.0,
                                            sXSectPoints, sXSectPolyEdges,
-                                           NULL, &sAllNonDegenPolyFaceEdges));
+                                           NULL, pNonDegenPolyFaceEdges, pOptNonDegenEdgeBoxes));
 
                       // save the min dist2 when it does not xsect any edges
                       if( sXSectPoints.GetSize() == 0 )
@@ -15799,7 +15852,7 @@ SmBoolean bDebugMe = FALSE;
           SER( IntersectSegment(pMinPolyLoopEdge->GetStartPoint(),
                                 pMinPolyFaceEdge->GetStartPoint(),
                                  GetTolerance() / 1000.0, sXSectPoints, sXSectPolyEdges, NULL,
-                                 &sAllNonDegenPolyFaceEdges));
+                                 pNonDegenPolyFaceEdges, pOptNonDegenEdgeBoxes));
 
 #ifdef SM_DEBUG_CODE
 SmBoolean bDebugMe2 = FALSE;
@@ -15863,7 +15916,7 @@ SmBoolean bDebugMe3 = FALSE;
               SER( IntersectSegment(pMinPolyLoopEdge->GetStartPoint(),
                                     pBetweenPolyEdge->GetStartPoint(),
                                     GetTolerance()/1000.0, sXSectPoints2, sXSectEdges2, NULL,
-                                   &sAllNonDegenPolyFaceEdges));
+                                   pNonDegenPolyFaceEdges, pOptNonDegenEdgeBoxes));
 
               // if this segment is xsect free - use it in pass 2, else add intersecting edges
               if( sXSectPoints2.GetSize() == 0 )
@@ -15883,7 +15936,7 @@ SmBoolean bDebugMe3 = FALSE;
               SER( IntersectSegment(pMinPolyLoopEdge->GetStartPoint(),
                                     pBetweenPolyEdge->GetEndPoint(),
                                     GetTolerance()/1000.0, sXSectPoints2, sXSectEdges2, NULL,
-                                     &sAllNonDegenPolyFaceEdges));
+                                     pNonDegenPolyFaceEdges, pOptNonDegenEdgeBoxes));
 
               // if this segment is xsect free - use the connecting edge in pass 2, else add intersecting edges
               if( sXSectPoints2.GetSize() == 0 )
@@ -15914,6 +15967,22 @@ SmBoolean bDebugMe3 = FALSE;
     {
       return SM_ERR;
     }
+  return FindLoopConnectionSectors(rpPolyLoopEdge, rpOtherPolyLoopEdge);
+
+} // end SmPolyFace::FindClosestPointToLoop
+
+/*******************************************************************//**
+PURPOSE: Last step of FindClosestPointToLoop(): at each vertex of the closest
+         pair, pick the PolyEdge whose sector contains the connecting segment.
+***********************************************************************/
+SmStatus SmPolyFace::FindLoopConnectionSectors
+  (SmPolyEdge *& rpPolyLoopEdge,       // i/o: PolyEdge starting at the loop vertex
+   SmPolyEdge *& rpOtherPolyLoopEdge)  // i/o: PolyEdge starting at the other vertex
+   const
+{
+  SM_PTR_ARRAY(sPolyLoopEdges,      SmPolyEdge, 256) ;   // SmTArray<SmPolyEdge *>
+  SM_PTR_ARRAY(sClosePolyFaceEdges, SmPolyEdge, 256) ;   // SmTArray<SmPolyEdge *>
+
   SmPolyVertex * pPolyLoopVertex  = rpPolyLoopEdge->GetStartPolyVertex();       // local: loopEdge->StartVertex
   SmPolyVertex * pOtherPolyVertex = rpOtherPolyLoopEdge->GetStartPolyVertex();  // local: OtherLoopEdge->StartVertex
 
@@ -15961,7 +16030,7 @@ SmBoolean bDebugMe3 = FALSE;
   // all done
   return SM_SUCCESS;
 
-} // end SmPolyFace::FindClosestPointToLoop
+} // end SmPolyFace::FindLoopConnectionSectors
 
 /*******************************************************************//**
 PURPOSE: Find the vertex sector on this face containing the input line vector.
@@ -16304,7 +16373,9 @@ SmStatus SmPolyFace::IntersectSegment
                                                 //      GWC: Check this - in other place pEdgeTree is a 
                                                 //      tree of StartPts, not EdgeBounding boxes.
                                                 //      If that's true then its not the SmTree we want.
-  SmTArray<SmPolyEdge*> * pOptEdgesToCheck)      // in : optional array to specify intersection candidates.
+  SmTArray<SmPolyEdge*> * pOptEdgesToCheck,      // in : optional array to specify intersection candidates.
+                                                //    : NULL to ignore. Default is NULL.
+  const SmTArray<SmExtent3d> * pOptEdgeBoxes)   // in : optional 3D extent of each pOptEdgesToCheck edge.
                                                 //    : NULL to ignore. Default is NULL.
  const
 {
@@ -16334,9 +16405,10 @@ SmStatus SmPolyFace::IntersectSegment
     }
 
   // load candidate sPolyEdges 
-  if(pOptEdgesToCheck != NULL) // use the list they gave us
+  const SmTArray<SmPolyEdge*> * pPolyEdges = &sPolyEdges;
+  if(pOptEdgesToCheck != NULL) // use the list they gave us, without copying it
   {
-      sPolyEdges = *pOptEdgesToCheck;
+      pPolyEdges = pOptEdgesToCheck;
   }
   else if( pOptEdgeTree != NULL )
   {
@@ -16349,24 +16421,31 @@ SmStatus SmPolyFace::IntersectSegment
       pOptEdgeTree->GetObjectsInBox(sBBox, sObjectsInBox);
       for (ii=0;ii<sObjectsInBox.GetSize();ii++) {sPolyEdges.Add((SmPolyEdge*)sObjectsInBox[ii]); }
   }
-  else if(pOptEdgesToCheck != NULL) // use the list they gave us
-  {
-      sPolyEdges = *pOptEdgesToCheck;
-  }
   else// Without edge-tree just get all SmPolyFace edges.
   {
     GetNonDegeneratePolyEdges( sPolyEdges );
   }
 
+  // use the boxes only if they match the caller's list
+  if(   pPolyEdges != pOptEdgesToCheck
+     || (pOptEdgeBoxes != NULL && pOptEdgeBoxes->GetSize() != pPolyEdges->GetSize()))
+  {
+      pOptEdgeBoxes = NULL;
+  }
+
   // for every PolyEdge
-  for(ii=0;ii<sPolyEdges.GetSize();ii++)
+  for(ii=0;ii<pPolyEdges->GetSize();ii++)
     {
-      SmPolyEdge * pPolyEdge  = sPolyEdges[ii];
+      SmPolyEdge * pPolyEdge  = (*pPolyEdges)[ii];
 
       if (pPolyEdge == NULL)
       {
           continue;
       }
+
+      // skip far edges without loading their points
+      if(pOptEdgeBoxes != NULL && sBBox.AreDisjoint((*pOptEdgeBoxes)[ii]))
+        { continue; }
 
       SmPoint3d    sEdgeStart = pPolyEdge->GetStartPoint();   
       SmPoint3d sEdgeEnd = pPolyEdge->GetCCWPolyEdge()->GetStartPoint(); //JLMCC changed 

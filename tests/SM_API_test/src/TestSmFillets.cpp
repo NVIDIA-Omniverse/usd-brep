@@ -16,7 +16,12 @@
 #include <SmApiPrimitives.h>
 #include <SmApiFillets.h>
 #include <SmApiBrep.h>
+#include <SmApiQueries.h>
 #include <SmBrep.h>
+#include <SmFace.h>
+#include <SmBSplineSurface.h>
+#include <cmath>
+#include <memory>
 
 
 //*************************************************************************
@@ -265,39 +270,48 @@ SmStatus TestSmSetBevelCorners()
 }
 
 
-//*************************************************************************
-// 
-//*************************************************************************
-
-SmStatus TestSmRemoveFillet()
+// Fillets meeting at rounded corners on a box whose flat faces are NURBS with
+// uneven control points. Analytic recognition leaves those as B-splines, so the
+// corner test must check flatness, not the surface type.
+SmStatus TestSmRemoveFilletNurbsPlanes()
 {
     SmApiCreateContext();
+    SmBrep* pCreated = NULL;
+    SER( SmApiCreateBox(SmVector3d(0.0, 0.0, 0.0), 10, 10, 10, pCreated) );
+    std::unique_ptr<SmBrep> pBox(pCreated);
+    SER( SmApiCircularFillet(pBox.get(), 1.0) );
+    SER( SmApiTurnToNurbs(pBox.get()) );
 
-    SmVector3d sOrigin(0.0, 0.0, 0.0);
-    SmBrep* pBox = NULL;
-    SmApiCreateBox(sOrigin, 10, 10, 10, pBox);
-    if (!pBox)
-        return SM_ERR;
-
-    SmStatus stat = SmApiCircularFillet(pBox, 1.0);
-    if (stat != SM_SUCCESS)
+    SmTArray<SmFace*> sFaces;
+    pBox->GetFaces(sFaces);
+    SmTemporaryChangeValue<SmBoolean> sEnableEdit(pBox->m_bEditingEnabled, TRUE);
+    for( ULONG ii = 0; ii < sFaces.GetSize(); ii++ )
     {
-        delete pBox;
-        return stat;
+        SmBSplineSurface* pSurface = SM_CAST_PTR(SmBSplineSurface, sFaces[ii]->GetSurface());
+        if( !pSurface || !pSurface->IsPlanar(SM_ZONE_TOL_3D) )
+            continue;
+        SmBSplineSurface* pUneven = new (*pBox->GetContext()) SmBSplineSurface(*pSurface);
+        SER( pUneven->DegreeElevate(SM_SP_U, 3) );
+        for( ULONG jj = 0; jj < pUneven->GetNumberControlPoints(SM_SP_V); jj++ )
+        {
+            SmPoint3d sP0, sP3;
+            double dWeight = 1.0;
+            SER( pUneven->GetControlPoint(SM_CP_NON_RATIONAL, 0, jj, sP0, dWeight) );
+            SER( pUneven->GetControlPoint(SM_CP_NON_RATIONAL, 3, jj, sP3, dWeight) );
+            SER( pUneven->SetControlPoint(SM_CP_NON_RATIONAL, 1, jj, sP0 + 0.1 * (sP3 - sP0), 1.0) );
+            SER( pUneven->SetControlPoint(SM_CP_NON_RATIONAL, 2, jj, sP0 + 0.2 * (sP3 - sP0), 1.0) );
+        }
+        SER( pBox->ReplaceSurface(sFaces[ii], pUneven, FALSE) );
     }
 
-    if (pBox->GetNumFaces() <= 6)
-    {
-        delete pBox;
+    SER( SmApiRemoveFillet(pBox.get()) );
+    double dVolume = 0.0;
+    SER( SmApiBrepComputeVolume(pBox.get(), 1.0e-6, dVolume) );
+    if( pBox->GetNumFaces() != 6 || std::fabs(dVolume - 1000.0) > 1.0e-2 || !pBox->IsManifoldSolid() )
         return SM_ERR;
-    }
 
-    stat = SmApiRemoveFillet(pBox);
-
-    delete pBox;
-    return stat;
+    return SM_SUCCESS;
 }
-
 
 //*************************************************************************
 // 

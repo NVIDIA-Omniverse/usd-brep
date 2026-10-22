@@ -5,7 +5,7 @@
 
 ## What It Is
 
-SMLib is a NURBS-based boundary representation (BRep) solid modeling kernel. It represents solids as collections of topological entities (shells, faces, edges, vertices) bound to exact geometric definitions (NURBS surfaces, B-spline curves, analytic primitives). This gives mathematically exact shape definitions that are resolution-independent, unlike polygon meshes.
+SMLib is a boundary representation (BRep) solid modeling kernel for NURBS and analytic geometry. It represents solids as collections of topological entities (shells, faces, edges, vertices) bound to exact geometric definitions (NURBS surfaces, B-spline curves, analytic primitives). This gives mathematically exact shape definitions that are resolution-independent, unlike polygon meshes.
 
 The library is structured in layers:
 

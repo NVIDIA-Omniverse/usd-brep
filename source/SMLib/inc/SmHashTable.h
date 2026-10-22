@@ -1799,8 +1799,8 @@ SmBoolean bOk      = TRUE ; SM_REF1(bOk) ;
           if(   pBucketItem->GetItem()   != NULL
              && pBucketItem->GetItemId() != SM_UNDEF_ULONG)
             {
-              // set the pointer value for the new array
-              pBucketItem->SetItem(&m_sPointItems.GetAt(pBucketItem->GetItemId())) ;
+              // set the pointer value for the new array - m_sPointItems still holds the old array here
+              pBucketItem->SetItem(&pNewPointItemData[pBucketItem->GetItemId()]) ;
             } // end NextItem NotNULL check
         } // end iter every BucketItem
 
@@ -2393,8 +2393,6 @@ inline void SmObjsInVoxels<TYPE>::FindCoincidentPairs
     {
       // locals - search beg
       SmBucketItem<SmPointItem<TYPE>*> * pBegBucketItem = pUsedBucket ;
-      SmPointItem<TYPE>                * pBegPointItem  = pBegBucketItem ? pBegBucketItem->GetItem() : NULL ;
-      SmPoint3d                        & rBegPoint      = pBegPointItem->m_sTgtPoint3d  ;
 
       // while the bucket has entries
       for(;pBegBucketItem != NULL; pBegBucketItem = pBegBucketItem->GetNextBucketItem())
@@ -2402,15 +2400,11 @@ inline void SmObjsInVoxels<TYPE>::FindCoincidentPairs
           // check state - pBegBucketItem is not a removed BucketItem
           SM_ASSERT_BREAK_MSG(pBegBucketItem->IsRemovedBucketItem() == FALSE, _T("SmObjsInVoxels<TYPE>::FindCoincidentPairs: error - found a begin RemovedBucketItem left behind in pUsedBucket")) ; 
 
-          // when asked - skip pointItems below the limitIndx (presumably they've been checked for coincidence on a previous call)
-          if(   pOptLimitIndx 
-             && pBegBucketItem->GetItemId() < *pOptLimitIndx)
-            { continue ; }
+          // locals - this beg entry's PointItem
+          SmPointItem<TYPE> * pBegPointItem = pBegBucketItem->GetItem() ;
 
           // get first pair BucketItem to compare
-          SmBucketItem<SmPointItem<TYPE>*> * pEndBucketItem = pBegBucketItem != NULL ? pBegBucketItem->GetNextBucketItem() : NULL ;
-          SmPointItem<TYPE>                * pEndPointItem  = pEndBucketItem ? pEndBucketItem->GetItem() : NULL ;
-          SmPoint3d                        & rEndPoint      = pEndPointItem->m_sTgtPoint3d  ;
+          SmBucketItem<SmPointItem<TYPE>*> * pEndBucketItem = pBegBucketItem->GetNextBucketItem() ;
 
           // while there are pairs of BucketItems in this bucket to compare
           for(;pEndBucketItem != NULL; pEndBucketItem = pEndBucketItem->GetNextBucketItem())
@@ -2418,14 +2412,20 @@ inline void SmObjsInVoxels<TYPE>::FindCoincidentPairs
               // check state - pEndBucketItem is not a removed BucketItem
               SM_ASSERT_BREAK_MSG(pEndBucketItem->IsRemovedBucketItem() == FALSE, _T("SmObjsInVoxels<TYPE>::FindCoincidentPairs: error - found a end RemovedBucketItem left behind in pUsedBucket")) ; 
 
+              // when asked - skip pairs with both pointItems below the limitIndx
+              //   (presumably they've been checked for coincidence on a previous call)
+              if(   pOptLimitIndx 
+                 && pBegBucketItem->GetItemId() < *pOptLimitIndx
+                 && pEndBucketItem->GetItemId() < *pOptLimitIndx)
+                { continue ; }
+
               // update locals
-              pEndPointItem  = pEndBucketItem->GetItem() ;
-              rEndPoint      = pEndPointItem->m_sTgtPoint3d  ;
+              SmPointItem<TYPE> * pEndPointItem = pEndBucketItem->GetItem() ;
 
               // gap and XSectTol between pairs of Vertices
               SmXSectTol3d sXSectTol3d   = pBegPointItem->m_sTgtZoneTol3d + pEndPointItem->m_sTgtZoneTol3d ;
               SmXSectTol3d sXSectTol3dSq = sXSectTol3d * sXSectTol3d ;
-              double       dGapSq        = (rBegPoint - rEndPoint).LengthSquared() ;
+              double       dGapSq        = (pBegPointItem->m_sTgtPoint3d - pEndPointItem->m_sTgtPoint3d).LengthSquared() ;
 
               // when asked, make a histogram of all gaps within common buckets
               if(pOptHistogram)

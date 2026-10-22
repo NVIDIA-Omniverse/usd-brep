@@ -19,6 +19,8 @@
 #include <SmApiPrimitives.h>
 #include <SmApiBrep.h>
 #include <SmApiUsd.h>
+#include <SmApiUsdGeometryValidate.h>
+#include <SmApiUsdHeal.h>
 #include <SmApiUsdTessellate.h>
 #include <SmApiGeneral.h>
 #include <UsdBrepTokens.h>
@@ -652,6 +654,155 @@ static SmStatus TestTessellateBrepArray()
 }
 
 //*************************************************************************
+// TestHealBrepArray
+//   SmApiUsdHeal.h: find sites, heal, and write on an open stage.
+//*************************************************************************
+static SmStatus TestHealBrepArray()
+{
+    // Two boxes in one BrepArray at /World/Brep0, instanced twice by internal reference.
+    std::vector<SmBrep*> boxes(2, nullptr);
+    SER(SmApiCreateBox(SmVector3d(0.0, 0.0, 0.0), 10.0, 10.0, 10.0, boxes[0]));
+    SER(SmApiCreateBox(SmVector3d(20.0, 0.0, 0.0), 10.0, 10.0, 10.0, boxes[1]));
+    const std::string sFilename = kOutputDir + "test_heal_brep_array.usda";
+    SmStatus stat = SmApiUsdExportBreps(sFilename.c_str(), boxes, TRUE);
+    DeleteImportedBreps(boxes);
+    SER(stat);
+    pxr::UsdStageRefPtr stage = pxr::UsdStage::Open(sFilename);
+    if (!stage)
+        return SM_ERR;
+    for (const char* pName : { "/A", "/B" })
+    {
+        pxr::UsdPrim instance = stage->DefinePrim(pxr::SdfPath(pName), pxr::TfToken("Xform"));
+        if (!instance.GetReferences().AddInternalReference(pxr::SdfPath("/World")) || !instance.SetInstanceable(true))
+            return SM_ERR;
+    }
+    const pxr::SdfPath sPath("/World/Brep0");
+    const pxr::VtValue sHealedSource(std::string("SMLib"));
+
+    std::vector<SmApiUsdBrepArraySite> sites;
+    SER(SmApiUsdFindBrepArraySites(stage, sites));
+    if (sites.size() != 1 || sites[0].m_sLayer != stage->GetRootLayer() || sites[0].m_sSpecPath != sPath
+        || !sites[0].m_sProblem.empty()
+        || sites[0].m_sPrimPaths != std::vector<pxr::SdfPath>{ sPath, pxr::SdfPath("/A/Brep0"), pxr::SdfPath("/B/Brep0") })
+        return SM_ERR;
+
+    SmApiUsdHealedBrepArray healed;
+    SER(SmApiUsdHealBrepArray(stage->GetPrimAtPath(sPath), healed));
+    if (healed.m_lBrepCount != 2 || !healed.m_pArrays || stage->GetPrimAtPath(sPath).GetCustomDataByKey(pxr::TfToken("source")) == sHealedSource)
+        return SM_ERR;
+
+    // Defined in a sublayer: refused, writing nothing, with the root layer as the edit target,
+    // which does not hold the geometry, and with the sublayer, which is not the root layer.
+    std::string sMessage;
+    pxr::UsdStageRefPtr layered = pxr::UsdStage::CreateInMemory();
+    layered->GetRootLayer()->InsertSubLayerPath(stage->GetRootLayer()->GetIdentifier());
+    SmApiUsdHealedBrepArray healedInSublayer;
+    SER(SmApiUsdHealBrepArray(layered->GetPrimAtPath(sPath), healedInSublayer));
+    if (SmApiUsdWriteHealedBrepArray(healedInSublayer, layered, sMessage) != SM_ERR_INVALID_INPUT
+        || sMessage.find("not authored only at its spec") == std::string::npos || layered->GetRootLayer()->GetPrimAtPath(sPath))
+        return SM_ERR;
+    layered->SetEditTarget(pxr::UsdEditTarget(stage->GetRootLayer()));
+    if (SmApiUsdWriteHealedBrepArray(healedInSublayer, layered, sMessage) != SM_ERR_INVALID_INPUT
+        || sMessage.find("root layer") == std::string::npos
+        || !stage->GetRootLayer()->GetAttributeAtPath(sPath.AppendProperty(pxr::TfToken("brep:regionCount"))))
+        return SM_ERR;
+
+    // Written at the definition, which the instances share.
+    SER(SmApiUsdWriteHealedBrepArray(healed, stage, sMessage));
+    for (const char* pPath : { "/World/Brep0", "/A/Brep0", "/B/Brep0" })
+        if (stage->GetPrimAtPath(pxr::SdfPath(pPath)).GetCustomDataByKey(pxr::TfToken("source")) != sHealedSource)
+            return SM_ERR;
+
+    // An internal reference that overrides the geometry in the same layer makes both specs unhealable.
+    if (!stage->GetPrimAtPath(pxr::SdfPath("/A")).SetInstanceable(false)
+        || !stage->OverridePrim(pxr::SdfPath("/A/Brep0"))
+                .CreateAttribute(pxr::TfToken("brep:regionCount"), pxr::SdfValueTypeNames->UIntArray)
+                .Set(pxr::VtArray<unsigned int>{ 2, 2 }))
+        return SM_ERR;
+    SER(SmApiUsdFindBrepArraySites(stage, sites));
+    if (sites.size() != 2 || sites[0].m_sProblem.find("prim specs") == std::string::npos || sites[1].m_sProblem != sites[0].m_sProblem)
+        return SM_ERR;
+
+    // A BrepArray that fails to heal.
+    const std::string sMixedFilename = kOutputDir + "test_heal_brep_array_mixed.usda";
+    SER(CreateMixedValidAndConversionInvalidUsd(sMixedFilename));
+    pxr::UsdStageRefPtr mixedStage = pxr::UsdStage::Open(sMixedFilename);
+    if (!mixedStage || SmApiUsdHealBrepArray(mixedStage->GetPrimAtPath(sPath), healed) == SM_SUCCESS
+        || healed.m_sMessage.empty() || healed.m_pArrays)
+        return SM_ERR;
+    if (SmApiUsdWriteHealedBrepArray(healed, mixedStage, sMessage) != SM_ERR_INVALID_INPUT || sMessage.find("not healed") == std::string::npos)
+        return SM_ERR;
+    if (SmApiUsdWriteHealedBrepArray(healed, pxr::UsdStagePtr(), sMessage) != SM_ERR_NULL_POINTER || sMessage.empty())
+        return SM_ERR;
+
+    // A session layer override of the material binding is not written into the root layer.
+    pxr::UsdStageRefPtr boundStage = pxr::UsdStage::Open(pxr::SdfLayer::OpenAsAnonymous(sFilename));
+    if (!boundStage)
+        return SM_ERR;
+    const pxr::SdfPath sRed("/Red"), sBlue("/Blue");
+    const pxr::TfToken sBinding("material:binding");
+    boundStage->DefinePrim(sRed, pxr::TfToken("Material"));
+    boundStage->DefinePrim(sBlue, pxr::TfToken("Material"));
+    pxr::UsdPrim bound = boundStage->GetPrimAtPath(sPath);
+    if (!bound.CreateRelationship(sBinding, false).SetTargets({ sRed }))
+        return SM_ERR;
+    boundStage->SetEditTarget(pxr::UsdEditTarget(boundStage->GetSessionLayer()));
+    if (!bound.CreateRelationship(sBinding, false).SetTargets({ sBlue }))
+        return SM_ERR;
+    boundStage->SetEditTarget(pxr::UsdEditTarget(boundStage->GetRootLayer()));
+    SER(SmApiUsdHealBrepArray(bound, healed));
+    if (SmApiUsdWriteHealedBrepArray(healed, boundStage, sMessage) != SM_ERR_INVALID_INPUT
+        || sMessage.find("material:binding") == std::string::npos)
+        return SM_ERR;
+    pxr::SdfPathVector sTargets;
+    auto rootBinding = boundStage->GetRootLayer()->GetRelationshipAtPath(sPath.AppendProperty(sBinding));
+    if (!rootBinding || rootBinding->GetTargetPathList().GetExplicitItems() != pxr::SdfPathVector{ sRed }
+        || !bound.GetRelationship(sBinding).GetTargets(&sTargets) || sTargets != pxr::SdfPathVector{ sBlue })
+        return SM_ERR;
+
+    return SM_SUCCESS;
+}
+
+//*************************************************************************
+// TestGeometryValidate
+//   SmApiUsdGeometryValidate.h: a valid prim, a prim that fails checks, and import failures.
+//*************************************************************************
+static SmStatus TestGeometryValidate()
+{
+    const std::string sDir = "../../TestFiles/brep_validator/";
+    const pxr::SdfPath sPath("/World/brepArray");
+    SmApiUsdGeometryResult result;
+
+    pxr::UsdStageRefPtr cube = pxr::UsdStage::Open(sDir + "CubeBrepArray.usda");
+    if (!cube)
+        return SM_ERR;
+    SER(SmApiUsdGeometryValidate(cube->GetPrimAtPath(sPath), 2, result));
+    if (result.m_lBrepCount != 2 || result.m_lInvalidBreps != 0 || !result.m_sFailures.empty())
+        return SM_ERR;
+    if (SmApiUsdGeometryValidate(cube->GetPrimAtPath(sPath), 3, result) != SM_ERR_INVALID_INPUT)
+        return SM_ERR;
+
+    // Without the healer, an inverted U range fails the face checks.
+    pxr::UsdStageRefPtr badRange = pxr::UsdStage::Open(sDir + "Test_BA_155_Invalid_U_range_order.usda");
+    if (!badRange)
+        return SM_ERR;
+    SER(SmApiUsdGeometryValidate(badRange->GetPrimAtPath(sPath), 2, result));
+    if (result.m_lBrepCount != 2 || result.m_lInvalidBreps != 1 || result.m_sFailures.empty()
+        || result.m_sFailures[0].m_lBrep != 0 || result.m_sFailures[0].m_sOwner != "SmFace"
+        || result.m_sFailures[0].m_sCheck != "UV Domain" || result.m_sFailures[0].m_sDetail.empty())
+        return SM_ERR;
+
+    const std::string sMixedFilename = kOutputDir + "test_geometry_validate_mixed.usda";
+    SER(CreateMixedValidAndConversionInvalidUsd(sMixedFilename));
+    pxr::UsdStageRefPtr mixed = pxr::UsdStage::Open(sMixedFilename);
+    if (!mixed || SmApiUsdGeometryValidate(mixed->GetPrimAtPath(pxr::SdfPath("/World/Brep0")), 2, result) != SM_ERR
+        || result.m_sMessage.rfind("import failed, status=", 0) != 0 || result.m_lBrepCount != 0)
+        return SM_ERR;
+
+    return SM_SUCCESS;
+}
+
+//*************************************************************************
 // TestSmApiUsdExportBrep
 //   Create a single sphere, export it to USD, verify file was written.
 //*************************************************************************
@@ -665,6 +816,8 @@ SmStatus TestSmApiUsdExportBrep()
     SER(TestSourceOwnedMaterialFallback());
     SER(TestEmptyMeshExtraction());
     SER(TestTessellateBrepArray());
+    SER(TestHealBrepArray());
+    SER(TestGeometryValidate());
 
     SmVector3d sPosition(0.0, 0.0, 0.0);
     SmBrep* pSphere = NULL;
