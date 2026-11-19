@@ -62,6 +62,7 @@ PT_EXPORT SmStatus my_test_time(void);
 PT_EXPORT SmStatus my_test_polynomial(void);
 
 PT_EXPORT SmStatus my_test_curve_properties(void);
+PT_EXPORT SmStatus my_test_projected_curve_rotation_axes(void);
 PT_EXPORT SmStatus my_test_crv_angle_min(void);
 PT_EXPORT SmStatus my_test_crv_directed_max(void);    
 PT_EXPORT SmStatus my_test_crv_directed_min(void);    

@@ -1120,6 +1120,10 @@ NL_FLAG N_CreateEllipticalArcAngTypeTol( NL_POINT C, NL_VECTOR X, NL_VECTOR Y, N
     fac = r1 / r2;
     omf = 1.0 - fac;
 
+    /* Reject unset (+-1e20), non-finite or absurd angles: the 360 wrapping below cannot terminate on them */
+    if( !( fabs( as ) LE 1.0e6 ) OR !( fabs( ae ) LE 1.0e6 ) )
+        NL_ERROR( NL_INP_ERR );
+
     /* Get start and end points */
     while( ae LE as )
         ae = 360.0 + ae;

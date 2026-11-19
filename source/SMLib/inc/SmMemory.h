@@ -197,12 +197,8 @@ struct SmAllocator
 
   T* allocate(std::size_t n)
   {
-//#ifdef SM_USE_EXCEPTIONS // following was removed to satisfy compiler for Alias connector.
-//      #undef max
-//      if (n > std::numeric_limits<std::size_t>::max() / sizeof(T))
-//          throw std::bad_array_new_length();
-//#endif
-      auto p = static_cast<T*>(smos_Malloc(n * sizeof(T)));
+      // An n whose size overflows fails like an allocation failure.
+      auto p = n > SIZE_MAX / sizeof(T) ? nullptr : static_cast<T*>(smos_Malloc(n * sizeof(T)));
 
       if (!p)
       {

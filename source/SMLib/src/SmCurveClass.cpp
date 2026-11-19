@@ -11325,83 +11325,6 @@ ULONG SmCurveClassification::FindVertexObjects
 } // end SmCurveClassification::FindVertexObjects
 
 /*******************************************************************//**
-PURPOSE: Find which periodic sides an edgeuse occupies from its connected curves.
-
-NOTES: Follow both ends through segmented seam edges until a curve leaves the
-       seam. This uses geometry and connectivity, independently of loop winding
-       and optional UV trims. A loop entirely on the seam has no geometric anchor;
-       its directed edgeuse then defines the occupied side.
-***********************************************************************/
-static SmStatus sm_FindEdgeuseSeamSides
- (SmEdgeuse      *pEdgeuse,    // in : boundary occurrence on the upward faceuse
-  double          dParameter,  // in : parameter of the encounter on its edge
-  SmSurface      *pSurface,    // in : supporting surface
-  SmSurfParamType eDirection,  // in : periodic parameter being crossed
-  double          dTolerance,  // in : 3D distance below which a sample stays on the seam
-  ULONG          &rlSides)     // out: bit 1 = minimum side, bit 2 = maximum side; zero = unanchored
-{
-  rlSides = 0;
-  SmExtent2d   sDomain        = pSurface->GetNaturalUVDomain();
-  const ULONG  lSampleCount   = 6;
-  const double adFractions[lSampleCount] = { 1e-4, 1e-3, 1e-2, .1, .5, .9 };
-  // Start close to the encounter, then look farther along a coincident run.
-  // Use a 3D seam neighborhood rather than a UV tolerance near a pole.
-  for(ULONG lDirection=0; lDirection<2; ++lDirection)
-    {
-      SmEdgeuse      *pCurrent = pEdgeuse;
-      SmBoolean       bFound   = FALSE;
-      SmPoint2d       sUVGuess;
-      const SmPoint2d *pUVGuess = NULL;
-      do
-        {
-          SmEdge    *pEdge       = pCurrent->GetEdge();
-          SmCurve   *pCurve      = pEdge->GetCurve();
-          SmExtent1d sInterval   = pEdge->GetInterval();
-          SmBoolean  bIncreasing = (pCurrent->GetOrientation() == SM_OT_SAME) == (lDirection == 0);
-          double     dStart = pCurrent == pEdgeuse ? dParameter
-                           : bIncreasing ? sInterval.GetMin() : sInterval.GetMax();
-          double     dEnd = bIncreasing ? sInterval.GetMax() : sInterval.GetMin();
-          for(ULONG lSample=0; dStart != dEnd && lSample<lSampleCount; ++lSample)
-            {
-              SmPoint3d sPoint, sSeamPoint, sSurfacePoint;
-              SmPoint2d sUV;
-              SmBoolean bSuccess, bMultiple;
-              double    dGap;
-              SER(pCurve->EvaluatePoint(dStart+adFractions[lSample]*(dEnd-dStart),sPoint));
-              SER(pSurface->DropPoint
-                (sPoint,      // in : connected boundary sample
-                 sDomain,     // in : full surface domain
-                 pUVGuess,    // in : previous successful sample, if available
-                 bSuccess,    // out: projection succeeded
-                 sUV,         // out: projected sample
-                 dGap,        // out: distance to surface
-                 bMultiple)); // out: multiple projection locations
-              if(!bSuccess) { return SM_ERR; }
-              sUVGuess = sUV;
-              pUVGuess = &sUVGuess;
-              SmPoint2d sSeamUV = sUV;
-              if(eDirection == SM_SP_U) { sSeamUV.x = sDomain.GetUMin(); }
-              else                     { sSeamUV.y = sDomain.GetVMin(); }
-              SER(pSurface->EvaluatePoint(sSeamUV,sSeamPoint));
-              SER(pSurface->EvaluatePoint(sUV,sSurfacePoint));
-              if(sSurfacePoint.DistanceBetween(sSeamPoint) <= dTolerance) { continue; }
-              double dPosition = eDirection == SM_SP_U ? sUV.x : sUV.y;
-              double dMiddle   = eDirection == SM_SP_U ? .5*(sDomain.GetUMin()+sDomain.GetUMax())
-                                                      : .5*(sDomain.GetVMin()+sDomain.GetVMax());
-              rlSides |= dPosition < dMiddle ? 1UL : 2UL;
-              bFound = TRUE;
-              break;
-            }
-          if(bFound) { break; }
-          pCurrent = lDirection == 0 ? pCurrent->GetCCWEdgeuse() : pCurrent->GetCWEdgeuse();
-          NER(pCurrent);
-        }
-      while(pCurrent != pEdgeuse);
-    }
-  return SM_SUCCESS;
-}
-
-/*******************************************************************//**
 PURPOSE: Distinguish a seam boundary occurrence from its unused periodic image.
 
 NOTES: Preserve the point classification and loop association even when the
@@ -11508,16 +11431,16 @@ static SmStatus sm_ClassifySeamEdgeuse
           double dCoordinate = lDirection == 0 ? sUV.x : sUV.y;
           double dMiddle     = lDirection == 0 ? .5*(sDomain.GetUMin()+sDomain.GetUMax())
                                               : .5*(sDomain.GetVMin()+sDomain.GetVMax());
-          ULONG  lWantedSide = dCoordinate < dMiddle ? 1UL : 2UL;
-          ULONG  lSides;
-          SER(sm_FindEdgeuseSeamSides
-            (pUse,              // in : connected boundary occurrence
-             sParameters[lUse], // in : encounter parameter on its edge
-             pSurface,          // in : supporting surface
+          SmSeamSideType eWantedSide = dCoordinate < dMiddle ? SM_SEAM_SIDE_MIN : SM_SEAM_SIDE_MAX;
+          SmSeamSideType eForwardSide,eBackwardSide;
+          SER(pUse->FindSeamSides
+            (sParameters[lUse], // in : encounter parameter on this edge
              eDirection,        // in : periodic parameter being crossed
              sTolerance,        // in : 3D seam neighborhood
-             lSides));          // out: occupied UV sides
-          if(lSides == 0)
+             TRUE,              // in : use stored directions, otherwise match connected endpoints
+             eForwardSide,      // out: evidence toward the CCW edgeuse
+             eBackwardSide));   // out: evidence toward the CW edgeuse
+          if(eForwardSide == SM_SEAM_SIDE_ON && eBackwardSide == SM_SEAM_SIDE_ON)
             {
               // An entire seam loop has no off-seam anchor; its left side is
               // defined by the directed edgeuse. Retain tangential encounters.
@@ -11530,7 +11453,7 @@ static SmStatus sm_ClassifySeamEdgeuse
               bBounds = dSide >= 0.0;
             }
           else
-            { bBounds = (lSides & lWantedSide) != 0; }
+            { bBounds = eForwardSide == eWantedSide || eBackwardSide == eWantedSide; }
         }
       if(bBounds) { return SM_SUCCESS; }
     }

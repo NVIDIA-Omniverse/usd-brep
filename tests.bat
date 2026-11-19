@@ -157,7 +157,7 @@ set rtn=1
 )
 :occt_done
 
-ECHO Run brep_validator Python unittests
+ECHO Run brep_usdschema_validator Python unittests
 cd "%start_dir%"
 :: usd-validation-nvidia is pure Python. Install it into _build\pydeps, not into the
 :: interpreter, which can be a link into a shared packman cache. The folder is named
@@ -169,19 +169,19 @@ call "_build\target-deps\python\python.exe" -m pip install --quiet --disable-pip
 if errorlevel 1 (
 ECHO Installing usd-validation-nvidia failed
 set rtn=1
-goto brep_validator_done
+goto brep_usdschema_validator_done
 )
 )
 set "PYTHONPATH=%pydeps%;%PYTHONPATH%"
 :: Kept out of ( ) blocks: there cmd would read ERRORLEVEL before the call runs.
-call "_build\target-deps\python\python.exe" -m unittest discover -s tools\brep_validator_test -p "test_*.py"
-ECHO Error level after brep_validator Python unittests:  %ERRORLEVEL%
+call "_build\target-deps\python\python.exe" -m unittest discover -s tools\brep_usdschema_validator_test -p "test_*.py"
+ECHO Error level after brep_usdschema_validator Python unittests:  %ERRORLEVEL%
 if %ERRORLEVEL% == 0 (
-ECHO brep_validator Python unittests passed
+ECHO brep_usdschema_validator Python unittests passed
 ) else (
-ECHO brep_validator Python unittests failed
+ECHO brep_usdschema_validator Python unittests failed
 set rtn=1
 )
-:brep_validator_done
+:brep_usdschema_validator_done
 
 exit /B %rtn%

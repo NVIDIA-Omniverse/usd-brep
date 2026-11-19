@@ -467,14 +467,14 @@ SMU_EXPORT SmStatus SMU_BrepConvert::PopulateMeshAttr
     SdfChangeBlock changeBlock;
 
     // set attributes all meshes have
-    pxr::SdfAttributeSpecHandle extentAttr = UsdBrepData::setAttributeSpec(rPrimSpecHandle, UsdGeomTokens->extent,              SdfValueTypeNames->Vector3fArray, VtValue(crExtent));
+    pxr::SdfAttributeSpecHandle extentAttr = UsdBrepData::setAttributeSpec(rPrimSpecHandle, UsdGeomTokens->extent,              SdfValueTypeNames->Float3Array,    VtValue(crExtent));
     if (!extentAttr)
     {
         std::string sstring = "Error: Failed to set extent attribute on mesh\n";
         usdBrep_WriteString(sstring);
     }
     
-    pxr::SdfAttributeSpecHandle pointsAttr = UsdBrepData::setAttributeSpec(rPrimSpecHandle, UsdGeomTokens->points,              SdfValueTypeNames->Vector3fArray, VtValue(crPoints));
+    pxr::SdfAttributeSpecHandle pointsAttr = UsdBrepData::setAttributeSpec(rPrimSpecHandle, UsdGeomTokens->points,              SdfValueTypeNames->Point3fArray,   VtValue(crPoints));
     if (!pointsAttr)
     {
         std::string sstring = "Error: Failed to set points attribute on mesh\n";

@@ -4,7 +4,7 @@
 """Regression tests for the standalone OCCT `.brep` -> USD BrepArray converter (`occt_to_usd`).
 
 Runs the `occt_to_usd` CLI on a corpus of `.brep` fixtures, then validates each emitted BrepArray
-with the same `BrepValidator` the `brep_validator_test` suite uses, asserting zero failed checks.
+with the same `BrepUsdSchemaValidator` the `brep_usdschema_validator_test` suite uses, asserting zero failed checks.
 
 The committed corpus additionally runs a SMLib round-trip self-consistency check: each emitted
 BrepArray is re-imported into an `SmBrep` and run through `AssertValid` (via
@@ -23,7 +23,7 @@ Two suites keep shareable and unshareable data isolated:
     ``TestFiles/occt_breps_external`` directory (or wherever ``OCCT_BREP_EXTERNAL_DIR`` points), so
     they are never committed. The suite skips when no such files are present.
 
-The USD-runtime bootstrap and the `BrepValidator` itself are reused from the `brep_validator_test`
+The USD-runtime bootstrap and the `BrepUsdSchemaValidator` itself are reused from the `brep_usdschema_validator_test`
 harness (its ``utils.base_test_case``).
 """
 
@@ -38,14 +38,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# Reuse the brep_validator test harness: it bootstraps the USD runtime, installs
-# usd-validation-nvidia, and exposes BrepValidatorBaseTestCase (with _collect_issues).
+# Reuse the brep_usdschema_validator test harness: it bootstraps the USD runtime, installs
+# usd-validation-nvidia, and exposes BrepUsdSchemaValidatorBaseTestCase (with _collect_issues).
 _THIS_DIR = Path(__file__).resolve().parent
-_VALIDATOR_TEST_DIR = _THIS_DIR.parent / "brep_validator_test"
+_VALIDATOR_TEST_DIR = _THIS_DIR.parent / "brep_usdschema_validator_test"
 if str(_VALIDATOR_TEST_DIR) not in sys.path:
     sys.path.insert(0, str(_VALIDATOR_TEST_DIR))
 
-from utils.base_test_case import REPO_ROOT, BrepValidatorBaseTestCase  # noqa: E402
+from utils.base_test_case import REPO_ROOT, BrepUsdSchemaValidatorBaseTestCase  # noqa: E402
 from pxr import Gf, Usd  # noqa: E402
 
 
@@ -131,7 +131,7 @@ def _usd_test_app_path() -> Path:
     return _built_binary("usd_test_app", "USD_TEST_APP")
 
 
-class _OcctBrepConvertMixin(BrepValidatorBaseTestCase):
+class _OcctBrepConvertMixin(BrepUsdSchemaValidatorBaseTestCase):
     """Shared convert + validate machinery; concrete suites supply the input directory."""
 
     inputs_dir: Path = None
@@ -179,13 +179,13 @@ class _OcctBrepConvertMixin(BrepValidatorBaseTestCase):
         return out_path
 
     def _validate_schema(self, out_path: Path, brep_path: Path):
-        """USD-level validation: run BrepValidator on the emitted BrepArray."""
+        """USD-level validation: run BrepUsdSchemaValidator on the emitted BrepArray."""
         issues = self._collect_issues(out_path)
         if issues:
             detail = "; ".join(
                 f"{getattr(getattr(i, 'requirement', None), 'code', '?')}: {getattr(i, 'message', i)}" for i in issues
             )
-            self.fail(f"BrepValidator reported {len(issues)} failed check(s) for {brep_path.name}: {detail}")
+            self.fail(f"BrepUsdSchemaValidator reported {len(issues)} failed check(s) for {brep_path.name}: {detail}")
 
     def _assert_valid_ranges(self, out_path: Path, brep_path: Path):
         """Importer-authored ranges must be finite, non-empty, and bounded for line edges."""

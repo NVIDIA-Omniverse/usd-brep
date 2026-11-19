@@ -267,11 +267,33 @@ SmStatus SmApiUsdTessellateFile
 
     pxr::UsdPrim outputParent = stage->GetDefaultPrim();
     if (!outputParent.IsValid())
-        outputParent = stage->DefinePrim(pxr::SdfPath("/Output"));
+    {
+        // Follow USD Exchange's explicit-root approach: keep the chosen name and any existing type.
+        // A new root is an Xform so the generated meshes can be placed together.
+        outputParent = stage->GetPrimAtPath(pxr::SdfPath("/World"));
+        if (!outputParent.IsValid())
+            outputParent = stage->DefinePrim(pxr::SdfPath("/World"), pxr::TfToken("Xform"));
+    }
+    if (!outputParent.IsValid())
+        return SM_ERR;
+
     // Mesh transform = Brep world transform relative to outputParent.
-    pxr::UsdGeomXformCache xformCache;
-    double dParentDet = 0.0;
-    const pxr::GfMatrix4d sParentFromWorld = xformCache.GetLocalToWorldTransform(outputParent).GetInverse(&dParentDet);
+    pxr::UsdGeomXformCache        sXformCache;
+    double                       dParentDet = 0.0;
+    const pxr::GfMatrix4d         sParentFromWorld = sXformCache.GetLocalToWorldTransform(outputParent).GetInverse(&dParentDet);
+    const pxr::UsdGeomImageable   sParentImageable(outputParent);
+    const pxr::TfToken            sParentVisibility = sParentImageable ? sParentImageable.ComputeVisibility() : pxr::UsdGeomTokens->inherited;
+    const pxr::TfToken            sParentPurpose = sParentImageable ? sParentImageable.ComputePurpose() : pxr::UsdGeomTokens->default_;
+    const char                  *pParentError = nullptr;
+    // Preserve an existing over or inactive/instanced prim rather than changing it to accept meshes.
+    if (!outputParent.IsDefined())
+        pParentError = "is not defined";
+    else if (!outputParent.IsActive())
+        pParentError = "is inactive";
+    else if (outputParent.IsInstance() || outputParent.IsInstanceProxy())
+        pParentError = "is an instance or instance proxy";
+    else if (dParentDet == 0.0)
+        pParentError = "has a singular transform";
 
     // Tessellate a batch of prims in parallel (each call reads the stage and uses its own
     // context), then author the batch serially so no stage writes overlap the reads.
@@ -322,17 +344,23 @@ SmStatus SmApiUsdTessellateFile
                     rResult.m_sMessage = brep.m_sMessage;
                     continue;
                 }
-                if (dParentDet == 0.0) // a singular parent cannot hold a mesh at its Brep's place
+                // Inherited state is safe when it agrees with the source Brep, including hidden guide assets.
+                const char *pPlacementError = pParentError;
+                if (!pPlacementError && sParentVisibility == pxr::UsdGeomTokens->invisible && visibility != pxr::UsdGeomTokens->invisible)
+                    pPlacementError = "would hide the mesh";
+                if (!pPlacementError && sParentPurpose != pxr::UsdGeomTokens->default_ && purpose == pxr::UsdGeomTokens->default_)
+                    pPlacementError = "would change the mesh purpose";
+                if (pPlacementError)
                 {
                     rResult.m_sStatus = SM_ERR;
-                    rResult.m_sMessage = "Cannot place the mesh: " + outputParent.GetPath().GetString() + " has a singular transform";
+                    rResult.m_sMessage = "Cannot place the mesh: " + outputParent.GetPath().GetString() + " " + pPlacementError;
                     continue;
                 }
                 const pxr::SdfPath meshPath = sm_UnusedPath(stage, outputParent.GetPath().AppendChild(pxr::TfToken(
                     "tess_" + std::to_string(ai) + "_" + std::to_string(brep.m_iPackedBrepIndex))));
                 const pxr::UsdShadeMaterial material = brep.m_sMaterialPath.IsEmpty()
                     ? arrayMaterial : pxr::UsdShadeMaterial(stage->GetPrimAtPath(brep.m_sMaterialPath));
-                sm_AuthorMesh(stage, meshPath, xformCache.GetLocalToWorldTransform(brepArrays[ai]) * sParentFromWorld,
+                sm_AuthorMesh(stage, meshPath, sXformCache.GetLocalToWorldTransform(brepArrays[ai]) * sParentFromWorld,
                               material, visibility, purpose, brep, rResult);
                 bAnyMesh |= rResult.m_sStatus == SM_SUCCESS;
             }

@@ -1124,7 +1124,7 @@ bool BrepWriteToUsdStage(
     } // end scope: Move UsdBrepArrayData geometry object data to UsdBrepArraySpecHandle
 
     // all done
-    return (true);
+    return true;
 } // end UsdBrepData::BrepWriteToUsdStage
 
 } // end namespace UsdBrepData

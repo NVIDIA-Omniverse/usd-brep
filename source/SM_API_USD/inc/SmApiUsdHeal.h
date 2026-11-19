@@ -10,6 +10,7 @@
 #ifndef _SM_API_USD_HEAL_H_
 #define _SM_API_USD_HEAL_H_
 
+#include "SmApiUsdBrepArraySites.h"
 #include "SmApiUsdConfig.h"
 #include <SmMessages.h>
 
@@ -28,23 +29,6 @@ namespace UsdBrepData
 {
 class UsdBrepArrayData;
 }
-
-/// A prim spec that defines BrepArray geometry. Healing it heals every prim that uses it.
-struct SmApiUsdBrepArraySite
-{
-    pxr::SdfLayerHandle        m_sLayer;      ///< layer that holds the spec
-    pxr::SdfPath               m_sSpecPath;   ///< path of the spec in m_sLayer
-    std::vector<pxr::SdfPath>  m_sPrimPaths;  ///< BrepArray prims that use it, including instance proxies
-    std::string                m_sProblem;    ///< why it cannot be healed in place; empty if it can
-};
-
-/// Find the specs that define the stage's BrepArray prims, and why any cannot be healed in place.
-/// @return SM_SUCCESS; SM_ERR_NULL_POINTER for a null stage
-SM_API_USD_EXPORT SmStatus SmApiUsdFindBrepArraySites
-(
-    const pxr::UsdStagePtr                  & crStage,
-    std::vector<SmApiUsdBrepArraySite>      & rSites
-);
 
 /// The healed geometry of one BrepArray.
 struct SmApiUsdHealedBrepArray

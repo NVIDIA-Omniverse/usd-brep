@@ -16,7 +16,7 @@ class TestBrepGeometryValidator(unittest.TestCase):
     def setUpClass(cls):
         cls.binary = os.environ["BREP_GEOMETRY_VALIDATOR"]
         cls.repo = Path(__file__).resolve().parents[3]
-        cls.cube = cls.repo / "TestFiles/brep_validator/CubeBrepArray.usda"
+        cls.cube = cls.repo / "TestFiles/usd_validator_TestFiles/CubeBrepArray.usda"
 
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -49,7 +49,7 @@ class TestBrepGeometryValidator(unittest.TestCase):
 
     def test_checks_breps_unhealed(self):
         # Healing on import repairs this file's reversed edge range, so it would pass.
-        result = self.run_validator(self.repo / "TestFiles/brep_validator/Test_BA_235_Invalid_edge_range_order.usda")
+        result = self.run_validator(self.repo / "TestFiles/usd_validator_TestFiles/Test_BA_235_Invalid_edge_range_order.usda")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("breps=2 invalid=1 ", result.stdout)
 
@@ -198,7 +198,7 @@ class TestBrepGeometryValidator(unittest.TestCase):
         for index in range(64):
             prim = stage.DefinePrim(f"/P{index}")
             prim.GetReferences().AddReference(
-                str(self.repo / f"TestFiles/brep_validator/{names[index % len(names)]}.usda"), Sdf.Path("/World"))
+                str(self.repo / f"TestFiles/usd_validator_TestFiles/{names[index % len(names)]}.usda"), Sdf.Path("/World"))
         stage.GetRootLayer().Save()
 
         def run(workers):

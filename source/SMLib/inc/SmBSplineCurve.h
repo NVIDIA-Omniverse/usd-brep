@@ -92,7 +92,8 @@ public:
   // Std Constructor, copies gw_CURVE NURB object
   SmBSplineCurve(ULONG lDim, const gw_CURVE* cpGwNurb) ;
   
-  // Copy Constructor
+  // Copy Constructor, also used by Copy(). Not always exact: the copy may be healed so that
+  // it is safer for downstream kernel use.
   SmBSplineCurve(const SmBSplineCurve & crSourceCurve) ;
   
   // destructor
@@ -769,6 +770,8 @@ public:
   SmStatus Scale(double dScaleFactor) ;           
   SmStatus Scale(SmVector3d& rScaleVec, SmPoint3d& rScaleCenter) ;
   
+  // Heals knots that the scaling brings within tolerance of each other; spans shorter than that are merged,
+  // which can change the shape of the curve.
   SmStatus ScaleKnotVector(double dIntervalMin,    ///< [out]:                                    <br>
                            double dIntervalMax) ;  ///< [out]: scale knots to fit given interval  <br>
   

@@ -179,9 +179,9 @@ SmCrvOnSurf::SmCrvOnSurf
 PURPOSE: Copy constructor for SmCrvOnSurf object.
 
 NOTES: The constructed object will make deep copies of both the target
-  curve's m_pUVCurve and m_pSurface when ever the target curve being copied
-  owns either.  When the target curve just has an unowned reference to either
-  then an unowned reference will be placed in the constructed object.
+  curve's m_pUVCurve and m_pSurface, and own both copies, when ever the
+  target curve being copied owns either.  When the target curve owns
+  neither, the constructed object references the same unowned objects.
 ***********************************************************************/
 SmCrvOnSurf::SmCrvOnSurf
   (const SmCrvOnSurf & crCurveToCopy)
@@ -212,7 +212,7 @@ SmCrvOnSurf::SmCrvOnSurf
       m_pUVCurve->SetOwner(this) ;
     }
 
-  // copy Surface when its owned by this object
+  // copy Surface when the source owns the curve or the surface
   if (bTargetOwnsCurve || bTargetOwnsSurface) 
     {
       const SmContext * pContext = GetContext();
@@ -224,10 +224,8 @@ SmCrvOnSurf::SmCrvOnSurf
       m_pSurface->SetOwner(this) ;
     }
 
-  // set the owner flag
-  m_lOwnerFlag =   (bTargetOwnsCurve == TRUE && bTargetOwnsSurface == TRUE) ? 2
-                 : (bTargetOwnsCurve == TRUE) ? 1
-                 : 0 ;
+  // set the owner flag - this object owns both copies made above
+  m_lOwnerFlag = (bTargetOwnsCurve || bTargetOwnsSurface) ? 2 : 0 ;
 
   // copy curve discontinuity break points when appropriate
   if(m_bNeedBreaks == FALSE) 

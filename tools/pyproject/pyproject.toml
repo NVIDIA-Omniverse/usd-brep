@@ -25,19 +25,23 @@ requires-python = ">=3.12,<3.13"
 dependencies = []
 
 # `pip install usd-brep[validation]` adds the validator that runs the BrepArray schema
-# rules (`brep_validator`), with PyPI usd-core as its OpenUSD (the validator finds no USD
+# rules (`brep_usdschema_validator`), with PyPI usd-core as its OpenUSD (the validator finds no USD
 # without one). That OpenUSD is the validator's, not usd_brep's, so the extra is optional.
 [project.optional-dependencies]
 validation = ["usd-validation-nvidia[usd]>=1.22.0,<2"]
 
 [project.urls]
 Homepage = "https://github.com/NVIDIA-Omniverse/usd-brep"
-Documentation = "https://github.com/NVIDIA-Omniverse/usd-brep"
+Documentation = "https://nvidia-omniverse.github.io/usd-brep/"
+
+[project.scripts]
+usd-brep-heal = "usd_brep._heal_cli:main"
+usd-brep-validate-geometry = "usd_brep._validate_geometry_cli:main"
 
 # usd-validation-nvidia loads every entry in this group (the key name is arbitrary), so
-# `nvidia_usd_validate` runs BrepValidator once the `validation` extra is installed.
+# `nvidia_usd_validate` runs BrepUsdSchemaValidator once the `validation` extra is installed.
 [project.entry-points."omni.asset_validator"]
-brep_validator = "brep_validator.plugin:BrepValidatorPlugin"
+brep_usdschema_validator = "brep_usdschema_validator.plugin:BrepUsdSchemaValidatorPlugin"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -50,8 +54,9 @@ include-package-data = true
 # can import any directory, so setuptools treats them as packages too. Discover
 # them as namespace packages; listing only usd_brep warns once per folder.
 [tool.setuptools.packages.find]
-include = ["usd_brep*", "brep_validator"]
+include = ["usd_brep*", "brep_usdschema_validator"]
 namespaces = true
 
 [tool.setuptools.package-data]
 usd_brep = ["*.pyd", "*.dll", "*.so*", "*.pyi", "py.typed", "usd/**/*", "omniSolid/**/*"]
+brep_usdschema_validator = ["README.md"]

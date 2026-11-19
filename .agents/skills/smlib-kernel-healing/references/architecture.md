@@ -85,13 +85,15 @@ Diagnostic stage numbers use the operation enum values, matching completion trac
 | `Fix_TolSizes` | Adjust stored tolerances from measured gaps, in face → edge → vertex order. This is distinct from geometrically closing gaps. |
 | `Cache_CoinVertices`, `Fix_CoinVertices` | Find coincident vertex pairs and combine them. |
 | `Cache_DegenFaces`, `Fix_DegenFaces`, `Fix_DegenEdges` | Classify and remove/squeeze degenerate faces before edges; new topology needs earlier properties rebuilt. |
-| `Cache_CoinEdges`, `Fix_CoinEdges`, `Cache_MissedEdgeXSects`, `Fix_MissedEdgeXSects` | Unfinished stages. Detection is TODO; fix helpers can return error if their problem arrays are populated directly. |
+| `Cache_MissedEdgeXSects`, `Fix_MissedEdgeXSects` | Unfinished stages. Detection is TODO; fix helpers can return error if their problem arrays are populated directly. |
 | `Fix_UncontainedEdges`, `Fix_BadGaps` | The former adjusts a cached edge interval/flag without applying an edge geometry repair; the latter is a no-op. Neither establishes general gap repair. |
 | `Cache_FaceProps_Stage2` (`SM_HO_CACHE_FACEPROPS_2`) | Cache surface, periodicity, poles, and seam classifications. Record an interior boundary/pole crossing per affected face in `m_sBadFaceProps_CrossedPole`. |
 | `Fix_MoveSeam` | Try moving a periodic seam away from face boundaries, or improve its location when it must remain inside the face. |
 | `Fix_SplitEdgesAtSeam` | Consume cached pole crossings, refreshing properties after each split to find remaining crossings, then split seam crossings. Endpoint rejections are reported and skipped for the rest of this invocation, leaving their problem flags set while other candidates and seams are processed. Other split errors and refresh errors stop the stage. |
 | `Fix_BadSheets` | Repair sheet/region organization. |
-| `Cache_FaceProps_Stage3` (`SM_HO_CACHE_FACEPROPS_3`) | Build loop properties, containment/orientation information, and missing-pole/loop problem lists. |
+| `Cache_FaceProps_Stage3` (`SM_HO_CACHE_FACEPROPS_3`) | Cache individual loop facts and closed-loop count without containment. |
+| `Cache_CoinEdges`, `Fix_CoinEdges` | Run after individual loop facts and before containment. Both remain unimplemented in this foundation. |
+| `Cache_FaceProps_Stage4` (`SM_HO_CACHE_FACEPROPS_4`) | Build containment/orientation information and aggregate missing-pole/loop problem lists. |
 | `Fix_SplitFaceAtSeams` | Insert seam boundaries/split faces using classifications. |
 | `Fix_BadLoops` | Has callable implementation, but its call in `HealTgts` is commented out. Ordinary `SM_HO_ALL` does not execute it. |
 | `Make_UVTrimCurves` | Creates curves only when `bMakeUVTrimCurves` is true; default false, including the ordinary API call. |
@@ -185,7 +187,8 @@ curve/edge pointers, natural/trimmed intervals, approximate length, gaps, and de
 - **Gaps:** face identity and gap/tolerance state.
 - **Stage 2:** borrowed `m_cpSurface`, natural domain, closure, poles/flat corners, owned seam
   classifications (`m_pCrvClassU/V`), and missing/crossed/near-miss seam flags.
-- **Stage 3:** owned loop tree/properties, orientation/containment, missing poles, and loop defects.
+- **Stage 3:** individual loop properties, closed-loop count, and closure-discrepancy counts.
+- **Stage 4:** owned loop tree, orientation/containment, missing poles, and aggregate loop defects.
 
 `HasProps` checks stage/face identity, not versions of all surface, edge, or loop dependencies.
 A live property may contain stale topology pointers inside a classification after an adjacent
@@ -395,3 +398,38 @@ Paths are repository-relative. Search these symbols before expanding scope.
 | Seam geometry and loop edits | `source/SMLib/src/SmFace.cpp`: `HasSeamProblem`, `MoveSeam`; `SmBrep.cpp`: `ReplaceSurface`; `SmLoop.cpp`: `FlipLoopOrientation`; `SmPeriodicExtent1d.cpp`: `SetMinMax` |
 | Owner traversal | `source/SMLib/src/SmCurve.cpp`: `GetEdge`; `SmSurface.cpp`: `GetFace`; `SmTrackTopologyChanges.cpp`: `Execute` |
 | Regression examples | `tests/prog_test/src/smTopoTest.cpp` |
+
+### Separate individual loop facts from containment
+
+Face properties have four completed stages. Stage 3 caches individual loop
+closure, seam crossings/winding, the closed-loop count, and closure-discrepancy
+counts. Stage 4 builds
+containment and orientation and aggregates loop problems. The healer runs coincident-edge cache/fix between these stages, preparing for
+repairs that consume loop facts. Those cache/fix bodies remain unimplemented.
+Early degenerate-face handling stays in its original position. Operation enum
+values and stage diagnostics follow the new execution order.
+
+Consumers of containment require Stage 4. A failed Stage 4 request retains
+completed Stage 3 facts and retries on the next request. Resetting Stage 4 clears
+its tree and derived classifications but retains loop facts; resetting Stage 3
+clears both. Problem-mask bit 8 selects containment problems; the default mask
+15 selects all stages. Bit 4 reports individual-loop closure discrepancies,
+seam crossings, and no-area findings without requiring containment.
+`DumpProblems_Stage3` reports those findings per loop; `DumpProblems_Stage4`
+reports containment and aggregate problems. Each reports incomplete data as
+not yet evaluated instead of interpreting uninitialized counters.
+
+### Closure findings before containment
+
+Stage 3 also owns `m_lBadClosed3d_LoopCnt` and `m_lBadClosedPtr_LoopCnt`.
+These count discrepancies between geometric and pointer closure, not wire loops
+that are open in both senses. `Cache_FaceProps_Stage3` populates the corresponding
+problem arrays even when another consumer already calculated the properties.
+Registration preserves numeric counts and avoids duplicate entries.
+
+`m_bBadLoopProblems` and its problem array combine findings from Stage 3 and
+completed Stage 4. Resetting Stage 4 preserves closure counts and recomputes the
+union from Stage 3; resetting Stage 3 clears both. Stage 3 diagnostics include
+closure totals. Containment-dependent no-area, nesting, orientation, and missing
+pole reports stay in Stage 4. The healer summary and target reports expose
+closure findings from `SM_HO_CACHE_FACEPROPS_3` onward.

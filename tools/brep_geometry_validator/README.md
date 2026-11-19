@@ -8,7 +8,7 @@ each `BrepArray` prim into SMLib and runs `SmBrep::AssertValid` on every BRep, w
 for problems such as open loops, non-manifold edges and UV trim curves that leave their surface.
 Programs can run the same check on one prim with `SmApiUsdGeometryValidate` (`SmApiUsdGeometryValidate.h`, `SM_API_USD`).
 
-It complements the [USD validator](../brep_validator/README.md), which checks that the USD data
+It complements the [USD validator](../brep_usdschema_validator/README.md), which checks that the USD data
 complies with the schema. A file can pass the USD validator and still fail here.
 
 ## Usage

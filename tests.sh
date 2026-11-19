@@ -203,8 +203,8 @@ else
     echo "Skipping SmPyDevLib tests (_smlib_dev module not built)"
 fi
 
-if ensure_binary_or_handle "brep_validator Python unittests" "${PWD}/_build/${platform}/release/usd_test_app"; then
-    echo "Running brep_validator Python unittests"
+if ensure_binary_or_handle "brep_usdschema_validator Python unittests" "${PWD}/_build/${platform}/release/usd_test_app"; then
+    echo "Running brep_usdschema_validator Python unittests"
     apply_runtime_lib_path
     # usd-validation-nvidia is pure Python. Install it into _build/pydeps, not into the
     # interpreter, which can be a link into a shared packman cache. The folder is named
@@ -216,10 +216,10 @@ if ensure_binary_or_handle "brep_validator Python unittests" "${PWD}/_build/${pl
             "${validator_requirement}"
     fi
     PYTHONPATH="${pydeps}${PYTHONPATH:+:$PYTHONPATH}" \
-    "$(repo_python)" -m unittest discover -s tools/brep_validator_test -p "test_*.py"
+    "$(repo_python)" -m unittest discover -s tools/brep_usdschema_validator_test -p "test_*.py"
     status=$?
     if [ $status -ne 0 ]; then
-        echo "brep_validator Python unittests failed with exit code $status, aborting"
+        echo "brep_usdschema_validator Python unittests failed with exit code $status, aborting"
         exit $status
     fi
 fi

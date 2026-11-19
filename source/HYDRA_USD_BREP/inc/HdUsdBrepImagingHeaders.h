@@ -7,8 +7,8 @@
 // USD 25.11 imaging headers warn on MSVC (C4100 unused parameters, C4324 robin_map
 // padding) and warnings are errors, so suppress them around the pxr includes only.
 #ifdef _MSC_VER
-#    pragma warning(push)
-#    pragma warning(disable : 4100 4324)
+#pragma warning(push)
+#pragma warning(disable : 4100 4324)
 #endif
 
 // MSVC binds warning state at template definition, so core USD must be included here too.
@@ -20,7 +20,7 @@
 #include "pxr/usdImaging/usdImaging/indexProxy.h"
 
 #ifdef _MSC_VER
-#    pragma warning(pop)
+#pragma warning(pop)
 #endif
 
 #endif

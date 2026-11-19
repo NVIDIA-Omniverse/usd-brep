@@ -139,7 +139,7 @@ Conventions: points/vectors are 3-tuples; return values are opaque handles (`Bre
 **Mutation conventions:** common docstring contracts for BRep operations are listed below.
 Consult the individual operation for exceptions and ownership details:
 
-- **`Pure: returns new <type>; inputs unchanged.`** — read-only producer. Example: `offset_brep`, `shell_brep`, `create_box`, `create_sphere`, `linear_sweep`, `tessellate`.
+- **`Pure: returns new <type>; inputs unchanged.`** — read-only producer. Example: `shell_brep`, `create_box`, `create_sphere`, `linear_sweep`, `tessellate`.
 - **`Consumes: <args>; returns new Brep.`** — ownership of the named inputs transfers to the operation; use only the returned Brep afterward. The result can reuse the modified primary operand. Example: `boolean_union`, `boolean_difference`, `merge_breps`.
 - **`Mutates: <arg>; returns the same handle for chaining.`** — modifies the first argument *and* returns it, so calls compose: `box = sm.fillet_edges(sm.translate(box, (0,0,5)), edges, radius=0.5)`. Example: `fillet_edges`, `cut`, `translate`, `rotate`, `heal_brep`.
 - **`Mutates: <arg>; returns (handle, ...diagnostics) for chaining.`** — same as above plus a tuple of report values; the handle comes *first* so unpacking is forward-compatible. Example: `stitch_into_solid`, `unify_normals`.
@@ -200,6 +200,7 @@ Hard rules:
 - Single source of truth for agent docs is **`AGENTS.md`** plus **`.agents/`**.
 - When adding a new operation guide, follow the existing guide structure and link it from `.agents/operations/INDEX.md`.
 - When a change fixes a bug listed in `KNOWN_ISSUES.md`, remove its entry and add a `CHANGELOG.md` entry in the same change.
+- Add a regression test in the layer that owns the changed behaviour. A fix in `source/SMLib/` gets a `tests/prog_test` case that calls the kernel directly (see [adding tests](tests/prog_test/README.md#source-organization-and-adding-tests) for which file); do not put kernel tests in `SM_API_test` or the Python tests, which cover their own wrappers.
 
 ## Repo-Local Skills
 

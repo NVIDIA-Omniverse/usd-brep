@@ -601,7 +601,8 @@ PURPOSE --- Perform a 2D Boolean operation on two Breps
 USAGE NOTES --- 
   Each Brep must have only one surface and it must be a plane
   The planar surfaces from each Brep must lie on the same infinite plane.
-  Kernel failures are returned to the caller without assigning rpResult.
+  NULL or identical operands return SM_ERR_INVALID_INPUT.
+  Failures are returned to the caller without assigning rpResult.
 
 ***********************************************************************/
 SmApiStatus SmApiBoolean2d
@@ -617,6 +618,10 @@ SmApiStatus SmApiBoolean2d
   SmBrep*& rpResult                      ///< [out]: Resulting SmBrep                                              <br>
 )
 {
+  // Not SmApiValidateBooleanOperands: it clears rpResult, which this API leaves unchanged on failure.
+  if( pBrep1 == NULL || pBrep2 == NULL || pBrep1 == pBrep2 )
+    return SM_ERR_INVALID_INPUT;
+
 #if SM_DEBUG_CODE
   SmBoolean bDebugMe = FALSE;
   if(bDebugMe)
@@ -1127,7 +1132,7 @@ USAGE NOTES ---
 ***********************************************************************/
 SmApiStatus SmApiStitch
 (
-    SmBrep* pBrep                          ///< [in ]: Pointer to brep                                             <br>
+    SmBrep* pBrep                          ///< [in/out]: Pointer to brep                                          <br>
 )
 {
   if(pBrep == NULL)
@@ -1156,8 +1161,8 @@ USAGE NOTES ---
 ***********************************************************************/
 SmApiStatus SmApiStitch
 (
-    SmBrep* pBrep,                     ///< [in ]: Pointer to brep                                             <br>
-    SmFace* pFaceToStitch             ///< [in ]: Pointer to curve to project                                 <br>
+    SmBrep* pBrep,                     ///< [in/out]: Pointer to brep                                          <br>
+    SmFace* pFaceToStitch             ///< [in ]: Face of pBrep to stitch to the rest of pBrep                <br>
 )
 {
   if(pBrep == NULL || pFaceToStitch == NULL )
@@ -2433,6 +2438,13 @@ SmApiStatus SmApiShellBrepFull
     if( pWorkingResult == NULL )
         return SM_ERR;
 
+    // The shell of a solid must be a solid.
+    if( pBrep->IsManifoldSolid() && !pWorkingResult->IsManifoldSolid() )
+    {
+        delete pWorkingResult;
+        return SM_ERR;
+    }
+
     rpResult = pWorkingResult;
 
 #ifdef SM_ASSERT_VALID
@@ -2458,6 +2470,8 @@ SmApiStatus SmApiOffsetBrepFull
     SmBrep*& rpResult
 )
 {
+    rpResult = NULL;
+
     if( !pBrep )
         return SM_ERR_INVALID_INPUT;
 
@@ -2466,6 +2480,15 @@ SmApiStatus SmApiOffsetBrepFull
     SER( SmOffsetExecutive::OffsetBrep( *pContext, pBrep, dOffsetDistance,
                                         bDoExtendedOffset, bDoSelfInt,
                                         rpResult ) );
+
+    // The offset of a solid must be a solid, unless bDoSelfInt is off and it keeps
+    // overlapping faces.
+    if( bDoSelfInt && rpResult && pBrep->IsManifoldSolid() && !rpResult->IsManifoldSolid() )
+    {
+        delete rpResult;
+        rpResult = NULL;
+        return SM_ERR;
+    }
 
 #ifdef SM_ASSERT_VALID
     if( rpResult )

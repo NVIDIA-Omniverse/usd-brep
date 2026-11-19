@@ -40,7 +40,7 @@ git log -1 --format='%H %cs %s' -- source/schema/omniSolid/resources/schema.usda
 
 Confirm `source/schema/omniSolid/resources/schema.usda` exists at the checked-out revision. If network freshness is required, fetch only after checking local work.
 
-In a source checkout, the validator wrappers expect built USD and OmniSolid dependencies. `tools/brep_validator_cli/validate_usd.sh` configures the usual repository paths. A missing plugin can make a real BrepArray appear untyped or undiscoverable.
+In a source checkout, the validator wrappers expect built USD and OmniSolid dependencies. `tools/brep_usdschema_validator_cli/validate_usd.sh` configures the usual repository paths. A missing plugin can make a real BrepArray appear untyped or undiscoverable.
 
 ## Compare Schema Layers
 
@@ -63,17 +63,17 @@ Do not compare only generated `plugInfo.json`: it cannot capture all property do
 Run the exit-code-bearing wrapper:
 
 ```bash
-tools/brep_validator_cli/validate_usd.sh path/to/asset.usda
+tools/brep_usdschema_validator_cli/validate_usd.sh path/to/asset.usda
 ```
 
 Interpret outcomes carefully:
 
 - Exit 0 with at least one discovered BrepArray and no messages means the current validator found no issue in its implemented coverage. It is not proof of complete schema compliance.
-- Exit 1 means one or more asset-validator or BrepValidator findings. Reclassify them against the schema.
+- Exit 1 means one or more asset-validator or BrepUsdSchemaValidator findings. Reclassify them against the schema.
 - "No BrepArray prims" is inconclusive. Diagnose plugin registration, population masks, inactive prims, variants, payloads, and actual type names.
 - A crash or dependency error is an environment/coverage failure, not an asset failure.
 
-Use `tools/brep_validator_cli/brep_array_handler.py` for interactive diagnostics if useful, but do not use it as a pass/fail gate: it prints issues and does not provide the same reliable nonzero result contract.
+Use `tools/brep_usdschema_validator_cli/brep_array_handler.py` for interactive diagnostics if useful, but do not use it as a pass/fail gate: it prints issues and does not provide the same reliable nonzero result contract.
 
 For authored type checks, inspect `Sdf.Layer` prim/property specs. A registered schema can supply the expected type through composition, making a malformed authored property appear correctly typed through `UsdAttribute.GetTypeName()`.
 
@@ -104,7 +104,7 @@ Do not cite a `BA.xxx` description as schema evidence. The requirement enum is p
 
 ## Audit Validator Rules
 
-The validator source is `tools/brep_validator/brep_validator.py`. Its current README is useful orientation but can lag the code; the implementation currently contains rules beyond the README's older BA.000-BA.555 summary.
+The validator source is `tools/brep_usdschema_validator/brep_usdschema_validator.py`. Its current README is useful orientation but can lag the code; the implementation currently contains rules beyond the README's older BA.000-BA.555 summary.
 
 For each audited rule:
 
@@ -137,11 +137,11 @@ These are observations against the 2026-07-14 source baseline. Recheck current c
 | GeomSubset policy (`BA.680`-`BA.682`) | Not declared by BrepArray-specific schema properties | Validator adds inherited/USD consumer policy |
 | Type validation | Raw authored type is a schema concern | Registered schema composition can mask a bad raw declaration unless `Sdf` specs are inspected |
 
-The current `tools/brep_validator_test/test_brep_validator.py` expected-valid loop asserts only that the result is a list, not that it is empty. Do not cite it as evidence that positive fixtures pass cleanly until that assertion is strengthened.
+The current `tools/brep_usdschema_validator_test/test_brep_usdschema_validator.py` expected-valid loop asserts only that the result is a list, not that it is empty. Do not cite it as evidence that positive fixtures pass cleanly until that assertion is strengthened.
 
 ## Develop Tests
 
-Create minimal fixtures under `TestFiles/brep_validator/` when changing validator behavior. Keep one intended contract distinction per fixture.
+Create minimal fixtures under `TestFiles/usd_validator_TestFiles/` when changing validator behavior. Keep one intended contract distinction per fixture.
 
 For an explicit schema rule, cover:
 
@@ -166,14 +166,14 @@ Windows PowerShell:
 
 ```powershell
 .\build.bat
-python -m unittest tools.brep_validator_test.test_brep_validator -v
+python -m unittest tools.brep_usdschema_validator_test.test_brep_usdschema_validator -v
 ```
 
 Linux/WSL:
 
 ```bash
 ./build.sh
-python3 -m unittest tools.brep_validator_test.test_brep_validator -v
+python3 -m unittest tools.brep_usdschema_validator_test.test_brep_usdschema_validator -v
 ```
 
 Use the repository's configured Python/USD environment when the system interpreter cannot import `pxr` or `usd_validation_nvidia`.

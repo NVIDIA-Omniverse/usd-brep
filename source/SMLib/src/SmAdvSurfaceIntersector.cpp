@@ -1119,7 +1119,7 @@ SmStatus SmAdvSurfaceIntersector::MakeDupin
       // Now do bottom hyperbola
       pHyp = new(*m_cpContext) SmConic(SM_CT_HYPERBOLA,
                                        1.0/smos_Sqrt(smos_Fabs(rdPrinK2)),
-                                       1.0/smos_Sqrt(smos_Fabs(rdPrinK2))) ;
+                                       1.0/smos_Sqrt(smos_Fabs(rdPrinK1))) ;
       NER(pHyp);
       SER(pHyp->Transform2D(SM_PI+SM_PI/2.0,SmPoint2d(0,0))) ;
       if (rdPrinK2 > 0.0) { crAboveDupinCurves.Add(pHyp) ; }

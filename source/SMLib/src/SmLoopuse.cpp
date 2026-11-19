@@ -873,7 +873,8 @@ SmBoolean bDebugMe = FALSE ;
       // When gap is bigger than XSectTol3d(ThisEdgeuse, NextEdgeuse)
       if(dGap3dSq > sXSectTol3dSq )
         { 
-          double dOverTol    = sXSectTol3d - smos_Sqrt(dGap3dSq) ;
+          // A positive excess selects the open gap and its matching tolerance.
+          double dOverTol    = smos_Sqrt(dGap3dSq) - sXSectTol3d ;
 
           // when OverTol is largest - save MaxOvertTol vals
           if(dOverTol > dMaxOverTol)

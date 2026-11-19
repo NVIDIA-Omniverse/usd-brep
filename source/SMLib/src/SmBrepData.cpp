@@ -51,6 +51,7 @@
 #include <nurbs.h>
 #include <SmAssembly.h>
 #include <stdio.h>
+#include <iomanip>
 
 
 
@@ -1256,6 +1257,17 @@ SmStatus SmBrepData::WriteAttributeToDB
 
 } // end SmBrepData::WriteAttributeToDB
 
+// Size an attribute's value arrays from the counts read from the stream; fail when a count is too big to allocate.
+static SmStatus sm_SizeAttributeValues
+  (SmTArray<long> & rLongs, SmTArray<double> & rDoubles, SmTArray<char> & rChars,
+   ULONG lNumLong, ULONG lNumDouble, ULONG lNumChar)
+{
+  SER_MSG(   rLongs.SetSize(lNumLong) == SM_BIG_ULONG || rDoubles.SetSize(lNumDouble) == SM_BIG_ULONG
+          || rChars.SetSize(lNumChar) == SM_BIG_ULONG ? SM_ERR_INVALID_INPUT : SM_SUCCESS,
+          _T("Attribute data holds a count too big to allocate."));
+  return SM_SUCCESS;
+}
+
 /*******************************************************************//**
 PURPOSE: Read an attribute from the stream
 
@@ -1274,7 +1286,7 @@ SmStatus SmBrepData::ReadAttributeFromDB
   SmTArray<double> sDoubles(MAXSIZE,sDData);
   char sCData[MAXSIZE];
   SmTArray<char> sChars(MAXSIZE,sCData);
-  ULONG lAttrID, lNumLong, lNumDouble, lNumChar;
+  ULONG lAttrID = 0, lNumLong = 0, lNumDouble = 0, lNumChar = 0;
   long lAttrBehavior = 0;
 
   if (eType == SM_ASCII)
@@ -1282,9 +1294,7 @@ SmStatus SmBrepData::ReadAttributeFromDB
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> lAttrID >> lAttrBehavior >> lNumLong >> lNumDouble >> lNumChar;
       GOTO_NEXT_LINE;
-      sLongs.SetSize(lNumLong);
-      sDoubles.SetSize(lNumDouble);
-      sChars.SetSize(lNumChar);
+      SER(sm_SizeAttributeValues(sLongs, sDoubles, sChars, lNumLong, lNumDouble, lNumChar));
 
       // read the longs
       for(ULONG i=0; i<lNumLong; i++)   { long lLong = 0;
@@ -1317,9 +1327,7 @@ SmStatus SmBrepData::ReadAttributeFromDB
       SER(rDB.ReadLong(lNumDouble));
       SER(rDB.ReadLong(lNumChar));
 
-      sLongs.SetSize(lNumLong);
-      sDoubles.SetSize(lNumDouble);
-      sChars.SetSize(lNumChar);
+      SER(sm_SizeAttributeValues(sLongs, sDoubles, sChars, lNumLong, lNumDouble, lNumChar));
 
       if (lNumLong   > 0) { SER(rDB.ReadLongs((ULONG*)sLongs.GetDataArray(),lNumLong));
                           }
@@ -1358,6 +1366,7 @@ SmStatus SmBrepData::ReadPartFromDB
     ULONG lHealerVersion   = 0;
 
     SmTArray<SmAttribute*> sAttributes;
+    SmObjsDelete<SmAttribute *> sCleanAttributes( &sAttributes ); // placeholders, also on an error return
 
     SER(rDB.BeginReading());
 
@@ -1486,7 +1495,7 @@ SmStatus SmBrepData::ReadPartFromDB
     // boolean trees
 
     // allocate a long for every boolean tree node
-    rBooleanTreeNodes.SetSize(lTotalTreeNodes);
+    SER_MSG(rBooleanTreeNodes.SetSize(lTotalTreeNodes) == SM_BIG_ULONG ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("Part holds a count too big to allocate."));
 
     if (eType == SM_ASCII)
       {
@@ -1524,7 +1533,7 @@ SmStatus SmBrepData::ReadPartFromDB
     // Brep Models
 
     // allocate a Brep pointer for every Brep model to read
-    rBreps.SetSize(lTotalBreps);
+    SER_MSG(rBreps.SetSize(lTotalBreps) == SM_BIG_ULONG ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("Part holds a count too big to allocate."));
 
     // read every Brep model
     for (ULONG k=0; k<lTotalBreps; k++)
@@ -1550,7 +1559,13 @@ SmStatus SmBrepData::ReadPartFromDB
 
         // Build Brep Model from BrepData
         //   FALSE: do not force creation of uv trim curves.
-        SER(rBreps[k]->MakeTopologyFromData(pBrepData,sAttributes,FALSE));
+        SmStatus sMakeStatus = rBreps[k]->MakeTopologyFromData(pBrepData,sAttributes,FALSE);
+        if (sMakeStatus != SM_SUCCESS)
+          {
+            SmObjsDelete<SmAttribute*> sCleanup(&sAttributes);
+            delete pBrepData;
+            SER(sMakeStatus);
+          }
 
         // clean up
         SM_ASSERT(pBrepData != NULL) ; delete pBrepData ; pBrepData = NULL ;
@@ -1565,8 +1580,7 @@ SmStatus SmBrepData::ReadPartFromDB
     if (lDBVersionNumber > 30)
       {
         // read total attribute count
-        ULONG lTotalAttributes;
-        SmObjsDelete<SmAttribute *> sCleanAttributes( &sAttributes );
+        ULONG lTotalAttributes = 0;
         if (eType == SM_ASCII)
           {
             std::istream & fin = *rDB.GetInStreamPtr();
@@ -1578,6 +1592,8 @@ SmStatus SmBrepData::ReadPartFromDB
           {// SM_BINARY
             SER(rDB.ReadLong(lTotalAttributes));
           }
+        SER_MSG(lTotalAttributes == sAttributes.GetSize() ? SM_SUCCESS : SM_ERR_INVALID_INPUT,
+                _T("Part data holds a different number of attributes than its Breps use."));
 
         // read each attribute
         for (ULONG jjj=0; jjj<lTotalAttributes; jjj++)
@@ -1595,7 +1611,12 @@ SmStatus SmBrepData::ReadPartFromDB
             SER(SmBrepData::ReadAttributeFromDB(crContext,pAttribute,rDB));
 
             // Replace and update attribute in sAttributes array
-            SmAttribute *pTempAttribute = sAttributes[jjj];
+            SmAttribute *pTempAttribute = (jjj < sAttributes.GetSize()) ? sAttributes[jjj] : NULL;
+            if (pTempAttribute == NULL)
+              {
+                delete pAttribute;
+                SER_MSG(SM_ERR_INVALID_INPUT, _T("Part data holds an attribute that no entity uses."));
+              }
 
             // get every object using this attribute
             SmAObject *sData[32];
@@ -2226,13 +2247,22 @@ SmBrepData::~SmBrepData()
   // locals
   ULONG ii ;
 
-  // clean up memory within the items of the internal arrays
+  // SmTArray does not call element destructors: release every nested attribute
+  // index array explicitly, whether the geometry is owned or borrowed.
   for(ii=0;ii<m_vRegions.GetSize();ii++)  { m_vRegions[ii].m_sAttributes.SetSize(0) ; }
   for(ii=0;ii<m_vShells.GetSize();ii++)   { m_vShells[ii].m_sAttributes.SetSize(0) ; }
   for(ii=0;ii<m_vFaceuses.GetSize();ii++) { m_vFaceuses[ii].m_sAttributes.SetSize(0) ; }
   for(ii=0;ii<m_vFaces.GetSize();ii++)    { m_vFaces[ii].m_sAttributes.SetSize(0) ; }
-  for(ii=0;ii<m_vLoops.GetSize();ii++)    { m_vLoops[ii].m_sAttributes.SetSize(0) ; }
-  for(ii=0;ii<m_vEdgeuses.GetSize();ii++) { m_vEdgeuses[ii].m_sAttributes.SetSize(0) ; }
+  for(ii=0;ii<m_vLoops.GetSize();ii++)
+    { m_vLoops[ii].m_sAttributes.SetSize(0) ;
+      m_vLoops[ii].m_sLUUpperAttributes.SetSize(0) ;
+      m_vLoops[ii].m_sLULowerAttributes.SetSize(0) ;
+    }
+  for(ii=0;ii<m_vEdgeuses.GetSize();ii++)
+    { m_vEdgeuses[ii].m_sAttributes.SetSize(0) ;
+      m_vEdgeuses[ii].m_sMateAttributes.SetSize(0) ;
+    }
+  for(ii=0;ii<m_vEdges.GetSize();ii++)   { m_vEdges[ii].m_sAttributes.SetSize(0) ; }
   for(ii=0;ii<m_vVertices.GetSize();ii++) { m_vVertices[ii].m_sAttributes.SetSize(0) ; }
   if(m_bIsGeomBorrowed == FALSE)
     { SmObjsDelete<SmCurve*>   sDelUVCurves(&m_vUVCurves) ;
@@ -2922,6 +2952,11 @@ SmStatus SmBrepData::FromBrep
 
 } // end SmBrepData::FromBrep
 
+// fail when the stream ran out or holds text that is not a number
+#define SM_CHECK_READ  SER_MSG(rDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("Brep data ends early or holds text that is not a number."))
+// fail when a count read from the stream is too big to allocate
+#define SM_SIZE_FROM_DB(rArray,lCount)  do { SM_CHECK_READ; SER_MSG((rArray).SetSize(lCount) == SM_BIG_ULONG ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("Brep data holds a count too big to allocate.")) } while (0)
+
 /*******************************************************************//**
 PURPOSE: Read this BrepData from a stream (file) in either ASCII or
     binary format.
@@ -2946,6 +2981,7 @@ SmStatus SmBrepData::ReadFromDB
   // allocate new BrepData object
   SmBrepData * pBrepData = new(crContext) SmBrepData(TRUE, SM_DS_SMLIB);
   NER(pBrepData);
+  SmObjDelete sBrepDataCleanup(pBrepData); // delete it on an error return
 
   // local file type
   SmFileType eType = rDB.GetFileType();
@@ -2959,8 +2995,8 @@ SmStatus SmBrepData::ReadFromDB
 
       if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
         {
-          SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,
-                                                       pBrepData->m_vAttributes,rDB);
+          SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,
+                                                       pBrepData->m_vAttributes,rDB));
         }
       else
         {
@@ -3010,10 +3046,10 @@ SmStatus SmBrepData::ReadFromDB
     {
       if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
         {
-          SmAttributeData::ReadIndexedAttributesFromDB(crContext,
+          SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,
                                                        rAllAttributes,
                                                        pBrepData->m_vAttributes,
-                                                       rDB);
+                                                       rDB));
         }
       else
         {
@@ -3046,12 +3082,13 @@ SmStatus SmBrepData::ReadFromDB
   // Region Data
 
   // allocate one SmRegionData Object for every Region
-  pBrepData->m_vRegions.SetSize(pBrepData->m_lNumRegions);
+  SM_SIZE_FROM_DB(pBrepData->m_vRegions, pBrepData->m_lNumRegions);
 
   // read every region
   for (i=0; i<pBrepData->m_lNumRegions; i++)
     {
-      pBrepData->m_vRegions[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vRegions[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Shells
@@ -3072,12 +3109,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmShellData Object for every Shell
-  pBrepData->m_vShells.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vShells, lCount);
 
   // read every shell
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vShells[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vShells[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Composite Faces
@@ -3118,7 +3156,7 @@ SmStatus SmBrepData::ReadFromDB
               rFileIn >> index;
               rFileIn >> lFaceCount;
               pBrepData->m_vCFaces.Add(lFaceCount);
-              for (ULONG j=0; j<lFaceCount; j++)
+              for (ULONG j=0; j<lFaceCount && !rDB.ReadFailed(); j++)
                 {
                   rFileIn >> lFace;
                   pBrepData->m_vCFaces.Add(lFace);
@@ -3129,12 +3167,13 @@ SmStatus SmBrepData::ReadFromDB
             {
               SER(rDB.ReadLong(lFaceCount));
               pBrepData->m_vCFaces.Add(lFaceCount);
-              for (ULONG j=0; j<lFaceCount; j++)
+              for (ULONG j=0; j<lFaceCount && !rDB.ReadFailed(); j++)
                 {
                   SER(rDB.ReadLong(lFace));
                   pBrepData->m_vCFaces.Add(lFace);
                 }
             } // end binary branch
+          SM_CHECK_READ;
         } // end iter every composite face
     } // end lCount !=> 0 check
 
@@ -3154,12 +3193,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmFaceuseData Object for each faceuse
-  pBrepData->m_vFaceuses.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vFaceuses, lCount);
 
   // read every faceuse
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vFaceuses[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vFaceuses[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Face Data
@@ -3180,12 +3220,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmFaceData Object for each face
-  pBrepData->m_vFaces.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vFaces, lCount);
 
   // read every face
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vFaces[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vFaces[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Loop Data
@@ -3205,12 +3246,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmLoopData Object for each loop
-  pBrepData->m_vLoops.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vLoops, lCount);
 
   // read every loop
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vLoops[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vLoops[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Composite Edge
@@ -3242,15 +3284,15 @@ SmStatus SmBrepData::ReadFromDB
       pBrepData->m_vCEdges.Add(lCount);
       for (i=0; i<lCount; i++)
         {
-          ULONG lEdgeCount;
-          ULONG lEdge;
+          ULONG lEdgeCount=0;
+          ULONG lEdge=0;
           if (eType == SM_ASCII)
             {
               std::istream & rFileIn = *rDB.GetInStreamPtr();
               rFileIn >> index;
               rFileIn >> lEdgeCount;
               pBrepData->m_vCEdges.Add(lEdgeCount);
-              for (ULONG j=0; j<lEdgeCount; j++)
+              for (ULONG j=0; j<lEdgeCount && !rDB.ReadFailed(); j++)
                 {
                   rFileIn >> lEdge;
                   pBrepData->m_vCEdges.Add(lEdge);
@@ -3261,12 +3303,13 @@ SmStatus SmBrepData::ReadFromDB
             {
               SER(rDB.ReadLong(lEdgeCount));
               pBrepData->m_vCEdges.Add(lEdgeCount);
-              for (ULONG j=0; j<lEdgeCount; j++)
+              for (ULONG j=0; j<lEdgeCount && !rDB.ReadFailed(); j++)
                 {
                   SER(rDB.ReadLong(lEdge));
                   pBrepData->m_vCEdges.Add(lEdge);
                 }
             }
+          SM_CHECK_READ;
         }
     }
 
@@ -3289,12 +3332,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmEUData OBject for each edge
-  pBrepData->m_vEdgeuses.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vEdgeuses, lCount);
 
   // read every edgeuse
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vEdgeuses[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vEdgeuses[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Edge Data
@@ -3313,12 +3357,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmEdgeData OBject for each edge
-  pBrepData->m_vEdges.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vEdges, lCount);
 
   // read every edge
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vEdges[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vEdges[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Vertex Data
@@ -3337,12 +3382,13 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmVertexData OBject for each vertex
-  pBrepData->m_vVertices.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vVertices, lCount);
 
   // read every vertex
   for (i=0; i<lCount; i++)
     {
-      pBrepData->m_vVertices[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs);
+      SER(pBrepData->m_vVertices[i].ReadFromDB(crContext,lDBVersionNumber,rAllAttributes,rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // UV-Curve Data
@@ -3360,7 +3406,7 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmCurve Pointer for each UVCurve
-  pBrepData->m_vUVCurves.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vUVCurves, lCount);
 
   // read every UVCurve
   for (i=0; i<lCount; i++)
@@ -3380,6 +3426,7 @@ SmStatus SmBrepData::ReadFromDB
                                       pBrepData->m_vUVCurves[i],
                                       rDB,
                                       bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // 3D-Curve Data
@@ -3397,7 +3444,7 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmCurve pointer for each 3DCurve
-  pBrepData->m_v3DCurves.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_v3DCurves, lCount);
 
   // read every 3DCurve
   for (i=0; i<lCount; i++)
@@ -3417,6 +3464,7 @@ SmStatus SmBrepData::ReadFromDB
                                       pBrepData->m_v3DCurves[i],
                                       rDB,
                                       bPersistAttribs));
+      SM_CHECK_READ;
     }
 
   // Surface Data
@@ -3434,7 +3482,7 @@ SmStatus SmBrepData::ReadFromDB
     }
 
   // allocate one SmSurface Pointer for each Surface
-  pBrepData->m_vSurfaces.SetSize(lCount);
+  SM_SIZE_FROM_DB(pBrepData->m_vSurfaces, lCount);
   for (i=0; i<lCount; i++)
     {
       if (eType == SM_ASCII)
@@ -3448,13 +3496,18 @@ SmStatus SmBrepData::ReadFromDB
       SER(SmBrepData::ReadSurfaceFromDB(crContext,
                                         lDBVersionNumber,rAllAttributes,
                                         pBrepData->m_vSurfaces[i],rDB,bPersistAttribs));
+      SM_CHECK_READ;
     }
 
+  sBrepDataCleanup.Clear();
   rpNewBrepData = pBrepData;
 
   return SM_SUCCESS;
 
 } // end SmBrepData::ReadFromDB
+
+#undef SM_SIZE_FROM_DB
+#undef SM_CHECK_READ
 
 /*******************************************************************/ /**
  PURPOSE: Write a single brep out to a file.
@@ -3610,7 +3663,7 @@ SmStatus SmBrepData::ReadFromFile
       c1stChar = (char)rFileIn.get() ;
   rFileIn.unget();  // peek was not working in VS10
 
-  ULONG lDBVersionNumber, lHealerVersion = 0 ;
+  ULONG lDBVersionNumber = 0, lHealerVersion = 0 ;
   if (c1stChar != 'V')
     {
       lDBVersionNumber = 30 ;
@@ -3621,7 +3674,7 @@ SmStatus SmBrepData::ReadFromFile
         {
           char sHeader[8] ; // for "Version "
           // std::ostream & rFileOut = *sDB.GetOutStreamPtr();
-          rFileIn >> sHeader >> lDBVersionNumber ;
+          rFileIn >> std::setw(sizeof(sHeader)) >> sHeader >> lDBVersionNumber ;
           GOTO_NEXT_LINE; // to get off line "Version VersionNumber"
         }
       else // Binary
@@ -3635,6 +3688,7 @@ SmStatus SmBrepData::ReadFromFile
         }
     }
 
+  SER_MSG(sDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("SmBrepData::ReadFromFile: unreadable version number")) ;
   sDB.SetVersionNum( lDBVersionNumber );
 
   // SM_CURRENT_DATABASE_VERSION 42 added the SM_HEALER_VERSION to the files.
@@ -3643,7 +3697,7 @@ SmStatus SmBrepData::ReadFromFile
       if (eType == SM_ASCII)
         {
           char sHeader[8] ; // for "Healer Version "
-          rFileIn >> sHeader >> sHeader >> lHealerVersion ;
+          rFileIn >> std::setw(sizeof(sHeader)) >> sHeader >> std::setw(sizeof(sHeader)) >> sHeader >> lHealerVersion ;
           GOTO_NEXT_LINE; // to get off line "Healer Version HealerVersionNumber"
         }
       else // Binary
@@ -3654,6 +3708,8 @@ SmStatus SmBrepData::ReadFromFile
           sDB.ReadLong( lHealerVersion );
         }
       }
+
+  SER_MSG(sDB.ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("SmBrepData::ReadFromFile: unreadable version header")) ;
 
   // pass the call along
   SmTArray<SmAttribute*> sAllAttributes;
@@ -4386,13 +4442,13 @@ SmStatus SmRegionData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> index;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       rFileIn >> m_lNumShells >> m_lStartShell >> m_bIsVoidFlag;
       GOTO_NEXT_LINE;
     }
   else // Binary
     {
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       SER(rDB.ReadLong(m_lNumShells));
       SER(rDB.ReadLong(m_lStartShell));
       SER(rDB.ReadBoolean(m_bIsVoidFlag));
@@ -4400,7 +4456,7 @@ SmStatus SmRegionData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
     }
 
   return SM_SUCCESS;
@@ -4462,7 +4518,7 @@ SmStatus SmShellData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> index;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       rFileIn >> m_lShellType;
       switch (m_lShellType)
         {
@@ -4480,7 +4536,7 @@ SmStatus SmShellData::ReadFromDB
     }
   else // Binary
     {
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       SER(rDB.ReadLong(m_lShellType));
       switch (m_lShellType)
         {
@@ -4500,7 +4556,7 @@ SmStatus SmShellData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
     }
 
   return SM_SUCCESS;
@@ -4587,20 +4643,20 @@ SmStatus SmFaceuseData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> index;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       rFileIn >> m_lFace >> m_bOrientation;
       GOTO_NEXT_LINE;
     }
   else
     {// Binary
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       SER(rDB.ReadLong(m_lFace));
       SER(rDB.ReadBoolean(m_bOrientation));
     }
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
     }
 
   return SM_SUCCESS;
@@ -4660,7 +4716,7 @@ SmStatus SmFaceData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> index ;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
 
 #ifdef SM_USE_NEWTOL
       SM_NEWTOL_LINE double dDummyVal ;
@@ -4682,7 +4738,7 @@ SmStatus SmFaceData::ReadFromDB
     }
   else // Binary
     {
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
                                  SER(rDB.ReadDouble(sMin.x));
                                  SER(rDB.ReadDouble(sMax.x));
                                  SER(rDB.ReadDouble(sMin.y));
@@ -4705,7 +4761,7 @@ SmStatus SmFaceData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
     }
 
   return SM_SUCCESS;
@@ -4792,7 +4848,7 @@ SmStatus SmLoopData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> index;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       rFileIn >> m_lLoopType;
       switch (m_lLoopType)
         {
@@ -4807,7 +4863,7 @@ SmStatus SmLoopData::ReadFromDB
     }
   else
     {// Binary
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
       SER(rDB.ReadLong(m_lLoopType));
       switch (m_lLoopType)
         {
@@ -4823,9 +4879,9 @@ SmStatus SmLoopData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sLUUpperAttributes,rDB);
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sLULowerAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sLUUpperAttributes,rDB));
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sLULowerAttributes,rDB));
     }
   return SM_SUCCESS;
 
@@ -4904,7 +4960,7 @@ SmStatus SmEUData::ReadFromDB
       rFileIn >> index;
     }
 
-  SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+  SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
 
   if (lDBVersionNumber > 31)
     { // changed from 30 RCLxx
@@ -4981,8 +5037,8 @@ SmStatus SmEUData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sMateAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sMateAttributes,rDB));
     }
   return SM_SUCCESS;
 
@@ -5101,7 +5157,7 @@ SmStatus SmEdgeData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr();
       rFileIn >> index;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
 
 #ifdef SM_USE_NEWTOL
       SM_NEWTOL_LINE double dDummyVal ;
@@ -5120,7 +5176,7 @@ SmStatus SmEdgeData::ReadFromDB
     }
   else // Binary
     {
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs);
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
 
 #ifdef SM_USE_NEWTOL
       SM_NEWTOL_LINE double dDummyVal ;
@@ -5141,7 +5197,7 @@ SmStatus SmEdgeData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB);
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
     }
 
   return SM_SUCCESS;
@@ -5224,7 +5280,7 @@ SmStatus SmVertexData::ReadFromDB
     {
       std::istream & rFileIn = *rDB.GetInStreamPtr() ;
       rFileIn >> index ;
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs) ;
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
 
 #ifdef SM_USE_NEWTOL
       SM_NEWTOL_LINE double dDummyVal ;
@@ -5240,7 +5296,7 @@ SmStatus SmVertexData::ReadFromDB
     }
   else // Binary
     {
-      SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs) ;
+      SER(SmTopologyData::ReadFromDB(lDBVersionNumber,rDB,bPersistAttribs));
 
 #ifdef SM_USE_NEWTOL
       SM_NEWTOL_LINE double dDummyVal ;
@@ -5256,7 +5312,7 @@ SmStatus SmVertexData::ReadFromDB
 
   if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
     {
-      SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB) ;
+      SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,m_sAttributes,rDB));
     }
   return SM_SUCCESS ;
 
@@ -5470,7 +5526,7 @@ SmStatus SmBrepData::ReadCurveFromDB
     if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
       {
         SmTArray<ULONG> sAttributes ;
-        SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,sAttributes,rDB);
+        SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,sAttributes,rDB));
         // SmObjDelete sClean(pAttributes);
         if (sAttributes.GetSize() > 0)
           {
@@ -5724,7 +5780,7 @@ SmStatus SmBrepData::ReadSurfaceFromDB
     if (lDBVersionNumber > 30 && bPersistAttribs == TRUE)
       {
         SmTArray<ULONG> sAttributes ;
-        SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,sAttributes,rDB);
+        SER(SmAttributeData::ReadIndexedAttributesFromDB(crContext,rAllAttributes,sAttributes,rDB));
         // SmObjDelete sClean(pAttributes);
 
         // when there are attributes

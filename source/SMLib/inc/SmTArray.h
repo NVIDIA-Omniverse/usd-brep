@@ -498,7 +498,8 @@ RETURNS: old size.
 template<class TYPE>
 inline ULONG SmTArray<TYPE>::SetSize(ULONG lNewSize)
 {
-  if (lNewSize >= SM_BIG_ULONG || lNewSize == SM_UNDEF_ULONG)
+  // The last test keeps the allocation size below, at most 2 * lNewSize * sizeof(TYPE), from overflowing.
+  if (lNewSize >= SM_BIG_ULONG || lNewSize == SM_UNDEF_ULONG || lNewSize > SIZE_MAX / 2 / sizeof(TYPE))
     {
       SM_ASSERT_BREAK(lNewSize < SM_BIG_ULONG && lNewSize != SM_UNDEF_ULONG) ;
       return SM_BIG_ULONG;
@@ -1530,7 +1531,7 @@ NOTES: Method is for arrays that store uninitialed element values.
 template<class TYPE>
 inline SmBoolean SmTArray<TYPE>::FindElementInMaskedArray
  (TYPE    pObjToFind,   // in : Search Tgt
-  ULONG   lBitMask,     // in : only search ith elem when (lBitMask & (1<ii)) == TRUE
+  ULONG   lBitMask,     // in : only search ith elem when (lBitMask & (1<<ii)) == TRUE
   ULONG & nFoundIndex)  // out: Indx of first Marked elem equal to pObjToFind
   const 
 {
@@ -1540,7 +1541,7 @@ inline SmBoolean SmTArray<TYPE>::FindElementInMaskedArray
   for(ULONG ii=0;ii<this->GetSize();ii++)
     {
       // when element is initialized and equal to pObjToFind
-      if(   (lBitMask & (1<ii))
+      if(   (lBitMask & (1UL<<ii))
          && (pObjToFind == this->GetAt(ii)))
         {
           nFoundIndex = ii;

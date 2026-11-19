@@ -112,7 +112,8 @@ NOTES ---   Reference point options:
 ***********************************************************************/
 SmApiStatus SmApiTrimProjectParallel
 ( 
-    SmObject* pObject,                 ///< [in ]: Either SmSurface or SmBrep to trim (consumed on success)
+    SmObject* pObject,                 ///< [in/out]: SmBrep trimmed in place and returned;
+                                       ///<           standalone SmSurface consumed on success
     SmBSplineCurve* crCurveToProject,  ///< [in ]: Curve to project to the faces
     const SmVector3d& crProjectionDirection, ///< [in ]: Defines direction of projection
     const SmPoint3d & crReferencePoint,      ///< [in ]: Used only if trimType is SM_TT_KEEP_POINT or SM_TT_DELETE_POINT.

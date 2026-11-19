@@ -790,13 +790,13 @@ NOTES ---   Defined by inside/outside radii and start/end angles
 ***********************************************************************/
 SmApiStatus SmApiCreateCylindricalBox
 (
-    const SmVector3d& crOrigin,        ///< [in ]: Position of origin on Z axis at base
+    const SmVector3d& crOrigin,  ///< [in ]: Position of origin on Z axis at base
     double dLength,              ///< [in ]: Length along Z axis
     double dInsideRadius,        ///< [in ]: Inside radius from Z axis
     double dOutsideRadius,       ///< [in ]: Outside radius from Z axis
     double dStartAngleDeg,       ///< [in ]: Start angle from X axis in XY plane
-    double dEndAngleDeg,         ///< [in ]: End angle from X axis in XY plane
-    SmBrep*& rpResult           ///< [out]: Resulting SmBrep
+    double dEndAngleDeg,         ///< [in ]: End angle; sweep in (0,360], dEndAngDeg - dStartAngDeg <= 360, else sweep is rejected 
+    SmBrep*& rpResult            ///< [out]: Resulting SmBrep
 )
 {
     rpResult = NULL;
@@ -804,7 +804,7 @@ SmApiStatus SmApiCreateCylindricalBox
         !SM_IS_VALID_DOUBLE( dOutsideRadius ) || dOutsideRadius <= dInsideRadius + SM_EFF_ZERO ||
         !SM_IS_VALID_DOUBLE( dStartAngleDeg ) || !SM_IS_VALID_DOUBLE( dEndAngleDeg ) ||
         dStartAngleDeg < -360.0 || dStartAngleDeg > 360.0 ||
-        dEndAngleDeg <= dStartAngleDeg + SM_EFF_ZERO || dEndAngleDeg - dStartAngleDeg > 360.0 )
+        dEndAngleDeg <= dStartAngleDeg + SM_EFF_ZERO || dEndAngleDeg - dStartAngleDeg > 360.0 + SM_EFF_ZERO_DEG )
         return( SM_ERR_INVALID_INPUT );
 
     SmVector3d sXaxis(1.0,0.0,0.0);
@@ -1190,7 +1190,7 @@ NOTES ---   Uses SmPrimitiveCreation::CreateBlendPrimitive
 ***********************************************************************/
 SmApiStatus SmApiCreateBlendPrimitive
 (
-    SmBrep* pBrep,                ///< [in ]: Brep containing the boundary edges
+    SmBrep* pBrep,                ///< [in/out]: Brep containing the boundary edges
     SmEdge* pEdge1,               ///< [in ]: First boundary edge (start of blend)
     SmFace* pFace1,               ///< [in ]: Target start blend surface 
     SmEdge* pEdge2,               ///< [in ]: End surface boundary curve

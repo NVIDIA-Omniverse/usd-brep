@@ -47,7 +47,7 @@ the same environment, because importing both crashes.
 
 `pip install "usd-brep[validation]"` adds
 [usd-validation-nvidia](https://pypi.org/project/usd-validation-nvidia/), with PyPI
-`usd-core` as its OpenUSD, and registers the BrepArray schema rules (`BrepValidator`)
+`usd-core` as its OpenUSD, and registers the BrepArray schema rules (`BrepUsdSchemaValidator`)
 with it, so they run with the standard rules:
 
 ```bash
@@ -58,8 +58,31 @@ The `validation` extra is not available on Linux aarch64, where PyPI has no `usd
 
 The rules run in the validator's OpenUSD and do not import `usd_brep`. They use the
 omniSolid schema bundled in this wheel unless `OMNISOLID_PLUGIN_PATH` points to another
-copy. To run them without the plugin system, call `brep_validator.register_all()`, or
-use `brep_validator.validate_file()`.
+copy. To run them without the plugin system, call `brep_usdschema_validator.register_all()`, or
+use `brep_usdschema_validator.usdschema_validate_file()`.
+
+## Healing
+
+`usd-brep-heal input.usda output.usda` heals the BrepArray prims in a scene and writes the
+result to a new file; it runs `usd_brep.usd.heal_file`.
+
+## Geometry validation
+
+`usd_brep.usd.validate_geometry_file` runs the kernel's `SmBrep::AssertValid` on the Breps
+of each BrepArray prim (geometry and topology); prims that share instanced geometry are checked once. It does not check the BrepArray schema rules
+that `brep_usdschema_validator` checks. An invalid Brep is returned as a result (`ok` is `False`), not raised.
+
+```python
+import usd_brep.usd
+
+for result in usd_brep.usd.validate_geometry_file("model.usda"):
+    print(result.prim_path, result.ok)
+    for failure in result.failures:
+        print(" ", failure)
+```
+
+`usd-brep-validate-geometry model.usda [--level N]` does the same from a shell. It prints a line
+per prim and exits 0 when every Brep is valid, 1 when any is invalid and 2 when the file cannot be checked.
 
 ## License
 

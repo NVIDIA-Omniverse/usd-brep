@@ -252,7 +252,7 @@ files = [
     ["tests/SM_API_USD_test/src/*", "tests/SM_API_USD_test/src"],
     ["_build/$${platform}/$${config}/brep_geometry_validator*", "bin"],
     ["TestFiles/usd_TestFiles/sphere_nurbs.usda", "TestFiles/usd_TestFiles"],
-    # Referenced by the TestFiles/brep_validator fixtures, including the SM_API_USD_test input.
+    # Referenced by the TestFiles/usd_validator_TestFiles fixtures, including the SM_API_USD_test input.
     ["TestFiles/usd_TestFiles/Materials.usda", "TestFiles/usd_TestFiles"],
     # Headers
     ["source/SMLib/inc/*.h","include/SMLib"],
@@ -264,14 +264,14 @@ files = [
     ["source/BREP_STAGING/inc/*.h","include/BREP_STAGING"],
     ["source/OCCT_BREP_IMPORT/inc/*.h","include/OCCT_BREP_IMPORT"],
     ["source/OCCT_BREP_EXPORT/inc/*.h","include/OCCT_BREP_EXPORT"],
-    # brep_validator: importable BrepArray schema-validation tooling (core lib, CLI, tests, fixtures).
+    # brep_usdschema_validator: importable BrepArray schema-validation tooling (core lib, CLI, tests, fixtures).
     # Folded in here so usd_brep publishes a single package; ships in every config (Python is config-agnostic).
-    ["tools/brep_validator/*", "brep_validator"],
-    ["tools/brep_validator_cli/*", "brep_validator_cli"],
-    ["tools/brep_validator_test/*", "brep_validator_test"],
-    ["tools/brep_validator_test/utils/*", "brep_validator_test/utils"],
-    ["TestFiles/brep_validator/*", "TestFiles/brep_validator"],
-    ["TestFiles/brep_validator/coverage_limits/*", "TestFiles/brep_validator/coverage_limits"],
+    ["tools/brep_usdschema_validator/*", "brep_usdschema_validator"],
+    ["tools/brep_usdschema_validator_cli/*", "brep_usdschema_validator_cli"],
+    ["tools/brep_usdschema_validator_test/*", "brep_usdschema_validator_test"],
+    ["tools/brep_usdschema_validator_test/utils/*", "brep_usdschema_validator_test/utils"],
+    ["TestFiles/usd_validator_TestFiles/*", "TestFiles/usd_validator_TestFiles"],
+    ["TestFiles/usd_validator_TestFiles/coverage_limits/*", "TestFiles/usd_validator_TestFiles/coverage_limits"],
     # Agent skills/docs/operations/commands, so package consumers get the same guidance as the repo.
     [".agents/**", ".agents"],
     # Runnable examples referenced by the operation guides and skills.

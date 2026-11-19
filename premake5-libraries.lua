@@ -71,7 +71,8 @@ function use_usd()
 end
 
 function use_usd_tbb()
-    if os.target() == "macosx" and not macos_usd_staged() then
+    -- No USD on Android; SMLib builds without TBB unless SM_USE_TBB is defined.
+    if os.target() == "android" or (os.target() == "macosx" and not macos_usd_staged()) then
         return
     end
     -- suppress TBB warnings from the fact it uses old headers

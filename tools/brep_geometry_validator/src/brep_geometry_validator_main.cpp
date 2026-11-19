@@ -6,7 +6,7 @@
 // Imports every unique BrepArray prim found in the input USD file(s) into a real SmBrep and runs
 // SmBrep::AssertValid on it (SmApiUsdGeometryValidate). This is the kernel-level "is the built
 // solid actually sound" check (closing loops, manifold edges, on-surface UV trim curves, ...). It is a sibling of the
-// schema-level brep_validator (the BA.xxx checks): the schema validator checks the USD data is
+// schema-level brep_usdschema_validator (the BA.xxx checks): the schema validator checks the USD data is
 // well-formed, this one checks the built solid is geometrically/topologically sound.
 //
 // Forms:
@@ -32,8 +32,6 @@
 
 #include "UsdBrepSuppressPixarWarningsPush.h"
 #include <pxr/usd/usd/stage.h>
-#include <pxr/usd/usd/primRange.h>
-#include <pxr/usd/usdGeom/gprim.h>
 #include <pxr/base/arch/systemInfo.h>
 #include "UsdBrepSuppressPixarWarningsPop.h"
 
@@ -47,7 +45,6 @@
 #include <thread>
 #include <map>
 #include <mutex>
-#include <set>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -150,7 +147,7 @@ void WriteTimingRecord(const SdfPath& rPrim, const PrimValidateResult& rResult)
     std::fflush(g_timingFp);
 }
 
-PrimValidateResult ProcessPrim(const UsdGeomGprim& rGprim, const SdfPath& rStablePath, int iLevel, bool bQuiet,
+PrimValidateResult ProcessPrim(const UsdPrim& rPrim, const SdfPath& rStablePath, int iLevel, bool bQuiet,
                                std::mutex* pStdoutMutex)
 {
     PrimValidateResult sResult;
@@ -158,7 +155,7 @@ PrimValidateResult ProcessPrim(const UsdGeomGprim& rGprim, const SdfPath& rStabl
 
     sResult.iImportStartUs = TimingElapsedUs();
     SmApiUsdGeometryResult sGeometry;
-    const SmStatus sStat = SmApiUsdGeometryValidate(rGprim.GetPrim(), iLevel, sGeometry);
+    const SmStatus sStat = SmApiUsdGeometryValidate(rPrim, iLevel, sGeometry);
     sResult.iImportEndUs = sResult.iImportStartUs + static_cast<long long>(sGeometry.m_dImportSeconds * 1e6);
     if (sStat != SM_SUCCESS)
     {
@@ -255,70 +252,16 @@ int ValidateFile(const std::string& sInput, int iLevel, bool bQuiet, bool bProgr
         return 0;
     }
 
-    using OrderedGprim = std::pair<SdfPath, UsdGeomGprim>;
-    std::vector<OrderedGprim> vOrderedBreps;
-    std::map<SdfPath, UsdGeomGprim> sOrderedBreps;
-    std::map<SdfPath, UsdPrim> sPendingPrototypes;
-    std::set<SdfPath> sVisitedPrototypes;
+    using OrderedPrim = std::pair<SdfPath, UsdPrim>;
+    std::vector<OrderedPrim> vOrderedBreps;
     size_t iDiscoveryPrimCount = 0;
-
-    auto isBrep = [](const UsdPrim& sPrim)
+    if (SmApiUsdFindGeometryPrims(sStage, vOrderedBreps, &iDiscoveryPrimCount) != SM_SUCCESS)
     {
-        return sPrim.HasAttribute(TfToken("brep:regionCount")) || sPrim.GetTypeName() == "BrepArray";
-    };
-
-    // Seed a sorted work queue with active authored instances.
-    for (const UsdPrim& sPrim : sStage->Traverse())
-    {
-        ++iDiscoveryPrimCount;
-        if (!sPrim.IsValid() || !sPrim.IsActive())
-        {
-            continue;
-        }
-        if (sPrim.IsInstance())
-        {
-            sPendingPrototypes.emplace(sPrim.GetPath(), sPrim.GetPrototype());
-        }
-        if (isBrep(sPrim))
-        {
-            sOrderedBreps.emplace(sPrim.GetPath(), UsdGeomGprim(sPrim));
-        }
+        std::fprintf(stderr, "ERROR: failed to search for BrepArray prims in %s\n", sInput.c_str());
+        std::printf("BREP_GEOMETRY file=%s open=FAIL\n", sInput.c_str());
+        rbHardError = true;
+        return 0;
     }
-
-    // The smallest authored path reaches each prototype first, so shared
-    // prototype contents are traversed and imported only once.
-    while (!sPendingPrototypes.empty())
-    {
-        const auto sNext = sPendingPrototypes.begin();
-        const SdfPath sPrototypeKey = sNext->first;
-        const UsdPrim sPrototype = sNext->second;
-        sPendingPrototypes.erase(sNext);
-        if (!sPrototype || !sVisitedPrototypes.insert(sPrototype.GetPath()).second)
-        {
-            continue;
-        }
-
-        for (const UsdPrim& sPrim : UsdPrimRange(sPrototype))
-        {
-            ++iDiscoveryPrimCount;
-            if (!sPrim.IsValid() || !sPrim.IsActive())
-            {
-                continue;
-            }
-            const SdfPath sRelativePath = sPrim.GetPath().MakeRelativePath(sPrototype.GetPath());
-            const SdfPath sStablePath = sPrototypeKey.AppendPath(sRelativePath);
-            if (sPrim.IsInstance())
-            {
-                sPendingPrototypes.emplace(sStablePath, sPrim.GetPrototype());
-            }
-            if (isBrep(sPrim))
-            {
-                sOrderedBreps.emplace(sStablePath, UsdGeomGprim(sPrim));
-            }
-        }
-    }
-
-    vOrderedBreps.assign(sOrderedBreps.begin(), sOrderedBreps.end());
 
     if (bDiscoveryStats)
     {
@@ -380,7 +323,7 @@ int ValidateFile(const std::string& sInput, int iLevel, bool bQuiet, bool bProgr
                 [&](const tbb::blocked_range<size_t>& rRange) {
                     for (size_t iPrim = rRange.begin(); iPrim != rRange.end(); ++iPrim)
                     {
-                        const OrderedGprim& rOrderedBrep = vOrderedBreps[iPrim];
+                        const OrderedPrim& rOrderedBrep = vOrderedBreps[iPrim];
                         vResults[iPrim] = ProcessPrim(rOrderedBrep.second, rOrderedBrep.first,
                                                      iLevel, bQuiet, &sStdoutMutex);
                         WriteTimingRecord(rOrderedBrep.first, vResults[iPrim]);
@@ -406,7 +349,7 @@ int ValidateFile(const std::string& sInput, int iLevel, bool bQuiet, bool bProgr
         int iInvalid = 0;
         for (size_t iPrim = 0; iPrim < vOrderedBreps.size(); ++iPrim)
         {
-            const OrderedGprim& rOrderedBrep = vOrderedBreps[iPrim];
+            const OrderedPrim& rOrderedBrep = vOrderedBreps[iPrim];
             vResults[iPrim] =
                 ProcessPrim(rOrderedBrep.second, rOrderedBrep.first, iLevel, bQuiet, nullptr);
             WriteTimingRecord(rOrderedBrep.first, vResults[iPrim]);
@@ -421,7 +364,7 @@ int ValidateFile(const std::string& sInput, int iLevel, bool bQuiet, bool bProgr
     unsigned long lChecksFailed = 0;
     for (size_t iPrim = 0; iPrim < vOrderedBreps.size(); ++iPrim)
     {
-        const OrderedGprim& rOrderedBrep = vOrderedBreps[iPrim];
+        const OrderedPrim& rOrderedBrep = vOrderedBreps[iPrim];
         const SdfPath& sStablePath = rOrderedBrep.first;
         const PrimValidateResult& rResult = vResults[iPrim];
         if (!rResult.sError.empty())

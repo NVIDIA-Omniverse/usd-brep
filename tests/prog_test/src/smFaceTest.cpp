@@ -16,6 +16,9 @@
 #include <SmTrimmingTools.h>
 #include <SmTrackTopologyChanges.h>
 #include <SmLine.h>
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 
 static SmStatus my_test_seam_uv_redistribution_at_poles()
 {
@@ -1569,6 +1572,36 @@ static SmStatus my_test_seam_touch_incidence()
             }
           }
         }
+        if(lKind >= 2 && lKind <= 5)
+          {
+            // Both endpoint-selection contracts must recover the same occupied
+            // side, including reversed loops and segmented seam edgeuses.
+            SmTArray<SmEdgeuse*> sUses;
+            apLoops[1]->GetEdgeuses(sUses);
+            for(ULONG lUse=0; lUse<sUses.GetSize(); ++lUse)
+              {
+                SmEdgeuse *pUse = sUses[lUse];
+                SmEdge    *pEdge = pUse->GetEdge();
+                SmCrvOnSurf *pCurve = (SmCrvOnSurf*)pEdge->GetCurve();
+                SmPoint3d sUV;
+                SER(pCurve->GetUVCurve()->EvaluatePoint(pEdge->GetInterval().GetMid(),sUV));
+                double dSeam = bHighSide ? sDomain.GetUMax() : sDomain.GetUMin();
+                if(smos_Fabs(sUV.x-dSeam) > SM_EFF_ZERO_PARAM) { continue; }
+                SmSeamSideType eExpected = bHighSide ? SM_SEAM_SIDE_MAX : SM_SEAM_SIDE_MIN;
+                for(ULONG lDirections=0; lDirections<2; ++lDirections)
+                  {
+                    SmSeamSideType eForward,eBackward;
+                    SER(pUse->FindSeamSides
+                      (pEdge->GetInterval().GetMid(), // in : encounter parameter on this edge
+                       SM_SP_U,                      // in : periodic parameter being crossed
+                       1e-7,                         // in : 3D seam neighborhood
+                       lDirections != 0,             // in : use stored directions, otherwise match connected endpoints
+                       eForward,                     // out: evidence toward the CCW edgeuse
+                       eBackward));                  // out: evidence toward the CW edgeuse
+                    if(eForward != eExpected || eBackward != eExpected) { return SM_ERR; }
+                  }
+              }
+          }
         SmFaceProps sProps(&sContext);
         SER(sProps.SetProps_Stage2(pFace, 0, SM_HO_ALL));
         // Full-period boundaries have two UV seam encounters and no periodic
@@ -1701,7 +1734,7 @@ static SmStatus my_test_seam_touch_incidence()
         SmTArray<SmTouchData> sSavedU, sSavedV;
         sSavedU.Append(sProps.m_sRawTouchListU);
         sSavedV.Append(sProps.m_sRawTouchListV);
-        SER(sProps.SetProps_Stage3(pFace, 0, SM_HO_ALL));
+        SER(sProps.SetProps_Stage4(pFace, 0, SM_HO_ALL));
         if(sSavedU.GetSize() != sProps.m_sRawTouchListU.GetSize()
          || sSavedV.GetSize() != sProps.m_sRawTouchListV.GetSize()) { return SM_ERR; }
         for(ULONG lIndex=0; lIndex<sSavedU.GetSize(); ++lIndex)
@@ -1791,7 +1824,7 @@ static SmStatus my_test_planar_outer_loop_winding()
       SER(sBuilder.EndBrep());
 
       SmFaceProps sProps(&sContext);
-      SER(sProps.SetProps_Stage3(pFace,0,SM_HO_ALL));
+      SER(sProps.SetProps_Stage4(pFace,0,SM_HO_ALL));
       if(   sProps.m_eNotYetFaceType != SM_HNF_NO_PROBS
          || sProps.m_pLooptreeRoot == NULL
          || sProps.m_sLoopProps.GetSize() != 1)
@@ -1867,7 +1900,7 @@ static SmStatus my_test_failed_loop_containment()
   // The invalid nesting also triggers two debug consistency assertions.
   MYPRINTF(_T("\nExpect inconsistent-loop classification diagnostics for the overlapping boundaries."));
   SmFaceProps sProps(&sContext);
-  SmStatus    sStatus = sProps.SetProps_Stage3(pFace,0,SM_HO_ALL);
+  SmStatus    sStatus = sProps.SetProps_Stage4(pFace,0,SM_HO_ALL);
   if(   sStatus != SM_ERR_NOTYET_HEAL_FACE
      || sProps.m_eNotYetFaceType != SM_HNF_NO_LOOP_TREE_ROOT
      || sProps.m_pLooptreeRoot != NULL)
@@ -1912,11 +1945,201 @@ static SmStatus my_test_loop_orientation_knot_sampling()
   return SM_SUCCESS;
 }
 
+// A full sphere has no off-seam anchor. Keep that evidence distinct from
+// an unresolved connection so gap measurement can use the seam curve directly.
+static SmStatus my_test_unanchored_seam_evidence()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_unanchored_seam_evidence"));
+  for(ULONG lSwap=0; lSwap<2; ++lSwap)
+    {
+      SmContext   sContext;
+      SmBrep     *pBrep = new(sContext) SmBrep();
+      SmObjDelete sCleanup(pBrep);
+      SmSphere   *pSphere = NULL;
+      SmFace     *pFace = NULL;
+      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),1.,pSphere));
+      if(lSwap) { SER(pSphere->SwapUV()); }
+      SER(pBrep->CreateFaceFromSurface(pSphere,pSphere->GetNaturalUVDomain(),pFace));
+      SmTArray<SmLoop*> sLoops;
+      pFace->GetLoops(sLoops);
+      SmTArray<SmEdgeuse*> sUses;
+      sLoops[0]->GetEdgeuses(sUses);
+      for(ULONG lUse=0; lUse<sUses.GetSize(); ++lUse)
+        {
+          SmSeamSideType eForward,eBackward;
+          SER(sUses[lUse]->FindSeamSides
+            (sUses[lUse]->GetEdge()->GetInterval().GetMid(), // in : encounter parameter on this edge
+             lSwap ? SM_SP_V : SM_SP_U,                     // in : periodic parameter being crossed
+             1e-7,                                         // in : 3D seam neighborhood
+             FALSE,                                        // in : use stored directions, otherwise match connected endpoints
+             eForward,                                     // out: evidence toward the CCW edgeuse
+             eBackward));                                  // out: evidence toward the CW edgeuse
+          if(eForward != SM_SEAM_SIDE_ON || eBackward != SM_SEAM_SIDE_ON) { return SM_ERR; }
+        }
+    }
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: Transfer pole vertex-loop classifications without shifting edge loops.
+***********************************************************************/
+static SmStatus my_test_faceprops_pole_loop_results()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_faceprops_pole_loop_results"));
+  for(ULONG lVertexFirst=0; lVertexFirst<2; ++lVertexFirst)
+    {
+      SmContext         sContext;
+      SmBrepConstructor sBuilder;
+      SmBrep           *pBrep = sBuilder.StartBrep(sContext);
+      SmObjDelete       sCleanup(pBrep);
+      SmShell          *pOuter = NULL,*pInner = NULL;
+      SER(sBuilder.StartShell(pOuter,pInner));
+      SmFace *pFace = sBuilder.StartFace(SM_OT_SAME);
+      NER(pFace);
+      SmSphere *pSphere = NULL;
+      SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),2.,pSphere));
+      SER(sBuilder.SetFaceSurface(pSphere,pSphere->GetNaturalUVDomain()));
+      if(lVertexFirst) { NER(sBuilder.StartAndEndSingleVertexLoop(SmPoint3d(0,0,2))); }
+      NER(sBuilder.StartLoop(SM_OT_SAME));
+      SmPoint3d sStart(2,0,0);
+      SmVertex *pStart = sBuilder.StartVertexOfLoop(sStart);
+      NER(sBuilder.StartEdge(SM_OT_SAME,NULL,pStart,pStart));
+      SmCircle *pCircle = new(sContext) SmCircle
+        (SmPoint3d(0,0,0),   // in : equator center
+         SmVector3d(1,0,0),  // in : first circle axis
+         SmVector3d(0,1,0),  // in : second circle axis
+         SmExtent1d(0,360), // in : full angular interval in degrees
+         2.,                // in : sphere radius
+         3,                 // in : dimension
+         &sContext);        // in : allocation context
+      SER(sBuilder.SetEdgeCurve(pCircle,FALSE));
+      SER(sBuilder.SetLimits(SmVertexNode(sStart),SmVertexNode(sStart)));
+      SER(sBuilder.EndEdge());
+      SER(sBuilder.EndLoop());
+      if(!lVertexFirst) { NER(sBuilder.StartAndEndSingleVertexLoop(SmPoint3d(0,0,2))); }
+      SER(sBuilder.EndFace());
+      SER(sBuilder.EndShell(FALSE));
+      SER(sBuilder.EndBrep());
+      SmFaceProps sProps(pFace,0,&sContext);
+      SER(sProps.SetProps(SM_PROPSTAGE_4,pFace,0,SM_HO_ALL));
+      AERN(sProps.m_lClosedLoopCnt == 2 && sProps.m_sLoopProps.GetSize() == 2,SM_ERR);
+      for(ULONG lLoop=0; lLoop<2; ++lLoop)
+        {
+          const SmLoopProps &crLoop = sProps.m_sLoopProps[lLoop];
+          AERN(crLoop.m_eContainmentType == SM_CMT_TOPLOOP || crLoop.m_eContainmentType == SM_CMT_BOTLOOP,SM_ERR);
+          AERN(crLoop.m_eLoopOrient != SM_OT_UNKNOWN,SM_ERR);
+        }
+      AERN(sProps.m_sLoopProps[0].m_eContainmentType != sProps.m_sLoopProps[1].m_eContainmentType,SM_ERR);
+    }
+  return SM_SUCCESS;
+}
+
+//*************************************************************************
+// SmFace::HasSeamProblem must hand its seam curves to its output rather than
+// copy them, which leaks the originals. Copies of the output, and output
+// copied from a caller's SmFaceProps, must use their own seam's UV curve,
+// which outlives the original or the cache.
+//*************************************************************************
+
+// TRUE when crCrvClass's UV curve is its own seam curve's.
+static SmBoolean sm_UsesOwnSeamUVCurve(const SmCurveClassification& crCrvClass)
+{
+    const SmCurve* pSeam = crCrvClass.GetCurve();
+    const SmCurve* pUVCurve = crCrvClass.GetAnyUVCurve1();
+    return pSeam != NULL && pSeam->IsKindOf(SmCrvOnSurf_TYPE) && pUVCurve != NULL
+        && pUVCurve == ((const SmCrvOnSurf*)pSeam)->GetUVCurve()
+        && pUVCurve->GetNaturalInterval().GetLength() > 0.0;
+}
+
+static SmStatus my_test_seam_curve_ownership()
+{
+    // A cylinder's side face has a U seam; a torus face has U and V seams.
+    SmContext sContext;
+    SmAxis2Placement sRefFrame;
+    sRefFrame.SetCanonical(SmPoint3d(0,0,0), SmVector3d(1,0,0), SmVector3d(0,1,0));
+    SmBrep* pCylinder = new (sContext) SmBrep();
+    SmObjDelete sCylinderCleanup(pCylinder);
+    SER( SmPrimitiveCreation(pCylinder->GetInfiniteRegion()).CreateCylinder(2.0, 1.0, sRefFrame) );
+    SmBrep* pTorus = new (sContext) SmBrep();
+    SmObjDelete sTorusCleanup(pTorus);
+    SER( SmPrimitiveCreation(pTorus->GetInfiniteRegion()).CreateTorus(5.0, 1.0, 0.0, 360.0, sRefFrame) );
+
+    ULONG aSeamCount[2] = { 0, 0 };
+    for( SmBrep* pBrep : { pCylinder, pTorus } )
+    {
+        SmTArray<SmFace*> sFaces;
+        pBrep->GetFaces(sFaces);
+        for( ULONG ii = 0; ii < sFaces.GetSize(); ++ii )
+        {
+            const SmContext& crContext = *sFaces[ii]->GetContext();
+            SmSurfParamType eCrossed, eMissing, eNearMiss;
+
+            // Copy the output, then delete it.
+            SmCurveClassification* aOutput[2] = { new (crContext) SmCurveClassification,
+                                                  new (crContext) SmCurveClassification };
+            sFaces[ii]->HasSeamProblem(*aOutput[0], *aOutput[1], eCrossed, eMissing, eNearMiss);
+            SmBoolean aHasSeam[2];
+            SmCurveClassification aCopied[2] = { *aOutput[0], *aOutput[1] };
+            SmCurveClassification aAssigned[2];
+            for( int jj = 0; jj < 2; ++jj )
+            {
+                aAssigned[jj] = *aOutput[jj];
+                aHasSeam[jj] = aOutput[jj]->GetCurve() != NULL;
+                delete aOutput[jj];
+            }
+
+            // Copy the output from a caller's SmFaceProps, then delete it. A new SmFaceProps
+            // does not know the surface is periodic, so say so.
+            SmCurveClassification aCached[2];
+            {
+                const SmSurface* pSurface = sFaces[ii]->GetSurface();
+                SmBoolean bPeriodicU = pSurface->IsPeriodic(pSurface->GetNaturalUVDomain(), SM_SP_U);
+                SmBoolean bPeriodicV = pSurface->IsPeriodic(pSurface->GetNaturalUVDomain(), SM_SP_V);
+                SmFaceProps sFaceProps(&crContext);
+                sFaces[ii]->HasSeamProblem(aCached[0], aCached[1], eCrossed, eMissing, eNearMiss, FALSE,
+                                           &bPeriodicU, &bPeriodicV, &sFaceProps);
+            }
+
+            for( int jj = 0; jj < 2; ++jj )
+            {
+                if( !aHasSeam[jj] )
+                    continue;
+                ++aSeamCount[jj];
+                if( !sm_UsesOwnSeamUVCurve(aCopied[jj]) || !sm_UsesOwnSeamUVCurve(aAssigned[jj])
+                    || !sm_UsesOwnSeamUVCurve(aCached[jj]) )
+                    return SM_ERR;
+            }
+        }
+    }
+    if( aSeamCount[0] == 0 || aSeamCount[1] == 0 )
+        return SM_ERR;
+
+#if defined(__GLIBC__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33))
+    // A copied seam curve leaks the original: level-2 AssertValid must not grow the heap.
+    const int iWarmUp = 10, iRuns = 100;
+    size_t lBase = 0;
+    for( int ii = 0; ii < iWarmUp + iRuns; ++ii )
+    {
+        if( ii == iWarmUp )
+            lBase = mallinfo2().uordblks;
+        for( SmBrep* pBrep : { pCylinder, pTorus } )
+            if( !pBrep->AssertValid(NULL, SM_LEVEL_2, SM_WALK) )
+                return SM_ERR;
+    }
+    const size_t lUsed = mallinfo2().uordblks;
+    if( lUsed > lBase && (lUsed - lBase) / iRuns > 1024 )
+        return SM_ERR;
+#endif
+    MYPRINTF(_T("\nSeam curve ownership: cylinder and torus seams passed"));
+    return SM_SUCCESS;
+}
+
 SmStatus my_test_faces()
 {
   // Run every independent test and retain the first failure in either build mode.
   SmStatus sResult = SM_SUCCESS;
 
+  PT_RUN(sResult, my_test_faceprops_pole_loop_results());
   PT_RUN(sResult, my_test_loop_orientation_periodic_winding());
   PT_RUN(sResult, my_test_loop_orientation_knot_sampling());
   // Scale each seam independently to exercise both adjacent derivative intervals.
@@ -1930,10 +2153,12 @@ SmStatus my_test_faces()
   PT_RUN(sResult, my_test_face_line_intersect_growth());
   PT_RUN(sResult, my_test_loop_uv_gap_neighborhood());
   PT_RUN(sResult, my_test_seam_touch_incidence());
+  PT_RUN(sResult, my_test_unanchored_seam_evidence());
   PT_RUN(sResult, my_test_planar_outer_loop_winding());
   PT_RUN(sResult, my_test_failed_loop_containment());
   PT_RUN(sResult, my_test_seam_uv_redistribution_at_poles());
   PT_RUN(sResult, my_test_get_loop_crossings());
   PT_RUN(sResult, my_test_face_loop_nesting());
+  PT_RUN(sResult, my_test_seam_curve_ownership());
   return sResult;
 }

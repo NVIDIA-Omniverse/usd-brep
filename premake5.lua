@@ -9,6 +9,12 @@
 -- Note: Most of this should probably be relocated to repo_build and
 -- loaded from there instead of copying around everywhere. #TODO
 
+-- Android (premake5 --os=android): kernel only, with makefiles kept apart from the host build's.
+local is_android = os.target() == "android"
+if is_android then
+    workspace_dir = "%{root}/_compiler/".._ACTION.."-android"
+end
+
 include("premake5-public.lua")
 
 ------------------------------------------------------------------------------------------------------------------------
@@ -77,14 +83,14 @@ workspace "usd-brep"
         end
         optimize "On"
         runtime "Release"
-    filter { "system:linux", "configurations:debug" }
+    filter { "system:linux or android", "configurations:debug" }
         defines { "_DEBUG", "NOMINMAX" }
         if not smlib_no_debug_gfx_check then
             defines { "SM_DEBUG_CODE=1", "SM_GFX_CODE=1", "SM_GRAPHICS_CALLBACKS=1" }
         end
         optimize "Off"
         runtime "Debug"
-    filter { "system:linux", "configurations:release" }
+    filter { "system:linux or android", "configurations:release" }
         -- SM_GRAPHICS_CALLBACKS=1: see the windows release note above. Required for
         -- dev/GUI prog_test draw-event capture in the default release workflow.
         defines { "NDEBUG", "NOMINMAX" }
@@ -146,8 +152,20 @@ workspace "usd-brep"
         -- results differed from x86-64 and Windows, and marginal geometry could take a different
         -- branch. Keep the multiply and add separate so every platform rounds the same way.
         buildoptions { "-ffp-contract=off" }
+    filter { "system:android" }
+        -- NDK clang (CC/CXX on the make command line). Its -Wall adds the warnings macOS clang
+        -- suppresses; -ffp-contract=off as on linux-aarch64.
+        buildoptions (concat_arrays({ "-Wall", "-Wno-missing-braces", "-Wno-misleading-indentation", "-Wunused-parameter",
+                                      "-ffp-contract=off" }, macos_warning_suppressions()))
+        -- Premake adds these only for linux: load sibling libraries by name, from beside the binary.
+        linkoptions { "-Wl,-rpath,'$$ORIGIN'" }
+    filter { "system:android", "kind:SharedLib" }
+        linkoptions { "-Wl,-soname=%{cfg.buildtarget.name}" }
     filter { "system:macosx" }
         platforms { "universal" }
+        -- Clang fuses a*b+c into one FMA instruction by default (-ffp-contract=on) when the target
+        -- has one, as the arm64 half of the universal binary does. Keep them separate, as on aarch64.
+        buildoptions { "-ffp-contract=off" }
         -- Change paths from 'macosx' to 'macos'. Premake likes 'macosx', but the rest of our
         -- repo tools prefer 'macos'
         -- this doesn't work
@@ -173,8 +191,10 @@ include("Examples/SM_API/premake5.lua")
 include("Examples/SMLib/premake5.lua")
 include("tests/SM_API_test/premake5.lua")
 include("tests/prog_test/premake5.lua")
-include("source/SmPyDevLib/premake5.lua")
-include("source/SmPyLib/premake5_tests.lua")
+if not is_android then
+    include("source/SmPyDevLib/premake5.lua")
+    include("source/SmPyLib/premake5_tests.lua")
+end
 
 local function include_usd_dependent_stack()
     include("source/BREP_USD_DATA/premake5.lua")
@@ -200,6 +220,6 @@ end
 
 -- USD/OCCT on macOS when local deps are staged (see setup-macos-local-deps.sh);
 -- macos_usd_staged() returns true on non-macOS platforms.
-if macos_usd_staged() then
+if macos_usd_staged() and not is_android then
     include_usd_dependent_stack()
 end

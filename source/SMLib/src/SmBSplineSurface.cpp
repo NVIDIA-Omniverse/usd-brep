@@ -2046,7 +2046,7 @@ SmStatus SmBSplineSurface::CreateSphereFromArcs
 
   // extract Sphere Params from Arc shapes
   double            dAngleSpan = dEndAng - dStartAng;
-  const SmPoint3d & rOrigin = sRefFrame.GetOriginRef();
+  const SmPoint3d   sOrigin = sRefFrame.GetOrigin(); // copy: IsArc below overwrites sRefFrame
 
   // for all other input arcs - check for Compatible centers and radii
   for (ULONG i=1; i<crArcs.GetSize(); i++) 
@@ -2065,7 +2065,7 @@ SmStatus SmBSplineSurface::CreateSphereFromArcs
          { return SM_ERR; }
 
       // no work - OtherCurve center is not the same as 1st Curve cent
-      SmVector3d sDiff = sRefFrame.GetOriginRef() - rOrigin;
+      SmVector3d sDiff = sRefFrame.GetOriginRef() - sOrigin;
       if(sDiff.Length() > d3DTol)
         { return SM_ERR; }
 
@@ -2176,7 +2176,7 @@ SmStatus SmBSplineSurface::CreateSphereFromArcs
   else                                          { SER(SM_ERR); }
 
   // Define ZAxis in same general direction as sRefZAxis
-  SmVector3d sZAxis = rOrigin - sNonCommonPnt;
+  SmVector3d sZAxis = sOrigin - sNonCommonPnt;
   if (sZAxis.Dot(sRefZAxis) < 0.0) 
     { sZAxis = - sZAxis; }
   sZAxis.Unitize() ;
@@ -2185,7 +2185,7 @@ SmStatus SmBSplineSurface::CreateSphereFromArcs
   SmBSplineSurface * pSurface = NULL;
   SER(SmBSplineSurface::CreateSurfOfRevolution(crContext,
                                                pGenCurve,
-                                               rOrigin,
+                                               sOrigin,
                                                sZAxis,
                                                dAngleSpan,
                                                pSurface));

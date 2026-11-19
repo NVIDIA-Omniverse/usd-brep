@@ -18,6 +18,9 @@
 #include <SmPrimitiveCreation.h>
 #include <SmTrimmingTools.h>
 #include <SmTopologyTraverser.h>
+#include <SmSurfOfRevolution.h>
+#include <SmCylinder.h>
+#include <SmPlane.h>
 
 #include <SmTree.h>
 // Remove Composites
@@ -2423,6 +2426,399 @@ SmStatus SmMerge::NonManifoldBoolean
 } // end SmMerge::NonManifoldBoolean
 
 /*******************************************************************//**
+PURPOSE: Height along, and distance from, an axis of a point
+***********************************************************************/
+static void sm_AxialCoordinates
+  (const SmPoint3d  & crPoint,      // in : point
+   const SmPoint3d  & crAxisPoint,  // in : point on the axis
+   const SmVector3d & crAxisDir,    // in : unit axis direction
+   double           & rdHeight,     // out: signed height along the axis
+   double           & rdRadius)     // out: distance from the axis
+{
+  SmVector3d sDiff = crPoint - crAxisPoint;
+  rdHeight = sDiff.Dot(crAxisDir);
+  rdRadius = (sDiff - crAxisDir * rdHeight).Length();
+}
+
+/*******************************************************************//**
+PURPOSE: Rotate a point about an axis
+***********************************************************************/
+static SmPoint3d sm_RotateAboutAxis
+  (const SmPoint3d  & crPoint,      // in : point
+   const SmPoint3d  & crAxisPoint,  // in : point on the axis
+   const SmVector3d & crAxisDir,    // in : unit axis direction
+   double             dAngleRad)    // in : rotation angle, right-handed about crAxisDir
+{
+  SmVector3d sV = crPoint - crAxisPoint;
+  double dCos = smos_Cosine(dAngleRad), dSin = smos_Sine(dAngleRad);
+  return crAxisPoint + sV * dCos + (crAxisDir * sV) * dSin + crAxisDir * (crAxisDir.Dot(sV) * (1.0 - dCos));
+}
+
+/*******************************************************************//**
+PURPOSE: Distance from a point to the segment [crP0,crP1]
+***********************************************************************/
+static double sm_PointSegmentDistance
+  (const SmPoint3d & crPoint,                         // in : point
+   const SmPoint3d & crP0, const SmPoint3d & crP1)    // in : segment
+{
+  SmVector3d sSeg = crP1 - crP0;
+  double dLengthSq = sSeg.Dot(sSeg);
+  double dT = (dLengthSq > SM_EFF_ZERO_SQ) ? smos_Min(smos_Max((crPoint - crP0).Dot(sSeg) / dLengthSq, 0.0), 1.0) : 0.0;
+  return (crPoint - (crP0 + sSeg * dT)).Length();
+}
+
+/*******************************************************************//**
+PURPOSE: Find the axis of a Brep that is a solid of revolution with straight seams
+
+NOTES: Every face lies on a surface of revolution about one axis or on a plane
+   perpendicular to it, every edge is a straight seam or a circle about the
+   axis on a face, and every vertex that is not on an edge lies on the axis.
+   Rotating such a Brep about its axis changes no geometry and only moves its
+   seams. Primitive cylinders, cones and frusta qualify.
+***********************************************************************/
+static SmBoolean sm_GetSolidOfRevolutionAxis
+  (const SmBrep      * cpBrep,       // in : Brep to check
+   double              dTol,         // in : distance tolerance for the checks
+   SmPoint3d         & rAxisPoint,   // out: point on the axis
+   SmVector3d        & rAxisDir,     // out: unit axis direction
+   SmTArray<SmEdge*> & rSeamEdges)   // out: the seam edges
+{
+  rSeamEdges.ReSet();
+  SmBoolean bHaveAxis = FALSE;
+  SmTArray<SmVector3d> sPlaneNormals;
+
+  // every surface of revolution shares one axis; the rest are planes
+  SmTArray<SmFace*> sFaces;
+  cpBrep->GetFaces(sFaces);
+  for (ULONG ii = 0; ii < sFaces.GetSize(); ii++)
+    {
+      const SmSurface * pSurf = sFaces[ii]->GetSurface();
+      if (pSurf->IsKindOf(SmSurfOfRevolution_TYPE))
+        {
+          SmBSplineCurve * pGenCurve = NULL;
+          SmPoint3d  sPoint;
+          SmVector3d sDir;
+          if (   ((const SmSurfOfRevolution*)pSurf)->GetCanonical(pGenCurve, sPoint, sDir) != SM_SUCCESS
+              || sDir.Unitize(FALSE) != SM_SUCCESS)
+            { return FALSE; }
+          if (!bHaveAxis)
+            {
+              rAxisPoint = sPoint;
+              rAxisDir   = sDir;
+              bHaveAxis  = TRUE;
+            }
+          else
+            {
+              double dHeight, dRadius;
+              sm_AxialCoordinates(sPoint, rAxisPoint, rAxisDir, dHeight, dRadius);
+              if ((sDir * rAxisDir).Length() > 1.0e-9 || dRadius > dTol)
+                { return FALSE; }
+            }
+        }
+      else if (pSurf->IsKindOf(SmPlane_TYPE))
+        {
+          SmAxis2Placement sFrame;
+          if (((const SmPlane*)pSurf)->GetCanonical(sFrame) != SM_SUCCESS)
+            { return FALSE; }
+          sPlaneNormals.Add(sFrame.GetZAxis());
+        }
+      else
+        { return FALSE; }
+    }
+  if (!bHaveAxis)
+    { return FALSE; }
+  for (ULONG ii = 0; ii < sPlaneNormals.GetSize(); ii++)
+    {
+      SmVector3d sNormal = sPlaneNormals[ii];
+      if (sNormal.Unitize(FALSE) != SM_SUCCESS || (sNormal * rAxisDir).Length() > 1.0e-9)
+        { return FALSE; }
+    }
+
+  // every edge is a straight seam or a circle about the axis on a face; a wire
+  // edge could be part of a circle, which a turn would move
+  SmTArray<SmEdge*> sEdges;
+  cpBrep->GetEdges(sEdges);
+  for (ULONG ii = 0; ii < sEdges.GetSize(); ii++)
+    {
+      SmEdge  * pEdge  = sEdges[ii];
+      SmCurve * pCurve = pEdge->GetCurve();
+      if (pCurve == NULL || pEdge->IsWire())
+        { return FALSE; }
+      SmExtent1d sInterval = pEdge->GetInterval();
+      SmPoint3d  sPts[5];
+      for (ULONG jj = 0; jj < 5; jj++)
+        {
+          if (pCurve->EvaluatePoint(sInterval.Evaluate(jj / 4.0), sPts[jj]) != SM_SUCCESS)
+            { return FALSE; }
+        }
+      if (pEdge->IsSeam())
+        {
+          // straight: the inner samples lie on the chord
+          SmVector3d sChord = sPts[4] - sPts[0];
+          double     dChordLength = sChord.Length();
+          if (dChordLength <= dTol)
+            { return FALSE; }
+          for (ULONG jj = 1; jj < 4; jj++)
+            {
+              if (((sPts[jj] - sPts[0]) * sChord).Length() / dChordLength > dTol)
+                { return FALSE; }
+            }
+          rSeamEdges.Add(pEdge);
+        }
+      else
+        {
+          // a circle about the axis: the samples share one height and one radius
+          double dHeight0, dRadius0;
+          sm_AxialCoordinates(sPts[0], rAxisPoint, rAxisDir, dHeight0, dRadius0);
+          for (ULONG jj = 1; jj < 5; jj++)
+            {
+              double dHeight, dRadius;
+              sm_AxialCoordinates(sPts[jj], rAxisPoint, rAxisDir, dHeight, dRadius);
+              if (smos_Fabs(dHeight - dHeight0) > dTol || smos_Fabs(dRadius - dRadius0) > dTol)
+                { return FALSE; }
+            }
+        }
+    }
+
+  // a shell or loop vertex off the axis would move with a turn
+  SmTArray<SmVertex*> sVertices;
+  cpBrep->GetVertices(sVertices);
+  for (ULONG ii = 0; ii < sVertices.GetSize(); ii++)
+    {
+      if (sVertices[ii]->IsEdgeVertex())
+        { continue; }
+      double dHeight, dRadius;
+      sm_AxialCoordinates(sVertices[ii]->GetPoint(), rAxisPoint, rAxisDir, dHeight, dRadius);
+      if (dRadius > dTol)
+        { return FALSE; }
+    }
+  return rSeamEdges.GetSize() > 0;
+}
+
+/*******************************************************************//**
+PURPOSE: Rotate a solid of revolution about its axis so that its seams pass
+   clear of the points where its cylinders touch the other Brep's cylinders
+
+NOTES: Two cylinders touch where their axes' common perpendicular meets them,
+   when the distance between the axes is the sum or the difference of the radii.
+   Equal-radius cylinders whose axes cross touch at two points, where their
+   intersection curves cross, and a branch that ends on the other's axis has its
+   cap rim touch the other cylinder there too. When a seam passes within the
+   intersector's capture distance of such a point, the crossings near it share
+   one proto vertex, and the Boolean can fail or drop a cylinder. Rotating a
+   solid of revolution about its axis changes none of its geometry, so turn it,
+   in 5 degree steps, to where its seams are farthest from those points. Leaves
+   pBrep alone when it is not a solid of revolution, when its seams are already
+   clear, or when no turn clears them.
+***********************************************************************/
+static SmStatus sm_TurnSeamsClearOfTouchPoints
+  (SmBrep       * pBrep,          // in : Brep that may be rotated about its axis
+   const SmBrep * cpOther,        // in : the other Boolean operand
+   double         dCaptureDist)   // in : intersector capture distance
+{
+  SmPoint3d         sAxisPoint;
+  SmVector3d        sAxisDir;
+  SmTArray<SmEdge*> sSeams;
+  double            dTol = pBrep->GetTolerance();
+  if (!sm_GetSolidOfRevolutionAxis(pBrep, smos_Max(10.0 * dTol, 1.0e-9), sAxisPoint, sAxisDir, sSeams))
+    { return SM_SUCCESS; }
+
+  // points where a cylinder of pBrep touches a cylinder of cpOther
+  SmTArray<SmPoint3d> sTouchPoints;
+  SmTArray<SmFace*>   sFaces, sOtherFaces;
+  pBrep->GetFaces(sFaces);
+  cpOther->GetFaces(sOtherFaces);
+  for (ULONG ii = 0; ii < sFaces.GetSize(); ii++)
+    {
+      if (!sFaces[ii]->GetSurface()->IsKindOf(SmCylinder_TYPE))
+        { continue; }
+      SmAxis2Placement sFrame;
+      double dRadius;
+      if (((const SmCylinder*)sFaces[ii]->GetSurface())->GetCanonical(sFrame, dRadius) != SM_SUCCESS)
+        { continue; }
+      SmPoint3d  sA = sFrame.GetOriginRef();
+      SmVector3d sD = sFrame.GetZAxis();
+      if (sD.Unitize(FALSE) != SM_SUCCESS)
+        { continue; }
+      for (ULONG jj = 0; jj < sOtherFaces.GetSize(); jj++)
+        {
+          if (!sOtherFaces[jj]->GetSurface()->IsKindOf(SmCylinder_TYPE))
+            { continue; }
+          SmAxis2Placement sOtherFrame;
+          double dOtherRadius;
+          if (((const SmCylinder*)sOtherFaces[jj]->GetSurface())->GetCanonical(sOtherFrame, dOtherRadius) != SM_SUCCESS)
+            { continue; }
+          SmPoint3d  sB = sOtherFrame.GetOriginRef();
+          SmVector3d sE = sOtherFrame.GetZAxis();
+          if (sE.Unitize(FALSE) != SM_SUCCESS)
+            { continue; }
+          SmVector3d sN = sD * sE;
+          if (sN.Length() < 1.0e-9)
+            { continue; }   // parallel axes touch along a line, not at points
+
+          // closest points of the two axes
+          SmVector3d sW = sA - sB;
+          double dB = sD.Dot(sE), dDd = sD.Dot(sW), dEe = sE.Dot(sW), dDenom = 1.0 - dB * dB;
+          double dS = (dB * dEe - dDd) / dDenom, dT = (dEe - dB * dDd) / dDenom;
+          SmPoint3d  sCA = sA + sD * dS, sCB = sB + sE * dT;
+          SmVector3d sAB = sCB - sCA;
+          double     dAxisDist = sAB.Length();
+          if (   smos_Fabs(dAxisDist - (dRadius + dOtherRadius)) > dCaptureDist
+              && smos_Fabs(dAxisDist - smos_Fabs(dRadius - dOtherRadius)) > dCaptureDist)
+            { continue; }
+
+          // the other face's height range along its axis, from samples of its edges
+          SmTArray<SmEdge*> sFaceEdges;
+          sOtherFaces[jj]->GetEdges(sFaceEdges);
+          double dLo = SM_BIG_DOUBLE, dHi = -SM_BIG_DOUBLE;
+          for (ULONG kk = 0; kk < sFaceEdges.GetSize(); kk++)
+            {
+              SmCurve * pCurve = sFaceEdges[kk]->GetCurve();
+              for (ULONG mm = 0; pCurve && mm < 5; mm++)
+                {
+                  SmPoint3d sPt;
+                  if (pCurve->EvaluatePoint(sFaceEdges[kk]->GetInterval().Evaluate(mm / 4.0), sPt) == SM_SUCCESS)
+                    {
+                      double dH = (sPt - sB).Dot(sE);
+                      dLo = smos_Min(dLo, dH);
+                      dHi = smos_Max(dHi, dH);
+                    }
+                }
+            }
+          SmVector3d sDir = (dAxisDist > dCaptureDist) ? sAB / dAxisDist : sN / sN.Length();
+          for (int iSide = -1; iSide <= 1; iSide += 2)
+            {
+              SmPoint3d sTouch = sCA + sDir * (iSide * dRadius);
+              double    dH = (sTouch - sB).Dot(sE);
+              if (dH >= dLo - dCaptureDist && dH <= dHi + dCaptureDist)
+                { sTouchPoints.Add(sTouch); }
+            }
+        }
+    }
+  if (sTouchPoints.GetSize() == 0)
+    { return SM_SUCCESS; }
+
+  // seam segments
+  SmTArray<SmPoint3d> sSeamEnds;
+  for (ULONG ii = 0; ii < sSeams.GetSize(); ii++)
+    {
+      SmVertex * pStart = NULL, * pEnd = NULL;
+      sSeams[ii]->GetVertices(pStart, pEnd);
+      if (pStart == NULL || pEnd == NULL)
+        { return SM_SUCCESS; }
+      sSeamEnds.Add(pStart->GetPoint());
+      sSeamEnds.Add(pEnd->GetPoint());
+    }
+
+  // smallest distance between the seams, turned by dAngle, and the touch points
+  auto clearance = [&](double dAngle)
+    {
+      double dMin = SM_BIG_DOUBLE;
+      for (ULONG ii = 0; ii < sSeamEnds.GetSize(); ii += 2)
+        {
+          SmPoint3d sP0 = sm_RotateAboutAxis(sSeamEnds[ii],     sAxisPoint, sAxisDir, dAngle);
+          SmPoint3d sP1 = sm_RotateAboutAxis(sSeamEnds[ii + 1], sAxisPoint, sAxisDir, dAngle);
+          for (ULONG jj = 0; jj < sTouchPoints.GetSize(); jj++)
+            { dMin = smos_Min(dMin, sm_PointSegmentDistance(sTouchPoints[jj], sP0, sP1)); }
+        }
+      return dMin;
+    };
+
+  double dBestClearance = clearance(0.0);
+  if (dBestClearance >= dCaptureDist)
+    { return SM_SUCCESS; }
+  double dBestAngle = 0.0;
+  for (ULONG kk = 1; kk < 72; kk++)
+    {
+      double dAngle = SM_DEG2RAD(5.0 * kk);
+      double dClearance = clearance(dAngle);
+      if (dClearance > dBestClearance)
+        {
+          dBestClearance = dClearance;
+          dBestAngle     = dAngle;
+        }
+    }
+  // only turn when that clears the capture distance
+  if (dBestAngle == 0.0 || dBestClearance < dCaptureDist)
+    { return SM_SUCCESS; }
+
+  // rotate the whole Brep about its axis: p -> A + R(p - A)
+  SmPoint3d  sOrigin = sm_RotateAboutAxis(SmPoint3d(0.0, 0.0, 0.0), sAxisPoint, sAxisDir, dBestAngle);
+  SmVector3d sXAxis  = sm_RotateAboutAxis(SmPoint3d(1.0, 0.0, 0.0), sAxisPoint, sAxisDir, dBestAngle) - sOrigin;
+  SmVector3d sYAxis  = sm_RotateAboutAxis(SmPoint3d(0.0, 1.0, 0.0), sAxisPoint, sAxisDir, dBestAngle) - sOrigin;
+  SER(pBrep->Transform(SmAxis2Placement(sOrigin, sXAxis, sYAxis)));
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: static helper: the largest side of the bounding box of both
+   operands, or 0 when a box cannot be computed.
+***********************************************************************/
+static double sm_OperandsSize(const SmBrep & crBrep, const SmBrep & crOther)
+{
+  SmExtent3d sBox, sOtherBox, sBothBox;
+  if (   crBrep .CalculateBoundingBox(sBox)      != SM_SUCCESS
+      || crOther.CalculateBoundingBox(sOtherBox) != SM_SUCCESS)
+    { return 0.0; }
+  sBox.Union(sOtherBox, sBothBox);
+  return smos_Max(0.0, sBothBox.GetMaxLength());
+}
+
+/*******************************************************************//**
+PURPOSE: static helper: the length of the shortest edge in rEdges, or
+   SM_BIG_DOUBLE when there are none.
+***********************************************************************/
+static double sm_ShortestEdgeLength(const SmTArray<SmEdge*> & crEdges)
+{
+  double dShortest = SM_BIG_DOUBLE;
+  for (ULONG ii = 0; ii < crEdges.GetSize(); ii++)
+    {
+      const SmCurve * cpCurve = crEdges[ii]->GetCurve();
+      if (cpCurve)
+        { dShortest = smos_Min(dShortest, cpCurve->ApproximateLength(crEdges[ii]->GetInterval(), 9)); }
+    }
+  return dShortest;
+}
+
+/*******************************************************************//**
+PURPOSE: static helper: Put the common edge pairs whose Brep edge is
+   shorter than dMinLength last, keeping the order otherwise.
+
+NOTES: Each face takes its side from the first common edge that reaches
+   it. A common edge shorter than the capture distance lies where the
+   intersection curves crowd together, often where the surfaces are
+   tangent, and the radial order of the faces around it is unreliable.
+***********************************************************************/
+static void sm_PutShortEdgesLast
+  (SmTArray<SmEdge*> & rEdges,        // i/o: common edges of the Brep
+   SmTArray<SmEdge*> & rOtherEdges,   // i/o: their mates in the other Brep, in the same order
+   double              dMinLength)    // in : edges shorter than this go last
+{
+  SmTArray<SmEdge*> sShort, sOtherShort;
+  ULONG lKept = 0;
+  for (ULONG ii = 0; ii < rEdges.GetSize(); ii++)
+    {
+      const SmCurve * cpCurve = rEdges[ii]->GetCurve();
+      if (cpCurve && cpCurve->ApproximateLength(rEdges[ii]->GetInterval(), 9) < dMinLength)
+        {
+          sShort.Add(rEdges[ii]);
+          sOtherShort.Add(rOtherEdges[ii]);
+        }
+      else
+        {
+          rEdges[lKept]      = rEdges[ii];
+          rOtherEdges[lKept] = rOtherEdges[ii];
+          lKept++;
+        }
+    }
+  for (ULONG ii = 0; ii < sShort.GetSize(); ii++)
+    {
+      rEdges[lKept + ii]      = sShort[ii];
+      rOtherEdges[lKept + ii] = sOtherShort[ii];
+    }
+}
+
+/*******************************************************************//**
 PURPOSE: Perform a manifold solid volumetric Boolean operation on
    the two breps.  It also performs a general merge operation which
    combines the topology of two breps.
@@ -2528,6 +2924,28 @@ SmStatus SmMerge::ManifoldBoolean
   // This can help a lot with numerical noise.
   SmTemporaryBrepTransform sTempXfm( &m_vTI );
 
+  // Union, intersection and difference size the capture distance down to the largest side of
+  // the operands' bounding box, at most 0.2% of it and at least 100 times the tolerance, so a
+  // small model's distinct intersection points and curves are not merged 0.01 apart. Other
+  // merges keep 0.01, and measure the operands only if step 7 needs to (< 0 until then). The
+  // seam turn, IntersectInsertRelate() and the short edges of step 7 use this one distance,
+  // and the intersector's is restored on return.
+  SmBoolean bVolumetric = (   eOperation == SM_BO_UNION
+                           || eOperation == SM_BO_INTERSECTION
+                           || eOperation == SM_BO_DIFFERENCE);
+  double dOperandsSize = -1.0;
+  double dCaptureDist  = m_vTI.GetCaptureDistance();
+  if (bVolumetric)
+    {
+      dOperandsSize = sm_OperandsSize(*m_vTI.m_pBrep, *m_vTI.m_pOther);
+      if (dOperandsSize > 0.0)
+        {
+          dCaptureDist = smos_Min(dCaptureDist, 0.002 * dOperandsSize);
+          dCaptureDist = smos_Max(dCaptureDist, 100.0 * m_vTI.GetThisApproxTol3d());
+        }
+    }
+  SmTemporaryChangeValue<double> sCaptureDist(m_vTI.m_dCaptureDistance, dCaptureDist);
+
   // check input: SM_BO_SLICE only defined when otherBrep is an oriented sheet
   if(eOperation == SM_BO_SLICE)
     {
@@ -2548,8 +2966,9 @@ SmStatus SmMerge::ManifoldBoolean
   // set brep contexts for booleans - commonly the same context but not always
   SmContext *pBrepContext  = SM_CONST_CAST(SmContext*,m_vTI.m_pBrep->GetContext());
   SmContext *pOtherContext = SM_CONST_CAST(SmContext*,m_vTI.m_pOther->GetContext());
-  pBrepContext->SetDoingBoolean (TRUE);
-  pOtherContext->SetDoingBoolean(TRUE);
+  // restored on every return, including error returns
+  SmTemporaryChangeValue<SmBoolean> sDoingBoolBrep (pBrepContext->GetDoingBooleanRef(), TRUE);
+  SmTemporaryChangeValue<SmBoolean> sDoingBoolOther(pOtherContext->GetDoingBooleanRef(),TRUE);
 
 #ifdef SM_USE_GLOBAL_CACHE
   // temporarily increase both context's global cache queue lengths using the SmCacheMgr mechanism.
@@ -2644,6 +3063,16 @@ static ULONG lDebugCount = 0 ;
   { 
     SmTemporaryChangeValue<SmBoolean> sStack1(m_vTI.m_pBrep->m_bEditingEnabled, TRUE);
     SmTemporaryChangeValue<SmBoolean> sStack2(m_vTI.m_pOther->m_bEditingEnabled,TRUE);
+
+    // Turn an operand that is a solid of revolution so its seams pass clear of the
+    // points where its cylinders touch the other's. Same capture distance as
+    // IntersectInsertRelate().
+    if (bVolumetric)
+      {
+        SER(sm_TurnSeamsClearOfTouchPoints(m_vTI.m_pBrep, m_vTI.m_pOther, dCaptureDist));
+        if (!m_bKeepOtherBrep && !m_bImprintAndClassifyFaces)   // a tool returned to the caller stays unchanged
+          { SER(sm_TurnSeamsClearOfTouchPoints(m_vTI.m_pOther, m_vTI.m_pBrep, dCaptureDist)); }
+      }
 
     // GWC:tried Removing 2 lines - caused prog_test failures - SmMerge without Composites needs work
     // 
@@ -3116,10 +3545,6 @@ static ULONG lDebugCount = 0 ;
                   m_vTI.m_pOther = NULL;
               }
 
-              // restore state
-              pBrepContext->SetDoingBoolean(FALSE);
-              pOtherContext->SetDoingBoolean(FALSE);
-
               // set output value
               rpResult = m_vTI.m_pBrep;
 
@@ -3156,9 +3581,18 @@ static ULONG lDebugCount = 0 ;
           //        - intersection loop gaps have been fixed
           //        - faces to be ignored by SM_BO_PARTIAL_MERGE are marked
 
-          // 7. Now classify faces of the common edges
+          // 7. Now classify faces of the common edges, at the short ones last. An edge
+          //    is short when it is under both the capture distance and a hundredth of
+          //    the size of the operands, so small models keep their order.
           m_vTI.GetCommonEdges   (m_vEdges,   m_vOtherEdges);
           m_vTI.GetCommonVertices(m_vVertices,m_vOtherVertices);
+          if (sm_ShortestEdgeLength(m_vEdges) < dCaptureDist)
+            {
+              if (dOperandsSize < 0.0)
+                { dOperandsSize = sm_OperandsSize(*m_vTI.m_pBrep, *m_vTI.m_pOther); }
+              if (dOperandsSize > 0.0)
+                { sm_PutShortEdgesLast(m_vEdges, m_vOtherEdges, smos_Min(dCaptureDist, 1.0e-2 * dOperandsSize)); }
+            }
 
           SmTArray<SmEdge*> sEdges, sOtherEdges;
 
@@ -4150,10 +4584,6 @@ static ULONG lDebugCount = 0 ;
           // exit gracefully
           sStack2.Clear();
 
-          // restore state
-          pBrepContext->SetDoingBoolean(FALSE);
-          pOtherContext->SetDoingBoolean(FALSE);
-
           // set output value although input breps remain intact
           rpResult = m_vTI.m_pBrep;
 
@@ -5098,8 +5528,6 @@ if ( cbiEndDump>0 ) {
       m_vTI.m_pBrep->DeleteStaleCaches();  // [B352]
     }
 
-  pBrepContext->SetDoingBoolean(FALSE);
-  pOtherContext->SetDoingBoolean(FALSE);
   return SM_SUCCESS;
 
 } // end SmMerge::ManifoldBoolean

@@ -17,6 +17,7 @@
 #include <SmMessages.h>   // SM_ERR_INVALID_INPUT
 #include <SmMath.h>       // SM_EFF_ZERO
 #include <SmBSplineCurve.h>
+#include <nurbs.h>        // N_CrvSplit, N_CrvExtendByDist
 #include <limits>
 
 #include <cfloat>
@@ -1154,6 +1155,144 @@ SmStatus TestSmRemoveCurveKnots()
 }
 
 
+// Build a quadratic NLib curve on stack S from knots U[0..nU-1] and z = 0 points.
+static void sm_MakeNLibQuadratic( NL_CURVE* pCrv, NL_STACKS* pS, const double* pU, int nU, const double (*pP)[2] )
+{
+    NL_INDEX m = nU - 1, n = m - 3;
+    NL_CPOINT* Pw;
+    NL_REAL* U;
+    N_CrvInitArrays( pCrv );
+    N_CrvSizeArrays( pCrv, n, 2, m, (NL_STRING)_T("test"), pS );
+    N_CrvGetCPtsAndKnots( pCrv, &Pw, &U );
+    for( int i = 0; i <= n; i++ )
+        N_CPtFromWxWyWz( pP[i][0], pP[i][1], 0.0, 1.0, &Pw[i] );
+    for( int i = 0; i <= m; i++ )
+        U[i] = pU[i];
+}
+
+// N_CrvSplit at a knot of multiplicity p+1 sized curL one control point too
+// large and wrote curR's control points from index -1, corrupting the heap.
+SmStatus TestSmNLibSplitAtFullMultiplicityKnot()
+{
+    SmStatus stat = SM_SUCCESS;
+    const double dP[6][2] = { {0,0}, {1,1}, {2,0}, {3,0}, {4,1}, {5,0} };
+
+    // Interior break: the two halves are the existing Bezier pieces.
+    {
+        const double dU[9] = { 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1 };
+        NL_STACKS S;
+        N_InitNurbs( &S );
+        NL_CURVE sCrv, sL, sR;
+        sm_MakeNLibQuadratic( &sCrv, &S, dU, 9, dP );
+        N_CrvInitArrays( &sL );
+        N_CrvInitArrays( &sR );
+        if( N_CrvSplit( &sCrv, 0.5, &sL, &sR, &S ) != NL_NO )
+            stat = SM_ERR;
+        else
+        {
+            NL_INDEX nL, mL, nR, mR;
+            NL_DEGREE p;
+            NL_CPOINT *Lw, *Rw;
+            NL_REAL *UL, *UR;
+            N_CrvGetCPtsDegreeAndKnots( &sL, &nL, &Lw, &p, &mL, &UL );
+            N_CrvGetCPtsDegreeAndKnots( &sR, &nR, &Rw, &p, &mR, &UR );
+            if( nL != 2 || mL != 5 || nR != 2 || mR != 5 )
+                stat = SM_ERR;
+            for( int i = 0; stat == SM_SUCCESS && i <= 2; i++ )
+            {
+                if( Lw[i].x != dP[i][0] || Lw[i].y != dP[i][1] ||
+                    Rw[i].x != dP[i + 3][0] || Rw[i].y != dP[i + 3][1] )
+                    stat = SM_ERR;
+                if( UL[i] != 0.0 || UL[i + 3] != 0.5 || UR[i] != 0.5 || UR[i + 3] != 1.0 )
+                    stat = SM_ERR;
+            }
+        }
+        N_EndNurbs( &S );
+    }
+
+    // On an unclamped knot vector, a split at either end of the active
+    // domain [U[p],U[m-p]] would leave an empty half: it must be rejected.
+    const double dStart[8] = { -2, 0, 0, 0, 0.5, 1, 2, 3 };
+    const double dEnd[7]   = { -2, -1, 0, 0.8, 2, 3, 4 };
+    for( int iCase = 0; stat == SM_SUCCESS && iCase < 2; iCase++ )
+    {
+        NL_STACKS S;
+        N_InitNurbs( &S );
+        NL_CURVE sCrv, sL, sR;
+        if( iCase == 0 )
+            sm_MakeNLibQuadratic( &sCrv, &S, dStart, 8, dP );
+        else
+            sm_MakeNLibQuadratic( &sCrv, &S, dEnd, 7, dP );
+        N_CrvInitArrays( &sL );
+        N_CrvInitArrays( &sR );
+        N_ErrClear();
+        if( N_CrvSplit( &sCrv, iCase == 0 ? 0.0 : 2.0, &sL, &sR, &S ) != NL_YES ||
+            N_ErrGetType() != NL_PAR_ERR )
+            stat = SM_ERR;
+        N_ErrClear();
+        N_EndNurbs( &S );
+    }
+
+    return stat;
+}
+
+
+// N_CrvExtendByParamDist / N_CrvExtendByDist (NL_CMAX) on a curve whose
+// first or last interior knot has multiplicity p+1 sized the output for a
+// knot insertion that is never made: the parameter extension returned an
+// error and the distance extension wrote past the end of its arrays.
+// SmApiCreateCanonicalCurve lowers such a knot to multiplicity p, so this
+// calls NLib directly.
+SmStatus TestSmNLibExtendAtFullMultiplicityKnot()
+{
+    SmStatus stat = SM_SUCCESS;
+    const double dP[6][2] = { {0,0}, {1,1}, {2,0}, {3,0}, {4,1}, {5,0} };
+    const double dU[9] = { 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1 };
+
+    for( int iCase = 0; stat == SM_SUCCESS && iCase < 4; iCase++ )
+    {
+        NL_STACKS S, SQ;
+        N_InitNurbs( &S );
+        N_InitNurbs( &SQ );
+        NL_CURVE sCrv, sExt;
+        sm_MakeNLibQuadratic( &sCrv, &S, dU, 9, dP );
+        N_CrvInitArrays( &sExt );
+        NL_FLAG end = ( iCase % 2 == 0 ) ? NL_START : NL_END;
+        NL_FLAG error;
+        if( iCase < 2 )
+            error = N_CrvExtendByParamDist( &sCrv, end == NL_START ? -0.2 : 1.2, end, NL_CMAX, &sExt, &S, &SQ );
+        else
+            error = N_CrvExtendByDist( &sCrv, 0.5, NL_ABSOLUTE, end, NL_CMAX, &sExt, &S, &SQ );
+        if( error != NL_NO )
+            stat = SM_ERR;
+        else
+        {
+            // Same number of knots (only the end knots move) and the
+            // original parameter range still maps to the original curve.
+            NL_INDEX n, m;
+            NL_DEGREE p;
+            NL_CPOINT *Qw;
+            NL_REAL *UQ;
+            N_CrvGetCPtsDegreeAndKnots( &sExt, &n, &Qw, &p, &m, &UQ );
+            if( n != 5 || m != 8 || UQ[3] != 0.5 || UQ[5] != 0.5 )
+                stat = SM_ERR;
+            for( int i = 0; stat == SM_SUCCESS && i <= 10; i++ )
+            {
+                NL_CPOINT sA, sB;
+                N_CrvEvalPt( &sCrv, 0.1 * i, NL_LEFT, &sA );
+                N_CrvEvalPt( &sExt, 0.1 * i, NL_LEFT, &sB );
+                if( fabs( sA.x / sA.w - sB.x / sB.w ) + fabs( sA.y / sA.w - sB.y / sB.w ) > 1.0e-9 )
+                    stat = SM_ERR;
+            }
+        }
+        N_EndNurbs( &SQ );
+        N_EndNurbs( &S );
+    }
+
+    return stat;
+}
+
+
 SmStatus TestSmCurves()
 {
 
@@ -1222,6 +1361,14 @@ SmStatus TestSmCurves()
         return( stat );
 
     stat = TestSmRemoveCurveKnots();
+    if( stat != SM_SUCCESS )
+        return( stat );
+
+    stat = TestSmNLibSplitAtFullMultiplicityKnot();
+    if( stat != SM_SUCCESS )
+        return( stat );
+
+    stat = TestSmNLibExtendAtFullMultiplicityKnot();
     if( stat != SM_SUCCESS )
         return( stat );
 

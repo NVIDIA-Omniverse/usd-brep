@@ -1770,7 +1770,7 @@ SmStatus SmTopologySweep::SweepEdgeSame
     
   // pImage is same as rpExistingSweptEdgeArg
   // if(!rpExistingSweptEdgeArg) { 
-      SetSame(pE,pSweptEdge);
+  SetSame(pE,pSweptEdge);
   //}
     
 #ifdef SM_USE_NEWTOL      

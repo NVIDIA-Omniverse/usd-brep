@@ -1994,7 +1994,7 @@ SmStatus SmTess::MakePolygon
               if (   !sExpandedDomain.ContainsPoint2d(sStartUV.Get2dXY())
                   || !sExpandedDomain.ContainsPoint2d(sEndUV.Get2dXY()))
               {
-                  TCHAR sBuff[SM_MAXSIZE];
+                  TCHAR sBuff[SM_TBLOCK_SIZE];
                   SmExtent2d sDomain = pSurface->GetNaturalUVDomain();
                   SM_SPRINTF(sBuff, _T("\n UV domain: [%f, %f] X [%f, %f], StartUV: (%f, %f), EndUV: (%f, %f)"),
                                 sDomain.GetMin().x, sDomain.GetMax().x,
@@ -3329,7 +3329,7 @@ SmStatus SmTess::SplitFaceEdgesToUVSize
       SmZoneTol3d sTol3d = SmTol::GetZoneTol3d(pEU->GetEdge());
       if (sEdgePt.DistanceBetweenSquared(sSurfacePt) > sTol3d*sTol3d*10000 )
       {
-          TCHAR sBuff[SM_MAXSIZE];
+          TCHAR sBuff[SM_TBLOCK_SIZE];
           smos_sprintf(
               sBuff,
               _T("Vertexuse UVPoint maps to location further than 100*tol from Edge->Curve End point. Tol: %f. Dist: %f."),

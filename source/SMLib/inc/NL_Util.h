@@ -13,11 +13,11 @@
 GW_EXPORT NL_VOID N_InitNurbs( NL_STACKS * );
 GW_EXPORT NL_VOID N_EndNurbs( NL_STACKS * );
 
-GW_EXPORT void *N_Malloc( NL_INTEGER size);
-GW_EXPORT void *N_Calloc( NL_INTEGER num, NL_INTEGER size);
-GW_EXPORT void *N_Realloc( void *MemPtr, NL_INTEGER size );
+GW_EXPORT void *N_Malloc( size_t size);
+GW_EXPORT void *N_Calloc( size_t num, size_t size);
+GW_EXPORT void *N_Realloc( void *MemPtr, size_t size );
 GW_EXPORT void N_Free( void *MemPtr );
-GW_EXPORT void N_MemSet(void *ptr, NL_INTEGER val, NL_INTEGER sizeInByte);
+GW_EXPORT void N_MemSet(void *ptr, NL_INTEGER val, size_t sizeInByte);
 
 
 GW_EXPORT NL_FLAG *N_AllocFlag1dArray( NL_INDEX, NL_STACKS * );

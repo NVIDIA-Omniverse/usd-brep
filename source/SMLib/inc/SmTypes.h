@@ -26,6 +26,7 @@
 #endif
 
 #include <iostream>
+#include <iterator> // std::size: SM_SPRINTF writes at most the destination array's length
 
 #ifndef NULL
 #define NULL 0
@@ -81,7 +82,7 @@ typedef unsigned long SmBooleanUL;
 #define FILE_NAME _T(__FILE__)
 #define FUNC_NAME _T(__FUNCTION__)
 #define SM_PRINTF(a) _tprintf(a);
-#define SM_SPRINTF(a, fmt, ...) _sntprintf(a, SM_TBLOCK_SIZE, fmt, __VA_ARGS__)
+#define SM_SPRINTF(a, fmt, ...) _sntprintf_s(a, std::size(a), _TRUNCATE, fmt, __VA_ARGS__) // _sntprintf leaves no null on truncation
 #define SM_SNPRINTF(a, size, fmt, ...) _sntprintf(a, size, fmt, __VA_ARGS__)
 #define SM_FOPEN   _wfopen
 #define SM_FROPEN  _tfreopen
@@ -140,7 +141,7 @@ void inline smos_snprintf(wchar_t* buff, size_t buffsize, const wchar_t * format
 #define FILE_NAME __FILE__
 #define FUNC_NAME __FUNCTION__
 #define SM_PRINTF(a) { int cnt = printf("%s", a); SM_ASSERT(cnt < SM_TBLOCK_SIZE) ; }
-#define SM_SPRINTF(a, fmt, ...) snprintf(a, SM_TBLOCK_SIZE, fmt, __VA_ARGS__)
+#define SM_SPRINTF(a, fmt, ...) snprintf(a, std::size(a), fmt, __VA_ARGS__)
 #define SM_SNPRINTF(a, size, fmt, ...) snprintf(a, size, fmt, __VA_ARGS__)
 #define SM_SSCANF    sscanf      // <=== need to check rtn count and make sure it's smaller than SM_TBLOCK_SIZE
 #define SM_FOPEN     fopen       //   SM_TBLOCK_SIZE and VS_TBLOCK_SIZE need to be larger, maybe 2048

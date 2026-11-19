@@ -629,7 +629,7 @@ USAGE NOTES --- When scaling in addition to transforming
 ***********************************************************************/
 SmApiStatus SmApiTransform
 (
-    SmObject* pObj,                 ///< [in ]: Transform this object
+    SmObject* pObj,                 ///< [in/out]: Transform this object
     const SmAxis2Placement & rRotateMove ///< [in ]: Transformation (rotate and translate)
 )
 {
@@ -645,7 +645,7 @@ USAGE NOTES --- See also SmApiScaleByPt
 ***********************************************************************/
 SmApiStatus SmApiScale
 (
-    SmObject* pObj,                 ///< [in ]: Scale this object
+    SmObject* pObj,                 ///< [in/out]: Scale this object
     const SmVector3d& rScale       ///< [in ]: Scale factor in x, y, z
 )
 {
@@ -663,7 +663,7 @@ USAGE NOTES --- This differs from SmScale because it translates the
 ***********************************************************************/
 SmApiStatus SmApiScaleByPt
 (
-    SmObject* pObj,                 ///< [in ]: Scale this object
+    SmObject* pObj,                 ///< [in/out]: Scale this object
     const SmVector3d& rRefPt,       ///< [in ]: Reference pt to translate to origin
     const SmVector3d& rScale       ///< [in ]: Scale factor in x, y, z
 )
@@ -693,7 +693,7 @@ USAGE NOTES ---
 ***********************************************************************/
 SmApiStatus SmApiTranslate
 (
-    SmObject* pObj,                 ///< [in ]: Translate this object
+    SmObject* pObj,                 ///< [in/out]: Translate this object
     const SmVector3d& crTranslate  ///< [in ]: Translation vector
 )
 {
@@ -711,7 +711,7 @@ USAGE NOTES --- The object is rotated by ``dAngleDeg`` degrees about the
 ***********************************************************************/
 SmApiStatus SmApiRotate
 (
-    SmObject* pObj,                  ///< [in ]: Rotate this object
+    SmObject* pObj,                  ///< [in/out]: Rotate this object
     const SmVector3d& rRefPt,        ///< [in ]: Point on the rotation axis (fixed point)
     const SmVector3d& rAxis,         ///< [in ]: Direction of the rotation axis
     double dAngleDeg                ///< [in ]: Angle of rotation, in degrees

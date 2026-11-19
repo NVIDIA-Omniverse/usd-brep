@@ -6049,6 +6049,78 @@ SmBoolean bDebugMe = FALSE ;
         } // end found a span/span NewtonRaphson intersection check
     } // end iter every guess point - looking for NewtonRaphson intersections
 
+  // When the spans run nearly parallel, the guesses above pair points far apart
+  // along them, and Newton can miss a crossing that has another one close by.
+  // If they found none, try each mid point with the closest point of the other
+  // span. Keep only a tight crossing inside both spans: a looser solution may
+  // be a touch between nearly coincident spans, and one on a span end belongs
+  // to the neighboring span too. Spans whose chords are 20 degrees or more
+  // apart are left to the guesses above; in fillets many curved span pairs
+  // that only touch reach here, and two more solves for each cost about 10%.
+  if (   !bAddedSolution
+      && !bOnlyOneIntersectionPossible
+      && !m_bSelfIntersection
+      && dAngDeg < 20.0)
+    {
+      SmPoint3d sMidPt[2];
+      SER(pCurve1->EvaluatePoint(sIvl1.Evaluate(0.5),sMidPt[0]));
+      SER(pCurve2->EvaluatePoint(sIvl2.Evaluate(0.5),sMidPt[1]));
+      for (i=0; i<2; i++)
+        {
+          // closest point of the other span to this span's mid point
+          double dGuess1, dGuess2;
+          if (i == 0)
+            {
+              pCurve2->LocalPointSolve(sIvl2,SM_SO_MINIMIZE,sMidPt[0],NULL,NULL,NULL,
+                  sIvl2.Evaluate(0.5),bFoundAnswer,sPointSolution);
+              dGuess1 = sIvl1.Evaluate(0.5);
+              dGuess2 = sPointSolution.m_vStart[0];
+            }
+          else
+            {
+              pCurve1->LocalPointSolve(sIvl1,SM_SO_MINIMIZE,sMidPt[1],NULL,NULL,NULL,
+                  sIvl1.Evaluate(0.5),bFoundAnswer,sPointSolution);
+              dGuess1 = sPointSolution.m_vStart[0];
+              dGuess2 = sIvl2.Evaluate(0.5);
+            }
+          if (!bFoundAnswer) { continue; }
+
+          SmBoolean bFoundSolution;
+          double dMyParameter, dOtherParameter, dDeviation;
+          SER(pCurve1->LocalCurveIntersect(sIvl1,
+                                           *pCurve2, sIvl2,
+                                           m_d3dTolerance,
+                                           dGuess1, dGuess2,
+                                           bFoundSolution, dMyParameter, dOtherParameter, dDeviation));
+          if (   !bFoundSolution
+              || dDeviation > m_d3dTolerance/1000.0
+              || sIvl1.IsValueOnBoundary(dMyParameter)
+              || sIvl2.IsValueOnBoundary(dOtherParameter))
+            { continue; }
+
+          SmSolution sSolution;
+          sSolution.m_lNumVariables           = 2;
+          sSolution.m_vStart[0]               = dMyParameter;
+          sSolution.m_vStart[1]               = dOtherParameter;
+          sSolution.m_vStart.m_dSolutionValue = dDeviation;
+          sSolution.m_eSolutionType           = SM_ST_SINGLE_VALUE;
+          sSolution.m_apNodes[0]              = apBranch[0];  // Curve1 node
+          sSolution.m_apNodes[1]              = apBranch[1];  // Curve2 node
+          sSolution.m_lNumObjects             = 2 ;
+          sSolution.m_apObjects[0]            = (SmObject *)pParentCurve1 ;
+          sSolution.m_apObjects[1]            = (SmObject *)pParentCurve2 ;
+
+          SmBoolean bKeepSolution = FALSE;
+          SER(sm_FilterSolution(*pCurve1,sIvl1,*pCurve2,sIvl2,aeConts1,aeConts2,lAdjacency,
+              sSolution,bKeepSolution));
+          if (!bKeepSolution) { continue; }
+
+          // add solution to SmGlobalSolver::m_pSolutions
+          AddSortedSolution(sSolution,SM_SK_BY_ALL_PARAMETERS, TRUE);
+          bAddedSolution = TRUE ;
+        } // end iter both mid point guesses
+    } // end no solution from the guess points check
+
   // add in accumulated endPoint solutions when
   // no actual intersections were found or allowing for multiple solutions
   if(   !bAddedSolution

@@ -3,7 +3,7 @@
 
 -- brep_geometry_validator — CLI: import USD BrepArray prims into SmBreps and run
 -- SmBrep::AssertValid (kernel-level geometry/topology validation). Sibling of the schema-level
--- brep_validator: the schema validator checks the USD data, this checks the built solid.
+-- brep_usdschema_validator: the schema validator checks the USD data, this checks the built solid.
 
 project "brep_geometry_validator"
     kind "ConsoleApp"

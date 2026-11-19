@@ -351,7 +351,10 @@ void bind_polybrep(py::module_& m)
             "same mesh walk as ``to_numpy_arrays``.\n"
             "``face_varying_normals=True`` returns source-face corner normals in\n"
             "polygon order without counts; use USD ``faceVarying`` interpolation.\n"
-            "Points stay shared. Otherwise normals are averaged per vertex.\n"
+            "Points stay shared. Otherwise normals are averaged per vertex over every\n"
+            "face that shares the point, so they blend across sharp edges: use them for\n"
+            "smooth surfaces only, and ``face_varying_normals=True`` to render CAD edges\n"
+            "sharp. To check a triangle's orientation, use ``face_normals``.\n"
             "Missing or degenerate normals use the vertex average, then (0, 0, 1)."
         )
         .def(
@@ -362,7 +365,8 @@ void bind_polybrep(py::module_& m)
             "\n"
             "Args:\n"
             "    face_varying_normals: Return source-face corner normals instead of\n"
-            "        averaged vertex normals; defaults to False.\n"
+            "        averaged vertex normals, which blend across sharp edges; defaults\n"
+            "        to False.\n"
             "\n"
             "Returns:\n"
             "    dict[str, numpy.ndarray]: ``points`` and ``normals`` are\n"

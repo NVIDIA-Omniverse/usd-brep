@@ -100,7 +100,8 @@ NOTES:
 ***********************************************************************/
 SmStatus SmOffsetExecutive::OffsetBrep
   (const SmContext & crContext,
-   SmBrep *pBrep,               // in : Will be consumed in creation of offset brep.
+   SmBrep *pBrep,               // i/o: Not deleted or reshaped, but left edit-enabled
+                                //      when bDoExtendedOffset and bDoSelfInt are both TRUE.
    double dOffsetDistance,      // in : Offset distance (negative for insets).
    SmBoolean bDoExtendedOffset, // in : For convex offsets, to close the gap:
                                 //      TRUE = Extend and intersect the two offset faces.

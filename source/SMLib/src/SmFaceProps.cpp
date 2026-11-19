@@ -218,10 +218,10 @@ SmFaceProps & SmFaceProps::operator= (const SmFaceProps &crOther)
       m_sRawTouchListV.SetSize(crOther.m_sRawTouchListV.GetSize()) ;
       m_sDoneTouchListV.SetSize(crOther.m_sDoneTouchListV.GetSize()) ;
 
-      for(ii=0;m_sRawTouchListU.GetSize() ;ii++) { m_sRawTouchListU[ii]  = crOther.m_sRawTouchListU[ii] ; }
-      for(ii=0;m_sDoneTouchListU.GetSize();ii++) { m_sDoneTouchListU[ii] = crOther.m_sDoneTouchListU[ii] ; }
-      for(ii=0;m_sRawTouchListV.GetSize() ;ii++) { m_sRawTouchListV[ii]  = crOther.m_sRawTouchListV[ii] ; }
-      for(ii=0;m_sDoneTouchListV.GetSize();ii++) { m_sDoneTouchListV[ii] = crOther.m_sDoneTouchListV[ii] ; }
+      for(ii=0;ii<m_sRawTouchListU.GetSize() ;ii++) { m_sRawTouchListU[ii]  = crOther.m_sRawTouchListU[ii] ; }
+      for(ii=0;ii<m_sDoneTouchListU.GetSize();ii++) { m_sDoneTouchListU[ii] = crOther.m_sDoneTouchListU[ii] ; }
+      for(ii=0;ii<m_sRawTouchListV.GetSize() ;ii++) { m_sRawTouchListV[ii]  = crOther.m_sRawTouchListV[ii] ; }
+      for(ii=0;ii<m_sDoneTouchListV.GetSize();ii++) { m_sDoneTouchListV[ii] = crOther.m_sDoneTouchListV[ii] ; }
 
       m_bBadCrossedPole       = crOther.m_bBadCrossedPole ;
       m_pCrossedPoleEdge      = crOther.m_pCrossedPoleEdge ;
@@ -252,7 +252,7 @@ SmFaceProps & SmFaceProps::operator= (const SmFaceProps &crOther)
   m_eBeenThroughSplitEdgesAtSeam  = crOther.m_eBeenThroughSplitEdgesAtSeam ;
   m_eBeenThroughSplitFacesAtSeam  = crOther.m_eBeenThroughSplitFacesAtSeam ;
 
-  // SetProps(SM_PROPSTAGE_3) from m_sLoopProps
+  // Stage 3 loop facts and Stage 4 containment properties
     {
       // deep copy m_sLoopProps
       m_pLooptreeRoot         = crOther.m_pLooptreeRoot ? new SmLooptreeItem(*crOther.m_pLooptreeRoot) : NULL ; 
@@ -269,10 +269,11 @@ SmFaceProps & SmFaceProps::operator= (const SmFaceProps &crOther)
       m_lBadNoArea_LoopCnt      = crOther.m_lBadNoArea_LoopCnt ;              
       m_lBadNested_LoopCnt      = crOther.m_lBadNested_LoopCnt ;     
       m_bBadUnpairedNoArea_Loop = crOther.m_bBadUnpairedNoArea_Loop ;
+      m_bBadLoopProblems        = crOther.m_bBadLoopProblems ;
       m_lBadClosed3d_LoopCnt    = crOther.m_lBadClosed3d_LoopCnt  ; 
       m_lBadClosedPtr_LoopCnt   = crOther.m_lBadClosedPtr_LoopCnt ; 
       m_lBadMissingPoles        = crOther.m_lBadMissingPoles ;  
-    } // end SetProps(SM_PROPSTAGE_3) from m_sLoopProps
+    } // end loop facts and containment properties
 
   // all done
   return(*this) ;
@@ -441,7 +442,7 @@ SmBoolean SmFaceProps::operator== (const SmFaceProps &crOther) const
   bRtn &= m_eBeenThroughSplitEdgesAtSeam  == crOther.m_eBeenThroughSplitEdgesAtSeam ;
   bRtn &= m_eBeenThroughSplitFacesAtSeam  == crOther.m_eBeenThroughSplitFacesAtSeam ;
 
-  // SetProps(SM_PROPSTAGE_3) from m_sLoopProps
+  // Stage 3 loop facts and Stage 4 containment properties
     {
       // deep compare m_sLoopProps
       bRtn &= m_sLoopProps.GetSize() == crOther.m_sLoopProps.GetSize() ; 
@@ -457,11 +458,12 @@ SmBoolean SmFaceProps::operator== (const SmFaceProps &crOther) const
       bRtn &= m_lBadNoArea_LoopCnt      == crOther.m_lBadNoArea_LoopCnt ;              
       bRtn &= m_lBadNested_LoopCnt      == crOther.m_lBadNested_LoopCnt ;     
       bRtn &= m_bBadUnpairedNoArea_Loop == crOther.m_bBadUnpairedNoArea_Loop ;
+      bRtn &= m_bBadLoopProblems        == crOther.m_bBadLoopProblems ;
       bRtn &= m_lBadClosed3d_LoopCnt    == crOther.m_lBadClosed3d_LoopCnt  ; 
       bRtn &= m_lBadClosedPtr_LoopCnt   == crOther.m_lBadClosedPtr_LoopCnt ; 
       bRtn &= m_lBadMissingPoles        == crOther.m_lBadMissingPoles ;  
 
-    } // end SetProps(SM_PROPSTAGE_3) from m_sLoopProps
+    } // end loop facts and containment properties
 
   // all done
   return(bRtn) ;
@@ -507,19 +509,23 @@ void SmFaceProps::ReSet
  (SmPropStageType eClearPropStage) // in : SM_PROPSTAGE_0 = clear constructor values     and
                                    //      SM_PROPSTAGE_GAPS = clear SetProps_Gaps() vals and 
                                    //      SM_PROPSTAGE_2 = clear SetProps_Stage2() vals and
-                                   //      SM_PROPSTAGE_3 = clear SetProps_Stage3() vals
+                                   //      SM_PROPSTAGE_3 = clear SetProps_Stage3() vals and
+                                   //      SM_PROPSTAGE_4 = clear SetProps_Stage4() vals
                                    //      default:[SM_PROPSTAGE_0]
 {
   // locals
   ULONG ii ;
 
   // Clear General Properties
+  SmPropStageType ePreviousStage = m_ePropStage;
 
   m_ePropStage      =   (eClearPropStage <= SM_PROPSTAGE_0) ? SM_PROPSTAGE_0
                       : (eClearPropStage <= SM_PROPSTAGE_GAPS) ? SM_PROPSTAGE_0
                       : (eClearPropStage <= SM_PROPSTAGE_2) ? SM_PROPSTAGE_GAPS
-                      : (eClearPropStage <= SM_PROPSTAGE_3) ? SM_PROPSTAGE_2 
+                      : (eClearPropStage <= SM_PROPSTAGE_3) ? SM_PROPSTAGE_2
+                      : (eClearPropStage <= SM_PROPSTAGE_4) ? SM_PROPSTAGE_3
                       : m_ePropStage ;
+  if(m_ePropStage > ePreviousStage) { m_ePropStage = ePreviousStage; }
   // m_cpContext = NULL ; // Leave Context alone
 
   m_bBadHasNotYetProb = FALSE ;
@@ -609,21 +615,35 @@ void SmFaceProps::ReSet
       m_bBadNearMissSeam = FALSE ;
       m_eBadNearMissSeam = SM_SP_UNKNOWN ;
 
-      // Stage 3 loop classification must retain the earlier crossing-repair result.
+      // Later loop-property stages must retain the earlier crossing-repair result.
       m_eBeenThroughSplitEdgesAtSeam = SM_TRY_NONE ;
     } // end eClearPropStage <= SM_PROPSTAGE_GAPS check
 
   m_eBeenThroughMoveSeam         = SM_TRY_NONE ;
   m_eBeenThroughSplitFacesAtSeam = SM_TRY_NONE ;
 
-  // when asked - clear SetProps_AfterSplitEdge values
+  // Stage 3 owns the loop facts.
   if(eClearPropStage <= SM_PROPSTAGE_3)
     {
-      // values that are computed only after FaceEdges have been split at MissingSeams
-      if(m_pLooptreeRoot) { delete m_pLooptreeRoot ; m_pLooptreeRoot = NULL ; }
-      m_sLoopProps.ReSet() ; 
-      
-      m_lClosedLoopCnt          = SM_UNDEF_ULONG ;
+      m_sLoopProps.ReSet();
+      m_lClosedLoopCnt = SM_UNDEF_ULONG;
+      m_lBadClosed3d_LoopCnt = SM_UNDEF_ULONG;
+      m_lBadClosedPtr_LoopCnt = SM_UNDEF_ULONG;
+    }
+
+  // Stage 4 owns containment and orientation; retain the earlier loop facts.
+  if(eClearPropStage <= SM_PROPSTAGE_4)
+    {
+      if(m_pLooptreeRoot) { delete m_pLooptreeRoot; m_pLooptreeRoot = NULL; }
+      for(ii=0; ii<m_sLoopProps.GetSize(); ++ii)
+        {
+          m_sLoopProps[ii].m_eContainmentType = SM_CMT_UNKNOWN;
+          m_sLoopProps[ii].m_eLoopOrient = SM_OT_UNKNOWN;
+          m_sLoopProps[ii].m_eDesiredLoopOrient = SM_OT_UNKNOWN;
+          m_sLoopProps[ii].m_bGoodOrient = UNSURE;
+        }
+      // Keep the Stage 3 findings when only containment is being discarded.
+      m_bBadLoopProblems        = m_ePropStage >= SM_PROPSTAGE_3 ? HasProblems(4) : UNSURE;
       m_lOuterLoopCnt           = SM_UNDEF_ULONG ;
 
       m_bBadOuterLoopOrder      = UNSURE ;
@@ -632,17 +652,9 @@ void SmFaceProps::ReSet
       m_lBadNested_LoopCnt      = SM_UNDEF_ULONG ;
       m_bBadUnpairedNoArea_Loop = UNSURE ;
 
-      m_lBadClosed3d_LoopCnt    = SM_UNDEF_ULONG ; 
-      m_lBadClosedPtr_LoopCnt   = SM_UNDEF_ULONG ; 
       m_lBadMissingPoles        = SM_UNDEF_ULONG ;  
     
-    } // end eClearPropStage <= SM_PROPSTAGE_2 check
-
-  // when asked - clear
-    if(eClearPropStage > SM_PROPSTAGE_3)
-    {
-      // no values here yet
-    } // end eClearPropStage <= SM_PROPSTAGE_3 check
+    } // end clear Stage 4 properties
 
 } // end SmFaceProps::ReSet
 
@@ -654,43 +666,55 @@ PURPOSE: Standardize calls to SetProps_Stage_i where a call
 NOTES:  
 ***********************************************************************/
 SmStatus SmFaceProps::SetProps
- (SmPropStageType  eSetPropStage,  // in : oneof 
-                                   //      SM_PROPSTAGE_GAPS = SetProps_Gaps()
-                                   //        (sets: m_pFace               m_lFaceIndx
-                                   //               m_sZoneTol3d          m_sOrigZoneTol3d          
-                                   //               m_bBadSmallZoneTol3d  m_bBadLargeZoneTol3d)  
-                                   //      SM_PROPSTAGE_2 = SetProps_Stage2()
-                                   //        (sets: m_cpSurface           m_sNaturalUVDomain
-                                   //               m_bSheetFace          
-                                   //               m_bClosedU            m_bClosedV          m_bClosedSurf
-                                   //               m_eClosedValU         m_eClosedValV              
-                                   //               m_lPoles              m_lApproxPoles      m_lNoVertexPoles
-                                   //               m_sPolePoints         m_sPoleNormals      
-                                   //               m_lBadFlatCorners     m_sFlatCornerPoints 
-                                   //               m_pCrvClassU          m_pCrvClassV      
-                                   //               m_sRawTouchListU      m_sRawTouchListV
-                                   //               m_sDoneTouchListU     m_sDoneTouchListV
-                                   //               m_eBadMissingSeam     m_eBadCrossedSeam   m_eBadNearMissSeam)
-                                   //      SM_PROPSTAGE_3 = SetProps_Stage3()
-                                   //        (sets: m_sLoopProps //  with call m_sLoopProps[ii].SetProps(pLoop, *this) ; 
-                                   //                            //  that sets: SmLoopProps::m_cpLoop             m_bDegen_Loop  
-                                   //                            //                        ::m_lEdgeCnt           m_bArea_Loop        
-                                   //                            //                        ::m_lEdgeuseCnt        m_eContainmentType  
-                                   //                            //                        ::m_bClosed3d          m_eLoopOrient       
-                                   //                            //                        ::m_bClosedPtrs        m_eDesiredLoopOrient
-                                   //                            //                        ::m_lSeamCrossingCntU  m_lSeamCrossingCntV
-                                   //                            //                        ::m_lSeamWindingCntU   m_lSeamWindingCntV
-                                   //                            //                        ::m_eWindingOrientU    m_eWindingOrientV
-                                   //                            //                        ::m_bGoodOrient        m_bGoodClosed       
-                                   //               m_lClosedLoopCnt       m_lOuterLoopCnt          
-                                   //               m_bBadOuterLoopOrder   m_lBadOrient_LoopCnt     
-                                   //               m_lBadNoArea_LoopCnt   m_lBadNested_LoopCnt     
-                                   //               m_lBadMissingPoles     m_bBadUnpairedNoArea_Loop
-                                   //               m_lBadClosed3d_LoopCnt m_lBadClosedPtr_LoopCnt)
-  const SmFace   * cpFace,         // in : TgtFace
-  ULONG            lFaceIndx,      // in : Associated FaceIndx within managing SmHeadData::m_sTgtFaces listSmHealerOpType   eExeHealOp,     // in : Max Healer Operation executed on this Face and Face->Brep
-  SmHealerOpType   eExeHealOp,     // in : Max Healer Operation executed on this Face and Face->Brep
-  ULONG            lOptLabel)      // in : Optional numeric label for Debug reports, SM_UNDEF_LONG to ignore, default:[SM_UNDEF_LONG]
+ (SmPropStageType eSetPropStage,    // in : latest property stage to calculate; includes incomplete preceding stages
+                                    //      SM_PROPSTAGE_GAPS = SetProps_Gaps()
+                                    //        (sets: m_pFace                 m_lFaceIndx
+                                    //               m_sZoneTol3d            m_sOrigZoneTol3d
+                                    //               m_bBadSmallZoneTol3d    m_bBadLargeZoneTol3d)
+                                    //      SM_PROPSTAGE_2 = SetProps_Stage2()
+                                    //        (sets: m_cpSurface             m_sNaturalUVDomain
+                                    //               m_eSheet               m_ePoles
+                                    //               m_bClosedU             m_bClosedV             m_bClosedSurf
+                                    //               m_eClosedValU          m_eClosedValV
+                                    //               m_lPoles               m_lApproxPoles         m_lNoVertexPoles
+                                    //               m_sPolePoints          m_sPoleNormals
+                                    //               m_bBadCrossedPole      m_pCrossedPoleEdge     m_dCrossedPoleParameter
+                                    //               m_lBadFlatCorners      m_sFlatCornerPoints
+                                    //               m_pCrvClassU           m_pCrvClassV
+                                    //               m_sRawTouchListU       m_sRawTouchListV
+                                    //               m_sDoneTouchListU      m_sDoneTouchListV
+                                    //               m_eBadMissingSeam      m_eBadCrossedSeam      m_eBadNearMissSeam
+                                    //               m_bBadMissingSeam      m_bBadCrossedSeam      m_bBadNearMissSeam)
+                                    //      SM_PROPSTAGE_3 = SetProps_Stage3()
+                                    //        (sets: m_sLoopProps with m_sLoopProps[ii].SetProps(pLoop, *this)
+                                    //                 SmLoopProps::m_cpLoop              m_tLoopuseType
+                                    //                            ::m_bVertexLoopOnPole
+                                    //                            ::m_lEdgeCnt            m_lEdgeuseCnt
+                                    //                            ::m_bClosed3d           m_bClosedPtrs
+                                    //                            ::m_bGoodClosed
+                                    //                            ::m_lSeamCrossingCntU   m_lSeamCrossingCntV
+                                    //                            ::m_lSeamWindingCntU    m_lSeamWindingCntV
+                                    //                            ::m_eWindingOrientU     m_eWindingOrientV
+                                    //                            ::m_bArea_Loop
+                                    //               m_lClosedLoopCnt
+                                    //               m_lBadClosed3d_LoopCnt  m_lBadClosedPtr_LoopCnt
+                                    //               m_bBadLoopProblems)
+                                    //        m_bDegen_Loop remains UNSURE; its calculation is not implemented.
+                                    //      SM_PROPSTAGE_4 = SetProps_Stage4()
+                                    //        (updates existing m_sLoopProps using SmFace::ClassifyLoops() results:
+                                    //                 SmLoopProps::m_eContainmentType    m_eLoopOrient
+                                    //                            ::m_eDesiredLoopOrient  m_bGoodOrient
+                                    //                            ::m_bArea_Loop
+                                    //         sets: m_pLooptreeRoot
+                                    //               m_lOuterLoopCnt          m_bBadOuterLoopOrder
+                                    //               m_lBadOrient_LoopCnt     m_lBadNoArea_LoopCnt
+                                    //               m_lBadNested_LoopCnt     m_bBadUnpairedNoArea_Loop
+                                    //               m_lBadMissingPoles       m_bBadLoopProblems)
+                                    //        Retains Stage 3 closure counts and combines both stages in m_bBadLoopProblems.
+  const SmFace   *cpFace,           // in : target face
+  ULONG           lFaceIndx,        // in : face index in SmHealData::m_sTgtFaces
+  SmHealerOpType  eExeHealOp,       // in : completed or currently executing healer operation
+  ULONG           lOptLabel)        // in : optional diagnostic label; SM_UNDEF_ULONG to omit
 { 
   // init rtn
   SmStatus sRtn = SM_SUCCESS ;
@@ -719,17 +743,22 @@ SmPropStageType ePropStageTgt = SM_PROPSTAGE_2a ;
   // SetProps_Gaps
   if(   (eSetPropStage == SM_PROPSTAGE_GAPS)
      || (eSetPropStage > SM_PROPSTAGE_GAPS && HasProps(SM_PROPSTAGE_GAPS, cpFace) == FALSE)) 
-    { sRtn = SetProps_Gaps(cpFace,lFaceIndx,eExeHealOp,lOptLabel) ; }
+    { SER(SetProps_Gaps(cpFace,lFaceIndx,eExeHealOp,lOptLabel)); }
 
   // SetProps_Stage2
   if(   (eSetPropStage == SM_PROPSTAGE_2)
      || (eSetPropStage > SM_PROPSTAGE_2 && HasProps(SM_PROPSTAGE_2, cpFace) == FALSE)) 
-    { sRtn = SetProps_Stage2(cpFace,lFaceIndx,eExeHealOp,lOptLabel) ; }
+    { SER(SetProps_Stage2(cpFace,lFaceIndx,eExeHealOp,lOptLabel)); }
 
-  // SetProps_Stage3
-  if(   (eSetPropStage == SM_PROPSTAGE_3)
-     || (eSetPropStage > SM_PROPSTAGE_3 && HasProps(SM_PROPSTAGE_3, cpFace) == FALSE))
-    { sRtn = SetProps_Stage3(cpFace,lFaceIndx,eExeHealOp,lOptLabel) ; }
+  // Stage 3 establishes loop facts before containment is requested.
+  if(   eSetPropStage == SM_PROPSTAGE_3
+     || (eSetPropStage > SM_PROPSTAGE_3 && !HasProps(SM_PROPSTAGE_3,cpFace)))
+    { SER(SetProps_Stage3(cpFace,lFaceIndx,eExeHealOp,lOptLabel)); }
+
+  // SetProps_Stage4
+  if(   (eSetPropStage == SM_PROPSTAGE_4)
+     || (eSetPropStage > SM_PROPSTAGE_4 && HasProps(SM_PROPSTAGE_4, cpFace) == FALSE))
+    { sRtn = SetProps_Stage4(cpFace,lFaceIndx,eExeHealOp,lOptLabel) ; }
 
   // all done
   return sRtn ;
@@ -737,15 +766,15 @@ SmPropStageType ePropStageTgt = SM_PROPSTAGE_2a ;
 } // end SmFaceProps::SetProps
 
 /*******************************************************************//**
-PURPOSE: Set all member values to be cached after running
-         Fix_CoinEdges()
+PURPOSE: Cache face identity and tolerance properties before geometric repairs.
 
 NOTES: 1. requires the existence of cpFace and cpFace->Surface
-       2. FaceProps values are calculated in three groups:
+       2. FaceProps values are calculated in four groups:
 
          a. SetProps_Gaps()   : calc GapSize dependent prop vals 
-         b. SetProps_Stage2(): calc prop vals independent of Edgeuse data
-         c. SetProps_Stage3() : calc prop vals dependent upon Edgeuse data
+         b. SetProps_Stage2() : calc prop vals independent of Edgeuse data
+         c. SetProps_Stage3() : cache individual loop facts
+         d. SetProps_Stage4() : classify loop containment and orientation
 
           Edgeuse UVTrimCurve creation is notoriously sensitive to Edge/Face database 
           problems.  UVTrimCurve creation is robust once the defining Edge
@@ -761,7 +790,7 @@ NOTES: 1. requires the existence of cpFace and cpFace->Surface
           to identify database problems that don't depend on UVTrimCurve data.  
           After the Heal process competes the "SplitEdgesAtSeams" step, 
           it becomes possible to depend on UVTrimCurves and the method 
-          SetProps_Stage3() is called to finish checking for the rest of 
+          SetProps_Stage4() is called to finish checking for the rest of
           the problems that the HealBrep() heals.
 ***********************************************************************/
 SmStatus SmFaceProps::SetProps_Gaps
@@ -779,7 +808,7 @@ SmStatus SmFaceProps::SetProps_Gaps
   if(m_ePropStage >= SM_PROPSTAGE_GAPSa)
     { return(SM_SUCCESS) ; }
 
-  // Init Props about to be computed - also resets SM_PROPSTAGE_2 and SM_PROPSTAGE_3 Values
+  // Init Props about to be computed - also resets SM_PROPSTAGE_2, SM_PROPSTAGE_3, and SM_PROPSTAGE_4 Values
   ReSet(SM_PROPSTAGE_GAPS) ; 
 
   // increment PropState here - prevent possible infinite loops
@@ -833,11 +862,12 @@ PURPOSE: Set all member values to be cached after running
          Fix_TolSizes()
 
 NOTES: 1. requires the existence of cpFace and cpFace->Surface
-       2. FaceProps values are calculated in three groups:
+       2. FaceProps values are calculated in four groups:
 
           a. SetProps_Gaps(): calc GapSize dependent prop vals
           b. SetProps_Stage2(): calc prop vals independent of Edgeuse data
-          c. SetProps_Stage3(): calc prop vals dependent upon Edgeuse data
+          c. SetProps_Stage3(): cache individual loop facts
+          d. SetProps_Stage4(): classify loop containment and orientation
 
           Edgeuse UVTrimCurve creation is notoriously sensitive to Edge/Face database 
           problems.  UVTrimCurve creation is robust once the defining Edge
@@ -849,7 +879,7 @@ NOTES: 1. requires the existence of cpFace and cpFace->Surface
           to identify database problems that don't depend on UVTrimCurve data.  
           After the Heal process competes the "SplitEdgesAtSeams" step, 
           it becomes possible to depend on UVTrimCurves and the method 
-          SetProps_Stage3() is called to finish checking for the rest of 
+          SetProps_Stage4() is called to finish checking for the rest of
           the problems that the HealBrep() heals.
 ***********************************************************************/
 SmStatus SmFaceProps::SetProps_Stage2
@@ -888,7 +918,7 @@ SmStatus SmFaceProps::SetProps_Stage2
       SER(SetProps_Gaps(cpFace, lFaceIndx, eExeHealOp, lOptLabel)) ;
     }
 
-  // Init props about to be computed - also resets SM_PROPSTAGE_3 Values
+  // Init props about to be computed - also resets SM_PROPSTAGE_3 and SM_PROPSTAGE_4 Values
   ReSet(SM_PROPSTAGE_2) ; 
 
   // increment PropState here - prevent infinite loops
@@ -1118,28 +1148,122 @@ SmBoolean bDebugMe2 = FALSE ;
 } // end SmFaceProps::SetProps_Stage2
 
 /*******************************************************************//**
-PURPOSE: Set all member values to be cached after running
-         Fix_SplitEdgesAtSeams()
+PURPOSE: Cache individual loop properties.
+
+NOTES: Requires Stage 2 and edge splitting at seams. Closure, winding, and
+       coincidence can be recorded without a containment tree or UV trims.
+       Stage 4 computes containment from the completed loop facts.
+***********************************************************************/
+SmStatus SmFaceProps::SetProps_Stage3
+ (const SmFace  *cpFace,      // in : target face
+  ULONG          lFaceIndx,   // in : index in the healer target list
+  SmHealerOpType eExeHealOp,  // in : completed or currently executing healer operation
+  ULONG          lOptLabel)   // in : optional diagnostic label
+{
+  if(m_pFace == cpFace && m_ePropStage >= SM_PROPSTAGE_3a) { return SM_SUCCESS; }
+  if(eExeHealOp < SM_HO_FIX_SPLITEDGE_ATSEAM) { return SM_ERR; }
+  if(!HasProps(SM_PROPSTAGE_2,cpFace))
+    { SER(SetProps_Stage2(cpFace,lFaceIndx,eExeHealOp,lOptLabel)); }
+  ReSet(SM_PROPSTAGE_3);
+  SmTemporaryChangeValue<SmPropStageType> sStage(m_ePropStage,SM_PROPSTAGE_3a);
+  ULONG             ii;
+  SmTArray<SmLoop*> sLoops,sClosedLoops;
+
+  // Get Face->Loops
+  m_pFace->GetLoops(sLoops) ;
+  m_sLoopProps.SetSize(sLoops.GetSize()) ;
+  m_lBadClosed3d_LoopCnt = 0;
+  m_lBadClosedPtr_LoopCnt = 0;
+
+  // for every Loop - Set following Loop Props marked with '*':
+  //                  (Loop Props marked with '##' are set in Stage 4 with SmFace::ClassifyLoops() results)
+  //   SmLoopProps::m_cpLoop *              m_tLoopuseType *
+  //              ::m_lEdgeCnt *            m_lEdgeuseCnt *
+  //              ::m_bClosed3d *           m_bClosedPtrs *
+  //              ::m_bGoodClosed *
+  //              ::m_lSeamCrossingCntU *   m_lSeamCrossingCntV *
+  //              ::m_lSeamWindingCntU *    m_lSeamWindingCntV *
+  //              ::m_eWindingOrientU *     m_eWindingOrientV * - set to SM_OT_UNKNOWN for Loops that don't cross seams
+  //              ::m_bDegen_Loop * - NotYetDone
+  //              ::m_bArea_Loop *
+  //              ::m_eContainmentType ##   m_eLoopOrient ##
+  //              ::m_eDesiredLoopOrient ## m_bGoodOrient ##
+  //    where *  = properties set in SmLoopProps::SetProps()
+  //          ## = properties set later in SmFaceProps::SetProps_Stage4()
+  for(ii=0;ii<sLoops.GetSize();ii++)
+    {
+      SmLoop * pLoop = sLoops[ii] ;
+      m_sLoopProps[ii].SetContext(m_cpContext) ;
+
+      // Set Loop props (when m_bAreaLoop==FALSE, m_eDesiredLoopOrient && m_bGoodOrient are set in Stage 4)
+      SER(m_sLoopProps[ii].SetProps(pLoop, *this)); // sets: following Loop Props marked with '*'
+                                                //       (Loop Props marked with '##' are set in Stage 4 with SmFace::ClassifyLoops() results)
+                                                //       SmLoopProps::m_cpLoop *              m_tLoopuseType *
+                                                //                  ::m_lEdgeCnt *            m_lEdgeuseCnt *
+                                                //                  ::m_bClosed3d *           m_bClosedPtrs *
+                                                //                  ::m_bGoodClosed *
+                                                //                  ::m_lSeamCrossingCntU *   m_lSeamCrossingCntV *
+                                                //                  ::m_lSeamWindingCntU *    m_lSeamWindingCntV *
+                                                //                  ::m_eWindingOrientU *     m_eWindingOrientV * - set to SM_OT_UNKNOWN for Loops that don't cross seams
+                                                //                  ::m_bDegen_Loop * - NotYetDone
+                                                //                  ::m_bArea_Loop *
+                                                //                  ::m_eContainmentType ##   m_eLoopOrient ##
+                                                //                  ::m_eDesiredLoopOrient ## m_bGoodOrient ##
+                                                //   where *  = properties set in SmLoopProps::SetProps()
+                                                //         ## = properties set later in SmFaceProps::SetProps_Stage4()
+      // Closure discrepancies do not require containment. A wire loop that is
+      // open both geometrically and topologically is not a closure discrepancy.
+      if(m_sLoopProps[ii].m_bGoodClosed == FALSE)
+        {
+          if(m_sLoopProps[ii].m_bClosed3d == FALSE) { ++m_lBadClosed3d_LoopCnt; }
+          else                                      { ++m_lBadClosedPtr_LoopCnt; }
+        }
+
+      // Count loops eligible for later containment classification.
+      if     ( m_sLoopProps[ii].m_tLoopuseType == SmVertexuse_TYPE )
+        { // include vertex loops when the vertex is on a pole and the pole is on a missing seam edge
+          if(   (   m_sLoopProps[ii].m_lSeamCrossingCntU > 0
+                 || m_sLoopProps[ii].m_lSeamCrossingCntV > 0)
+             && ( m_sLoopProps[ii].m_bVertexLoopOnPole )) // vertex is on pole
+            { sClosedLoops.Add(pLoop) ; }
+        }
+      else if(   m_sLoopProps[ii].m_bClosed3d
+              || m_sLoopProps[ii].m_bClosedPtrs) { sClosedLoops.Add(pLoop) ; }
+
+    } // end iter ii, every Loop getting FirstLoop props
+
+  // closed Loop count
+  m_lClosedLoopCnt = sClosedLoops.GetSize() ;
+
+  m_ePropStage = SM_PROPSTAGE_3;
+  sStage.Clear();
+  m_bBadLoopProblems = HasProblems(4);
+  return SM_SUCCESS;
+} // end SmFaceProps::SetProps_Stage3
+
+/*******************************************************************//**
+PURPOSE: Cache loop containment and orientation after individual loop property collection.
 
 RETURNS: SM_SUCCESS              = normal operation - properties set and problem lists updated
          SM_ERR_NOTYET_HEAL_FACE = Found a Face with a problem not yet supported - output in unknown state
 
-NOTES: 1. requires all the vals set by the SetProps_Stage2() call.    
+NOTES: 1. requires all the vals set by the SetProps_Stage3() call.
        2. Requires the Face and Edges have been healed at least through
-          the "SplitEdgesAtSeams" step.
+          the "Fix_CoinEdges" step.
 
-       3. SetProps_Stage3() primarily calcs property values needed 
+       3. SetProps_Stage4() primarily calcs property values needed
           for finding the current and desired orientations and containment of Loops.  
           When working with MissingSeam Faces - these properties 
           characterize Area and NoArea_Loops and their orientations.  
           See long Loop orientation note included below. 
           (The note is also contained in SmBrep::HealBrep() header.)
 
-       4. FaceProps values are calculated in three groups by three methods:
+       4. FaceProps values are calculated in four groups:
 
           a. SetProps_Gaps()   : calc GapSize dependent prop vals
           b. SetProps_Stage2(): calc prop vals independent of Edgeuse data
-          c. SetProps_Stage3() : calc prop vals dependent upon Edgeuse data
+          c. SetProps_Stage3() : cache individual loop facts
+          d. SetProps_Stage4() : classify loop containment and orientation
 
           Edgeuse UVTrimCurve creation is notoriously sensitive to Edge/Face database 
           problems.  UVTrimCurve creation is robust once the defining Edge
@@ -1149,9 +1273,9 @@ NOTES: 1. requires all the vals set by the SetProps_Stage2() call.
           
           At the beginning of the Heal process, SetProps_Stage2() is called 
           to identify database problems that don't depend on Edgeuse and UVTrimCurve data.  
-          After the Heal process completes the "SplitEdgesAtSeams" step, 
+          After edge splitting and coincident-edge repair,
           it becomes possible to depend on UVTrimCurves and the method 
-          SetProps_Stage3() is called to finish checking the Face  
+          SetProps_Stage4() is called to finish checking the Face
           for the rest of the problems that the HealBrep() heals.
 
 ORIENT: 5. A NOTE ON LOOP ORIENTATIONS FOR LOOPS ON FACES WITH MISSING SEAMS
@@ -1284,169 +1408,44 @@ NOTE  :    When missing a seam:
           Face.  We will leave this problem for a later time. (perhaps that time is now for you!)
   End note 5. A NOTE ON LOOP ORIENTATIONS FOR LOOPS ON FACES WITH MISSING SEAMS
 ***********************************************************************/
-SmStatus SmFaceProps::SetProps_Stage3
-  (const SmFace * cpFace,     // in : target Face
-   ULONG          lFaceIndx,  // in : Associated FaceIndx within managing SmHeadData::m_sTgtFaces list
-   SmHealerOpType eExeHealOp, // in : Max Healer Operation executed on this Face and Face->Brep
-   ULONG          lOptLabel)  // in : Optional numeric label for Debug reports, SM_UNDEF_LONG to ignore, default:[SM_UNDEF_LONG]
-                    // sets: FaceProps:
-                    //        if(m_ePropStage < SM_PROPSTAGE_2) call SetProps_Stage2() to set
-                    //          { m_pFace               m_lFaceIndx
-                    //            m_sZoneTol3d          m_sOrigZoneTol3d          
-                    //            m_bBadSmallZoneTol3d  m_bBadLargeZoneTol3d
-                    //          } 
-                    //        if(!IsSet_BeforeBeforeEdgeSplit()) call SetProps_Stage2() to set
-                    //          { m_cpSurface           m_sNaturalUVDomain
-                    //            m_bSheetFace          
-                    //            m_bClosedU            m_bClosedV          m_bClosedSurf
-                    //            m_eClosedValU  m_eClosedValV
-                    //            m_lPoles              m_lApproxPoles      m_lNoVertexPoles
-                    //            m_sPolePoints         m_sPoleNormals      
-                    //            m_lBadFlatCorners     m_sFlatCornerPoints 
-                    //            m_pCrvClassU          m_pCrvClassV        
-                    //            m_sRawTouchListU      m_sRawTouchListV
-                    //            m_sDoneTouchListU     m_sDoneTouchListV
-                    //            m_eBadMissingSeam     m_eBadCrossedSeam   m_eBadNearMissSeam 
-                    //          }
-                    //      FaceProps set by SetProps_Stage3():
-                    //        m_sLoopProps //  with call m_sLoopProps[ii].SetProps(pLoop, *this) ; 
-                                           //  that sets: SmLoopProps::m_cpLoop             m_bDegen_Loop  
-                                           //                        ::m_lEdgeCnt           m_bArea_Loop        
-                                           //                        ::m_lEdgeuseCnt        m_eContainmentType  
-                                           //                        ::m_bClosed3d          m_eLoopOrient       
-                                           //                        ::m_bClosedPtrs        m_eDesiredLoopOrient
-                                           //                        ::m_lSeamCrossingCntU  m_lSeamCrossingCntV
-                                           //                        ::m_lSeamWindingCntU   m_lSeamWindingCntV
-                                           //                        ::m_eWindingOrientU    m_eWindingOrientV
-                                           //                        ::m_bGoodOrient        m_bGoodClosed       
-                    //        m_lClosedLoopCnt       m_lOuterLoopCnt          
-                    //        m_bBadOuterLoopOrder   m_lBadOrient_LoopCnt     
-                    //        m_lBadNoArea_LoopCnt   m_lBadNested_LoopCnt     
-                    //        m_lBadMissingPoles     m_bBadUnpairedNoArea_Loop
-                    //        m_lBadClosed3d_LoopCnt m_lBadClosedPtr_LoopCnt
-{                             
-  // no work - already done or being done
-  if(m_ePropStage >= SM_PROPSTAGE_3a)
-    { return(SM_SUCCESS) ; }
-
-  // no work - called before SmHealData::Fix_SplitEdgesAtSeam() has run on this Brep
-  if(eExeHealOp < SM_HO_FIX_SPLITEDGE_ATSEAM)
-    { return(SM_ERR) ; }
-
-  // extra work - Get props that need to be built before these props
-  if(m_ePropStage < SM_PROPSTAGE_2 || m_pFace != cpFace)
-    {
-      SER(SetProps_Stage2(cpFace, lFaceIndx, eExeHealOp, lOptLabel)) ;
-    }
-
-  // Init props about to be computed - also resets any future higher stage values (currently none)
-  ReSet(SM_PROPSTAGE_3) ;
-
-  // increment PropState here - prevent infinite loops
-  m_ePropStage = SM_PROPSTAGE_3a ; // SM_PROPSTAGE_3a = during SmFaceProps::SetProps_Stage3() call
-
+SmStatus SmFaceProps::SetProps_Stage4
+ (const SmFace * cpFace,      // in : target face
+  ULONG          lFaceIndx,   // in : index in the healer target list
+  SmHealerOpType eExeHealOp,  // in : completed or currently executing healer operation
+  ULONG          lOptLabel)   // in : optional diagnostic label
+{
+  if(m_pFace == cpFace && m_ePropStage >= SM_PROPSTAGE_4a) { return SM_SUCCESS; }
+  if(eExeHealOp < SM_HO_FIX_COIN_EDGES) { return SM_ERR; }
+  if(!HasProps(SM_PROPSTAGE_3,cpFace))
+    { SER(SetProps_Stage3(cpFace,lFaceIndx,eExeHealOp,lOptLabel)); }
+  ReSet(SM_PROPSTAGE_4);
+  SmTemporaryChangeValue<SmPropStageType> sStage(m_ePropStage,SM_PROPSTAGE_4a);
 #ifdef SM_DEBUG_CODE
-SmBoolean bDebugMe = FALSE ;
-  if(bDebugMe)
+  SmBoolean bDebugMe = FALSE;
+#endif
+  ULONG                      ii,jj,cnt;
+  SmTArray<SmLoop*>          sLoops,sClosedLoops;
+  SmTArray<SmClassifyLoopIO> sClassifyLoopIOs;
+  SmTArray<ULONG>            sOrderedNoAreaIndices;
+  SmCurveClassification      sCrvClassification;
+  sCrvClassification.SetContext(m_cpContext);
+  SmCrvDirOnFaceType   eClassifyCrv_StartType = SM_CD_UNINIT;
+  SmCrvDirOnFaceType   eClassifyCrv_StopType  = SM_CD_UNINIT;
+  SmHealNotYetFaceType eClassifiable          = SM_HNF_NO_PROBS;
+  m_pFace->GetLoops(sLoops);
+  // Match the Stage 3 loop selection without recalculating its properties.
+  for(ii=0; ii<sLoops.GetSize(); ++ii)
     {
-      Dump(lOptLabel) ;
-    }
-#endif // SM_DEBUG_CODE
-
-  // locals
-  ULONG ii, jj, cnt ; 
-  SmTArray<SmVertex*>        sVerticesU ;
-  SmTArray<SmVertex*>        sVerticesV ;  // Lists of Vertices where Loop crosses a Missing Seam
-  SmCurveClassification      sOptCurveClassification ; 
-  SmTArray<SmLoop*>          sLoops, sClosedLoops ;
-  SmTArray<SmClassifyLoopIO> sClassifyLoopIOs ;
-  SmTArray<ULONG>            sOrderedNoAreaIndices ;
-  SmCurveClassification      sCrvClassification ; sCrvClassification.SetContext(m_cpContext) ;
-  SmCrvDirOnFaceType         eClassifyCrv_StartType = SM_CD_UNINIT ;
-  SmCrvDirOnFaceType         eClassifyCrv_StopType  = SM_CD_UNINIT ;
-  SmHealNotYetFaceType       eClassifiable      = SM_HNF_NO_PROBS ;
-
-  // Get Face->Loops
-  m_pFace->GetLoops(sLoops) ; 
-  m_sLoopProps.SetSize(sLoops.GetSize()) ; 
-
-  // for every Loop - Set following Loop Props marked with '*': 
-  //                  (Loop Props marked with '##' are set later in this method with SmFace::ClassifyLoops() results)
-  //   SmLoopProps::m_cpLoop *              m_tLoopuseType *
-  //              ::m_lEdgeCnt *            m_lEdgeuseCnt *
-  //              ::m_bClosed3d *           m_bClosedPtrs *
-  //              ::m_bGoodClosed *         
-  //              ::m_lSeamCrossingCntU *   m_lSeamCrossingCntV *
-  //              ::m_lSeamWindingCntU *    m_lSeamWindingCntV *
-  //              ::m_eWindingOrientU *     m_eWindingOrientV * - set to SM_OT_UNKNOWN for Loops that don't cross seams
-  //              ::m_bDegen_Loop * - NotYetDone       
-  //              ::m_bArea_Loop *          
-  //              ::m_eContainmentType ##   m_eLoopOrient ##          
-  //              ::m_eDesiredLoopOrient ## m_bGoodOrient ##       
-  //    where *  = properties set in SmLoopProps::SetProps()
-  //          ## = properties set later in SmFaceProps::SetProps_Stage3()
-  for(ii=0;ii<sLoops.GetSize();ii++)
-    {
-      SmLoop * pLoop = sLoops[ii] ;
-      m_sLoopProps[ii].SetContext(m_cpContext) ; 
-
-      // Set Loop props (when m_bAreaLoop==FALSE, m_eDesiredLoopOrient && m_bGoodOrient are set in this method)
-      m_sLoopProps[ii].SetProps(pLoop, *this) ; // sets: following Loop Props marked with '*'
-                                                //       (Loop Props marked with '##' are set later in this method with SmFace::ClassifyLoops() results)
-                                                //       SmLoopProps::m_cpLoop *              m_tLoopuseType *
-                                                //                  ::m_lEdgeCnt *            m_lEdgeuseCnt *
-                                                //                  ::m_bClosed3d *           m_bClosedPtrs *
-                                                //                  ::m_bGoodClosed *         
-                                                //                  ::m_lSeamCrossingCntU *   m_lSeamCrossingCntV *
-                                                //                  ::m_lSeamWindingCntU *    m_lSeamWindingCntV *
-                                                //                  ::m_eWindingOrientU *     m_eWindingOrientV * - set to SM_OT_UNKNOWN for Loops that don't cross seams
-                                                //                  ::m_bDegen_Loop * - NotYetDone       
-                                                //                  ::m_bArea_Loop *          
-                                                //                  ::m_eContainmentType ##   m_eLoopOrient ##          
-                                                //                  ::m_eDesiredLoopOrient ## m_bGoodOrient ##       
-                                                //   where *  = properties set in SmLoopProps::SetProps()
-                                                //         ## = properties set later in SmFaceProps::SetProps_Stage3()
-      // accumulate closed loops and mark open loops as wires
-      if     ( m_sLoopProps[ii].m_tLoopuseType == SmVertexuse_TYPE )
-        { // include vertex loops when the vertex is on a pole and the pole is on a missing seam edge
-          if(   (   m_sLoopProps[ii].m_lSeamCrossingCntU > 0
-                 || m_sLoopProps[ii].m_lSeamCrossingCntV > 0)
-             && ( m_sLoopProps[ii].m_bVertexLoopOnPole )) // vertex is on pole
-            { sClosedLoops.Add(pLoop) ; }
-        }
-      else if(   m_sLoopProps[ii].m_bClosed3d
-              || m_sLoopProps[ii].m_bClosedPtrs) { sClosedLoops.Add(pLoop) ; }
-      else                                       { m_sLoopProps[ii].m_eContainmentType = SM_CMT_WIRELOOP ; }
-
-#ifdef SM_DEBUG_CODE
-      if(bDebugMe)
+      const SmLoopProps &crLoopProps = m_sLoopProps[ii];
+      if(crLoopProps.m_tLoopuseType == SmVertexuse_TYPE)
         {
-          m_sLoopProps[ii].Dump(ii) ;
-
-          SmBrep    * pBrep    = m_pFace ? m_pFace->GetBrep() : NULL ;
-          SmSurface * pSurface = m_pFace ? m_pFace->GetSurface() : NULL ;
-
-          smgfx_Erase() ;
-          smgfx_SetLook(1,2, 0,0,1) ;    if(pBrep) pBrep->Draw(TRUE) ; sm_GraphicsLoop() ;
-          smgfx_SetLook(1,2, 0,1,1) ;    if(pSurface) pSurface->DrawUV() ; sm_GraphicsLoop() ;
-          smgfx_SetLook(2,3, .3,.3,.3) ; if(pSurface) pSurface->DrawSeams() ; sm_GraphicsLoop() ;
-          smgfx_SetLook(2,3, 0,1,0) ;    if(pSurface) pSurface->DrawParams() ; sm_GraphicsLoop() ;
-          smgfx_SetLook(4,5, 1,0,0) ;    if(sLoops[ii]) sLoops[ii]->Draw() ; sm_GraphicsLoop() ; 
-          sm_GraphicsLoop() ;
+          if(   (crLoopProps.m_lSeamCrossingCntU > 0 || crLoopProps.m_lSeamCrossingCntV > 0)
+             && crLoopProps.m_bVertexLoopOnPole) { sClosedLoops.Add(sLoops[ii]); }
         }
-#endif // SM_DEBUG_CODE
-
-    } // end iter ii, every Loop getting FirstLoop props 
-    
-  // closed Loop count
-  m_lClosedLoopCnt = sClosedLoops.GetSize() ;
-
-#ifdef SM_DEBUG_CODE
-  if(bDebugMe)
-    {
-      Dump(lOptLabel == SM_UNDEF_ULONG ? 100 : 100 + lOptLabel) ;
+      else if(crLoopProps.m_bClosed3d || crLoopProps.m_bClosedPtrs)
+        { sClosedLoops.Add(sLoops[ii]); }
+      else { m_sLoopProps[ii].m_eContainmentType = SM_CMT_WIRELOOP; }
     }
-#endif // SM_DEBUG_CODE
 
   // Call SmFace::ClasifyLoops to get Loop orientations and containment for all NonWireLoop Loops
   SmStatus sClassifyStatus = m_pFace->ClassifyLoops
@@ -1489,6 +1488,7 @@ SmBoolean bDebugMe = FALSE ;
  //  - for now, treat these as unknown problems that need further study so that the healer and ClassifyLoops
  //    can be extended to handle whatever problems this problem Face is causing.
  //  - return an error code - let the caller handle the problem
+ SER(sClassifyStatus);
  if(eClassifiable != SM_HNF_NO_PROBS)
    {
      // remember this problem - return an error
@@ -1505,15 +1505,15 @@ SmBoolean bDebugMe = FALSE ;
   //                           2. m_lBadOrient_LoopCnt              5. m_bBadOuterLoopOrder
   //                           3. m_lBadNoArea_LoopCnt              6. m_lBadMissingPoles
   //                           4. m_lBadNested_LoopCnt              7. m_bBadUnpairedNoArea_Loop
-  //                           8. m_lBadClosed3d_LoopCnt            9. m_lBadClosedPtr_LoopCnt                      
+  //     Closure discrepancy counts were completed in Stage 3 and are retained.
   //                                                                   
-  for(ii=0,jj=0;ii<sLoops.GetSize();ii++,jj++)
+  for(ii=0,jj=0; jj<sClassifyLoopIOs.GetSize(); ++ii,++jj)
     {
-      // WireLoops were skipped when building the sClassifyLoopIO array
-      while(ii<sLoops.GetSize() && (   m_sLoopProps[ii].m_eContainmentType == SM_CMT_WIRELOOP
-                                    || m_sLoopProps[ii].m_tLoopuseType     == SmVertexuse_TYPE ) )
-        { ii++ ; }
-      if(ii>=sLoops.GetSize()) { break ; }
+      // Results follow the selected input loops, including pole vertex loops.
+      // Skip only loops omitted from that input, not every vertex loop.
+      while(ii<sLoops.GetSize() && sLoops[ii] != sClassifyLoopIOs[jj].m_pLoop)
+        { ++ii; }
+      AERN_MSG(ii<sLoops.GetSize(), SM_ERR, _T("SmFaceProps::SetProps_Stage4 - sClassifyLoopIOs contains a loop that is not in sLoops"));
 
       // match SmClassifyLoopIO and m_sLoopProps indices
       SmLoop           * pLoop           = sLoops[ii] ; 
@@ -1524,7 +1524,7 @@ SmBoolean bDebugMe = FALSE ;
       if (!m_pLooptreeRoot)
         {
           // verify that ClassifyLoops failed
-          SE_MSG(sClassifyStatus != SM_SUCCESS, _T("SetProps__Stage3::Possible error, ClassifyLoops returned success but left m_pLooptreeRoot NULL - needs investigation - could be a bug or a missed heal case.")); 
+          SE_MSG(sClassifyStatus != SM_SUCCESS, _T("SetProps__Stage4::Possible error, ClassifyLoops returned success but left m_pLooptreeRoot NULL - needs investigation - could be a bug or a missed heal case."));
           
           // GWC: another block of code that might have been added by cursor and without the test case hard to determine if its correct.
           // Cannot process loop properties without looptree root
@@ -1626,7 +1626,7 @@ SmBoolean bDebugMe = FALSE ;
                         && m_sLoopProps[ii].m_eContainmentType != SM_CMT_NESTEDLOOP_ODD 
                         && m_sLoopProps[ii].m_eContainmentType != SM_CMT_WIRELOOP       
                         && m_sLoopProps[ii].m_eContainmentType != SM_CMT_ERROR),
-                    _T("SmFaceProps::SetPRops_Stage3: Found a VertexLoop with an unexpected ContainmentType - This may or may not be a bug - needs review")) ;
+                    _T("SmFaceProps::SetPRops_Stage4: Found a VertexLoop with an unexpected ContainmentType - This may or may not be a bug - needs review")) ;
 
       // remember okay/problem orientations
       m_sLoopProps[ii].m_bGoodOrient = m_sLoopProps[ii].m_eLoopOrient == m_sLoopProps[ii].m_eDesiredLoopOrient ;
@@ -1645,8 +1645,6 @@ SmBoolean bDebugMe = FALSE ;
                          m_lBadOrient_LoopCnt    = 0 ;
                          m_lBadNoArea_LoopCnt    = 0 ;
                          m_lBadNested_LoopCnt    = 0 ;
-                         m_lBadClosed3d_LoopCnt  = 0 ;
-                         m_lBadClosedPtr_LoopCnt = 0 ;
                        }
           break ; 
         } // end all loops are wire loops check
@@ -1689,14 +1687,6 @@ SmBoolean bDebugMe = FALSE ;
           m_lBadNested_LoopCnt++ ;                                                     
         }                                                                              
                                                                                        
-      // 5. count the problem nested Loops                                             
-      if(cnt == 0) { m_lBadClosed3d_LoopCnt  = 0 ; 
-                     m_lBadClosedPtr_LoopCnt = 0 ;
-                   }
-      if(   m_sLoopProps[ii].m_bGoodClosed == FALSE)                                   
-        { if(m_sLoopProps[ii].m_bClosed3d == FALSE) { m_lBadClosed3d_LoopCnt++ ; }     
-          else                                      { m_lBadClosedPtr_LoopCnt++ ; }
-        }
 #ifdef SM_DEBUG_CODE
       if(bDebugMe)
         {
@@ -1792,15 +1782,13 @@ SmBoolean bDebugMe2 = FALSE ;
     }
 #endif // SM_DEBUG_CODE
 
-  // set m_bBadLoopProblems = TRUE: has at least one Loop problem
-  m_bBadLoopProblems = HasProblems(4) ; // 4 has Post SetProps_Stage3() problems 
-
-  // all done
-  // increment PropState here - prevent infinite loops
-  m_ePropStage = SM_PROPSTAGE_3 ; // SM_PROPSTAGE_3 = after SmFaceProps::SetProps_Stage3() call
+  // Publish completed containment before aggregating its problem flags.
+  m_ePropStage = SM_PROPSTAGE_4;
+  sStage.Clear();
+  m_bBadLoopProblems = HasProblems(12);
   return(SM_SUCCESS) ;
 
-} // end SmFaceProps::SetProps_Stage3
+} // end SmFaceProps::SetProps_Stage4
 
 /*******************************************************************//**
 PURPOSE: Return TRUE if Point3d is within Face->ZoneTol3d of a surface pole
@@ -1838,11 +1826,13 @@ PURPOSE: Return TRUE if obj has any problems
 NOTES: Member values are set with a calls to 
          SetProps_Stage2()
          SetProps_Stage3()
+         SetProps_Stage4()
 ***********************************************************************/
 SmBoolean SmFaceProps::HasProblems
  (ULONG lBitArray) const   // in : OrOf : OrOf 1 = Post SetProps_Gaps() problems       
                            //           :      2 = Post SetProps_Stage2() problems     
                            //           :      4 = Post SetProps_Stage3() problems
+                           //           :      8 = Post SetProps_Stage4() problems
 { 
   // return val
   SmBoolean bProb = FALSE ;
@@ -1874,8 +1864,23 @@ SmBoolean SmFaceProps::HasProblems
 
     } // end // SetProps(SM_PROPSTAGE_2) problem list
 
-  // SetProps(SM_PROPSTAGE_3) problem list
+  // Stage 3 findings do not require containment or loop orientation.
   if(m_ePropStage >= SM_PROPSTAGE_3 && (lBitArray & 4))
+    {
+      bProb |= (m_lBadClosed3d_LoopCnt  > 0) ;
+      bProb |= (m_lBadClosedPtr_LoopCnt > 0) ;
+
+      for(ULONG lLoop=0; lLoop<m_sLoopProps.GetSize(); ++lLoop)
+        {
+          const SmLoopProps &crLoopProps = m_sLoopProps[lLoop];
+          bProb |= (crLoopProps.m_bArea_Loop        == FALSE) ;
+          bProb |= (crLoopProps.m_lSeamCrossingCntU  > 0) ;
+          bProb |= (crLoopProps.m_lSeamCrossingCntV  > 0) ;
+        }
+    }
+
+  // SetProps(SM_PROPSTAGE_4) problem list
+  if(m_ePropStage >= SM_PROPSTAGE_4 && (lBitArray & 8))
     { 
       bProb |= (m_lOuterLoopCnt           != 1) ;
       
@@ -1885,11 +1890,9 @@ SmBoolean SmFaceProps::HasProblems
       bProb |= (m_lBadNoArea_LoopCnt       > 0) ;
       bProb |= (m_lBadNested_LoopCnt       > 0) ;
       bProb |= (m_bBadUnpairedNoArea_Loop == TRUE) ;
-      bProb |= (m_lBadClosed3d_LoopCnt     > 0) ;
-      bProb |= (m_lBadClosedPtr_LoopCnt    > 0) ;
       bProb |= (m_lBadMissingPoles         > 0) ;
 
-    } // end SetProps(SM_PROPSTAGE_3) problem list
+    } // end SetProps(SM_PROPSTAGE_4) problem list
 
   // all done
   return(bProb) ;  
@@ -1934,7 +1937,8 @@ SmDisplayList * SmFaceProps::Draw
      && bHasProblems  == FALSE 
      && m_ePropStage != SM_PROPSTAGE_GAPSa
      && m_ePropStage != SM_PROPSTAGE_2a
-     && m_ePropStage != SM_PROPSTAGE_3a)
+     && m_ePropStage != SM_PROPSTAGE_3a
+     && m_ePropStage != SM_PROPSTAGE_4a)
     {
       // all done
       return(NULL) ; 
@@ -2150,16 +2154,8 @@ SmDisplayList * SmFaceProps::Draw
    //    } // end Has VDir NearMissSeams check
    // end Not Yet: section removal - to be added back in after Fix_BadGaps() is built
 
-  // For Faces with problem Loops (only available after SmFaceProps::SetProps_Stage3() has run)
-  if(   (m_lOuterLoopCnt           != 1)
-     || (m_bBadOuterLoopOrder      == TRUE)
-     || (m_lBadOrient_LoopCnt      != 0)
-     || (m_lBadNoArea_LoopCnt      != 0)
-     || (m_lBadNested_LoopCnt      != 0)
-     || (m_bBadUnpairedNoArea_Loop == TRUE)
-     || (m_lBadClosed3d_LoopCnt    != 0) 
-     || (m_lBadClosedPtr_LoopCnt   != 0)
-    )
+  // Individual loop problems are available before containment is complete.
+  if(m_ePropStage >= SM_PROPSTAGE_3 && HasProblems(12))
     {
       // for every loop prop
       for(ii=0;ii<m_sLoopProps.GetSize();ii++)
@@ -2368,8 +2364,10 @@ void SmFaceProps::Dump
                    : m_ePropStage == SM_PROPSTAGE_GAPS  ? _T("SM_PROPSTAGE_GAPS  = after SmFaceProps::SetProps_Gaps() call")      
                    : m_ePropStage == SM_PROPSTAGE_2a ? _T("SM_PROPSTAGE_2a = during SmFaceProps::SetProps_Stage2() call")    
                    : m_ePropStage == SM_PROPSTAGE_2  ? _T("SM_PROPSTAGE_2  = after SmFaceProps::SetProps_Stage2() call")    
-                   : m_ePropStage == SM_PROPSTAGE_3a ? _T("SM_PROPSTAGE_3a = during SmFaceProps::SetProps_Stage3() call")
-                   : m_ePropStage == SM_PROPSTAGE_3  ? _T("SM_PROPSTAGE_3  = after SmFaceProps::SetProps_Stage3() call")
+                   : m_ePropStage == SM_PROPSTAGE_3a ? _T("SM_PROPSTAGE_3a = collecting individual loop properties")
+                   : m_ePropStage == SM_PROPSTAGE_3  ? _T("SM_PROPSTAGE_3 = individual loop properties complete")
+                   : m_ePropStage == SM_PROPSTAGE_4a ? _T("SM_PROPSTAGE_4a = during SmFaceProps::SetProps_Stage4() call")
+                   : m_ePropStage == SM_PROPSTAGE_4  ? _T("SM_PROPSTAGE_4  = after SmFaceProps::SetProps_Stage4() call")
                    : _T("Unknown Value")) ; 
   smos_WriteBuffer(sBuff) ;         
 
@@ -2386,9 +2384,14 @@ void SmFaceProps::Dump
                     : m_ePropStage >= SM_PROPSTAGE_2  ? _T("DONE") : _T("ToDo")) ; 
   smos_WriteBuffer(sBuff) ;
 
-  smos_sprintf(sBuff, _T("\n     SetProps_Stage3():[%s] - (save LoopProp and Missing Pole Vals)"),                        
-                      m_ePropStage == SM_PROPSTAGE_3a ? _T("AMID") 
-                    : m_ePropStage >= SM_PROPSTAGE_3  ? _T("DONE") : _T("ToDo")) ; 
+  smos_sprintf(sBuff, _T("\n     SetProps_Stage3():[%s] - (individual loops)"),
+                      m_ePropStage == SM_PROPSTAGE_3a ? _T("AMID")
+                    : m_ePropStage >= SM_PROPSTAGE_3 ? _T("DONE") : _T("ToDo"));
+  smos_WriteBuffer(sBuff);
+
+  smos_sprintf(sBuff, _T("\n     SetProps_Stage4():[%s] - (save LoopProp and Missing Pole Vals)"),
+                      m_ePropStage == SM_PROPSTAGE_4a ? _T("AMID")
+                    : m_ePropStage >= SM_PROPSTAGE_4  ? _T("DONE") : _T("ToDo")) ;
   smos_WriteBuffer(sBuff) ;
   
   // m_eBeenThroughMoveSeam
@@ -2414,6 +2417,7 @@ void SmFaceProps::Dump
                    m_eNotYetFaceType == SM_HNF_NO_PROBS ? _T("[NONE] - Okay") 
                  : m_eNotYetFaceType == SM_HNF_NO_CLASSIFY_ZERO_CROSSCNT ? _T("[TgtLoop NotCrvClassifiable Zero CrossCnt - Maybe DegenFace or CoincidentEdges] - Bad")
                  : m_eNotYetFaceType == SM_HNF_NO_CLASSIFY_ODD_CROSSCNT  ? _T("[TgtLoop NotCrvClassifiable Odd CrossCnt on OpenSurface Face - Maybe DegenFace or CoincidentEdges] - Bad")
+                 : m_eNotYetFaceType == SM_HNF_PROPERTY_CALC_FAILED     ? _T("[Face property calculation failed - dependent repairs skipped] - Bad")
                  : _T("[Undescribed Problem] - Bad")) ;
       smos_WriteBuffer(sBuff) ;
 
@@ -2443,10 +2447,10 @@ void SmFaceProps::Dump
      }
   else { smos_WriteBuffer(_T("\n  Section 2: Data Not Yet Set by SetProps_Stage2()")) ; }
 
-  // Section 3: Props and Probs Post SetProps_Stage3
+  // Stage 3 is useful independently of a completed containment tree.
   if(m_ePropStage >= SM_PROPSTAGE_3) 
      { 
-       smos_WriteBuffer(_T("\n  Section 3: Post SetProps_Stage3 Props and Probs")) ;
+       smos_WriteBuffer(_T("\n  Section 3: Post SetProps_Stage3 Props and Probs, Individual loop properties")) ;
        DumpProps_Stage3() ; // Per Loop data dumps done below
 
        // 4 = Post SetProps_Stage3() problems
@@ -2455,7 +2459,19 @@ void SmFaceProps::Dump
      }
   else { smos_WriteBuffer(_T("\n  Section 3: Data Not Yet Set by SetProps_Stage3()")) ; }
 
-  // Section 4: Dump Long Data when asked and present
+  // Section 4: Props and Probs Post SetProps_Stage4
+  if(m_ePropStage >= SM_PROPSTAGE_4)
+     { 
+       smos_WriteBuffer(_T("\n  Section 4: Post SetProps_Stage4 Props and Probs")) ;
+       DumpProps_Stage4() ; // Per Loop data dumps done below
+
+       // 8 = Post SetProps_Stage4() problems
+       if(HasProblems(8) == TRUE) { DumpProblems_Stage4() ; }
+       else                       { smos_WriteBuffer(_T("\n   Problems  : [None] Okay")) ; }
+     }
+  else { smos_WriteBuffer(_T("\n  Section 4: Data Not Yet Set by SetProps_Stage4()")) ; }
+
+  // Section 5: Dump Long Data when asked and present
   if(bLong == TRUE)
     {
       // when there is section 4 data
@@ -2463,7 +2479,7 @@ void SmFaceProps::Dump
          || (   m_ePropStage >= SM_PROPSTAGE_3
              && m_sLoopProps.GetSize() > 0))
         {
-          smos_WriteBuffer(_T("\n  Section 4: Dump Long Data when asked (SeamCrvClassifies, LoopContainmentTree, and LoopProps)")) ;
+          smos_WriteBuffer(_T("\n  Section 5: Dump Long Data when asked (SeamCrvClassifies, LoopContainmentTree, and LoopProps)")) ;
           
           // SeamU ClassifyCrv - when present
           if(m_ePropStage >= SM_PROPSTAGE_2)
@@ -2506,7 +2522,7 @@ void SmFaceProps::Dump
              && m_sLoopProps.GetSize() > 0) 
             { 
               // Looptree
-              if(m_pLooptreeRoot)
+              if(m_ePropStage >= SM_PROPSTAGE_4 && m_pLooptreeRoot)
                 { m_pLooptreeRoot->Dump() ; }
           
               // m_sLoopProps Size
@@ -2519,12 +2535,12 @@ void SmFaceProps::Dump
                 } // end iter dumping every LoopProps
             } // end PerLoop_Data_to_dump existence check
 
-          smos_WriteBuffer(_T("\n  End Section 4: Dump Long Data when asked (SeamCrvClassifies, LoopContainmentTree, and LoopProps)")) ;
+          smos_WriteBuffer(_T("\n  End Section 5: Dump Long Data when asked (SeamCrvClassifies, LoopContainmentTree, and LoopProps)")) ;
 
         } // end section 4 data to dump branch
       else  // else no Section 4 data to dump branch
         {
-          smos_WriteBuffer(_T("\n  Section 4: Long Data not yet set by SetProps_Stage2() or SetProps_Stage3()")) ;
+          smos_WriteBuffer(_T("\n  Section 5: Long Data not yet set by SetProps_Stage2() or SetProps_Stage3()")) ;
         }
 
     } // end bLone == TRUE check
@@ -2534,11 +2550,12 @@ void SmFaceProps::Dump
   if(bLong == TRUE)
     {
 
-      smos_WriteBuffer(_T("\n  Section 5: Repeat FaceProblems Dump - (* LongDump DebugMode Only)")) ;
+      smos_WriteBuffer(_T("\n  Section 6: Repeat FaceProblems Dump - (* LongDump DebugMode Only)")) ;
       DumpProblems_Gaps() ;
       smos_WriteBuffer(_T("\n")) ; DumpProblems_Stage2() ; 
-      smos_WriteBuffer(_T("\n")) ; DumpProblems_Stage3() ; 
-      smos_WriteBuffer(_T("\n  End Section 5: FaceProblems Dump")) ;
+      smos_WriteBuffer(_T("\n")) ; DumpProblems_Stage3() ;
+      smos_WriteBuffer(_T("\n")) ; DumpProblems_Stage4() ;
+      smos_WriteBuffer(_T("\n  End Section 6: FaceProblems Dump")) ;
     }
 #endif // SM_DEBUG_CODE
 
@@ -2852,11 +2869,103 @@ void SmFaceProps::DumpProblems_Stage2() const
 } // end SmFaceProps::DumpState2_Probs
 
 /*******************************************************************//**
-PURPOSE: Formatted Write for SmFaceProps 
-         SetProps_Stage3()] properties
-NOTES:
+PURPOSE: Report Stage 3 loop facts without requiring containment.
 ***********************************************************************/
 void SmFaceProps::DumpProps_Stage3() const
+{
+  TCHAR sBuff[SM_TBLOCK_SIZE];
+  smos_sprintf(sBuff,_T("\n   Individual loops: %lu, closed loops: %lu"),
+               m_sLoopProps.GetSize(),m_lClosedLoopCnt);
+  smos_WriteBuffer(sBuff);
+}
+
+/*******************************************************************//**
+PURPOSE: Report individual loop problems known after SetProps_Stage3().
+
+NOTES: Uses closure and seam-crossing facts without consulting containment,
+       orientation, or Stage 4 counters. A no-area loop needs later pairing
+       classification; this report does not claim that it is unpaired.
+***********************************************************************/
+void SmFaceProps::DumpProblems_Stage3() const
+{
+  if(m_ePropStage < SM_PROPSTAGE_3)
+    {
+      smos_WriteBuffer(_T("\n   Stage 3 problems: Not yet evaluated"));
+      return;
+    }
+
+  TCHAR     sBuff[SM_TBLOCK_SIZE];
+  // m_bBadLoopProblems
+  smos_sprintf(sBuff, _T("\n   Problems  : Has Any Loop Problems       :[%s"),
+                    m_bBadLoopProblems == FALSE ? _T("FALSE] - Okay")
+                  : m_bBadLoopProblems == TRUE  ? _T("TRUE ] - Bad")
+                                                : _T("UNSURE]") ) ;
+  smos_WriteBuffer(sBuff) ;
+
+  // Total Bad_ClosedLoop Count
+  smos_sprintf(sBuff, _T("\n             : Bad_ClosedLoop_TotCnt       :[%2lu]%s"),
+                     m_lBadClosed3d_LoopCnt + m_lBadClosedPtr_LoopCnt,
+                     m_lBadClosed3d_LoopCnt == SM_UNDEF_ULONG               ? _T(" Okay - hasn't been set yet")
+                  : (m_lBadClosed3d_LoopCnt + m_lBadClosedPtr_LoopCnt) != 0 ? _T(" Bad - Assumed Loop is meant to be closed")
+                                                                            : _T(" Okay"));
+  smos_WriteBuffer(sBuff) ;
+
+  // m_lBadClosed3d_LoopCnt
+  smos_sprintf(sBuff, _T("\n             :   Bad_ClosedLoop_Cnt BadGaps:[%2lu]%s"),
+             m_lBadClosed3d_LoopCnt,
+             m_lBadClosed3d_LoopCnt == SM_UNDEF_ULONG ? _T(" Okay - hasn't been set yet")
+           : m_lBadClosed3d_LoopCnt != 0              ? _T(" Bad - Assumed Loop is meant to be closed")
+                                                      : _T(" Okay")) ;
+  smos_WriteBuffer(sBuff) ;
+
+  // m_lBadClosedPtr_LoopCnt
+  smos_sprintf(sBuff, _T("\n             :   Bad_ClosedLoop_Cnt BadPtrs:[%2lu]%s"),
+             m_lBadClosedPtr_LoopCnt,
+             m_lBadClosedPtr_LoopCnt == SM_UNDEF_ULONG ? _T(" Okay - hasn't been set yet")
+           : m_lBadClosedPtr_LoopCnt != 0              ? _T(" Bad - Assumed Loop is meant to be closed")
+                                                       : _T(" Okay")) ;
+  smos_WriteBuffer(sBuff) ;
+
+  SmBoolean bLoopProblems = FALSE;
+  for(ULONG lLoop=0; lLoop<m_sLoopProps.GetSize(); ++lLoop)
+    {
+      const SmLoopProps &crLoopProps = m_sLoopProps[lLoop];
+      SmBoolean         bCrossesSeam =    crLoopProps.m_lSeamCrossingCntU > 0
+                                      || crLoopProps.m_lSeamCrossingCntV > 0;
+      if(   crLoopProps.m_bGoodClosed != FALSE
+         && crLoopProps.m_bArea_Loop != FALSE
+         && !bCrossesSeam) { continue; }
+
+      bLoopProblems = TRUE;
+      smos_sprintf(sBuff,_T("\n   Individual loop [%lu] problems:"),lLoop);
+      smos_WriteBuffer(sBuff);
+      if(crLoopProps.m_bGoodClosed == FALSE)
+        {
+          smos_sprintf(sBuff,_T("\n     Closure mismatch: Closed3d:[%s] ClosedPtrs:[%s]"),
+                       crLoopProps.m_bClosed3d == TRUE ? _T("TRUE") : _T("FALSE"),
+                       crLoopProps.m_bClosedPtrs == TRUE ? _T("TRUE") : _T("FALSE"));
+          smos_WriteBuffer(sBuff);
+        }
+      if(bCrossesSeam)
+        {
+          smos_sprintf(sBuff,_T("\n     Seam crossings U:[%lu] V:[%lu] - seam completion required"),
+                       crLoopProps.m_lSeamCrossingCntU,crLoopProps.m_lSeamCrossingCntV);
+          smos_WriteBuffer(sBuff);
+        }
+      if(crLoopProps.m_bArea_Loop == FALSE)
+        { smos_WriteBuffer(_T("\n     NoArea_Loop - pairing is evaluated in Stage 4")); }
+    }
+  if(!bLoopProblems)
+    { smos_WriteBuffer(_T("\n   Individual loop problems: [None]")); }
+
+} // end SmFaceProps::DumpProblems_Stage3
+
+/*******************************************************************//**
+PURPOSE: Formatted Write for SmFaceProps 
+         SetProps_Stage4()] properties
+NOTES:
+***********************************************************************/
+void SmFaceProps::DumpProps_Stage4() const
 {
   TCHAR sBuff[SM_TBLOCK_SIZE] ;
   SmTArray<SmLoop *> sLoops ;
@@ -2880,23 +2989,24 @@ void SmFaceProps::DumpProps_Stage3() const
                                   : _T(" Okay")) ;
   smos_WriteBuffer(sBuff) ;
 
-} // end SmFaceProps::DumpProps_Stage3
+} // end SmFaceProps::DumpProps_Stage4
 
 /*******************************************************************//**
 PURPOSE: Formatted Write for SmFaceProps 
-         SetProps_Stage3()] problems
+         SetProps_Stage4()] problems
 NOTES:
 ***********************************************************************/
-void SmFaceProps::DumpProblems_Stage3() const
+void SmFaceProps::DumpProblems_Stage4() const
 {
-  TCHAR sBuff[SM_TBLOCK_SIZE] ;
+  // The long dump can request every problem group before containment completes.
+  // Do not interpret uninitialized aggregate counters as completed findings.
+  if(m_ePropStage < SM_PROPSTAGE_4)
+    {
+      smos_WriteBuffer(_T("\n   Stage 4 problems: Not yet evaluated"));
+      return;
+    }
 
-  // m_bBadLoopProblems    
-  smos_sprintf(sBuff, _T("\n   Problems  : Has Any Loop Problems       :[%s"), 
-                    m_bBadLoopProblems == FALSE ? _T("FALSE] - Okay") 
-                  : m_bBadLoopProblems == TRUE  ? _T("TRUE ] - Bad") 
-                                                : _T("UNSURE]") ) ;
-  smos_WriteBuffer(sBuff) ;
+  TCHAR sBuff[SM_TBLOCK_SIZE] ;
 
   // m_lOuterLoopCnt    
   smos_sprintf(sBuff, _T("\n   Problems  : BadOuterLoop_Cnt            :[%2lu]%s"), 
@@ -2954,34 +3064,10 @@ void SmFaceProps::DumpProblems_Stage3() const
                    : m_bBadUnpairedNoArea_Loop == FALSE ? _T("[FALSE]") 
                    :                                      _T("[UNSURE]   "),
                      m_bBadUnpairedNoArea_Loop == TRUE ? _T(" Bad - AddMissingSeam will not fix unpaired NoArea_Loops - Face is missing OuterLoop - No Fix available")
-                   : m_bBadUnpairedNoArea_Loop == TRUE ? _T(" Okay")
+                   : m_bBadUnpairedNoArea_Loop == FALSE ? _T(" Okay")
                                                        : _T(" Okay - hasn't been set yet")) ;  
   smos_WriteBuffer(sBuff) ;
                                                                           
-  // Total Bad_ClosedLoop Count
-  smos_sprintf(sBuff, _T("\n             : Bad_ClosedLoop_TotCnt       :[%2lu]%s"),
-                     m_lBadClosed3d_LoopCnt + m_lBadClosedPtr_LoopCnt,
-                     m_lBadClosed3d_LoopCnt == SM_UNDEF_ULONG               ? _T(" Okay - hasn't been set yet")
-                  : (m_lBadClosed3d_LoopCnt + m_lBadClosedPtr_LoopCnt) != 0 ? _T(" Bad - Assumed Loop is meant to be closed")
-                                                                            : _T(" Okay"));
-  smos_WriteBuffer(sBuff) ;
-
-  // m_lBadClosed3d_LoopCnt
-  smos_sprintf(sBuff, _T("\n             :   Bad_ClosedLoop_Cnt BadGaps:[%2lu]%s"), 
-             m_lBadClosed3d_LoopCnt,
-             m_lBadClosed3d_LoopCnt == SM_UNDEF_ULONG ? _T(" Okay - hasn't been set yet")
-           : m_lBadClosed3d_LoopCnt != 0              ? _T(" Bad - Assumed Loop is meant to be closed")
-                                                      : _T(" Okay")) ; 
-  smos_WriteBuffer(sBuff) ;
-
-  // m_lBadClosedPtr_LoopCnt
-  smos_sprintf(sBuff, _T("\n             :   Bad_ClosedLoop_Cnt BadPtrs:[%2lu]%s"),
-             m_lBadClosedPtr_LoopCnt,
-             m_lBadClosedPtr_LoopCnt == SM_UNDEF_ULONG ? _T(" Okay - hasn't been set yet")
-           : m_lBadClosedPtr_LoopCnt != 0              ? _T(" Bad - Assumed Loop is meant to be closed")
-                                                       : _T(" Okay")) ; 
-  smos_WriteBuffer(sBuff) ;
-
   // m_lBadMissingPoles
   smos_sprintf(sBuff, _T("\n             : Bad_MissingVertex_Pole      :%s%s%s%s%s%s"),
              (m_lBadMissingPoles == SM_UNDEF_ULONG) ? _T("[UNSURE") 
@@ -2996,4 +3082,4 @@ void SmFaceProps::DumpProblems_Stage3() const
                                                   : _T("] Okay")) ; 
   smos_WriteBuffer(sBuff) ;
 
-} // end SmFaceProps::DumpState3_Probs
+} // end SmFaceProps::DumpProblems_Stage4

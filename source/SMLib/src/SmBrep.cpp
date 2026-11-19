@@ -669,8 +669,9 @@ SmBrep::SmBrep
   SM_NEWTOL_LINE m_sThisZoneTol3d           = crBrepToCopy.m_sThisZoneTol3d           ;
 // #endif // SM_USE_NEWTOL
 
-  // do the actual copying
-  SE(MergeBrep(crBrepToCopy, pOptCopyBrepMap, pOptReverseMap, bAddAnalytics));
+  // do the actual copying; a failure leaves the copy incomplete (see GetCopyStatus())
+  m_sCopyStatus = MergeBrep(crBrepToCopy, pOptCopyBrepMap, pOptReverseMap, bAddAnalytics);
+  SE(m_sCopyStatus);
 
   // Now we are done - clear cleanup objects
   sClean1.Clear(); sClean2.Clear();
@@ -4047,7 +4048,7 @@ SmStatus SmBrep::ExtendSurfaces
              || pSurface->GetType() != SmOffsetSurface_TYPE)
             continue;
 
-        SmSurface *pNewS = new(*GetContext())SmSurface;
+        SmSurface *pNewS = NULL;
         SmStatus Status;
 
         if (dExtendDistance < SM_EFF_ZERO)
@@ -19471,6 +19472,11 @@ SmStatus SmBrep::MakeVertexLoop
 
 } // end SmBrep::MakeVertexLoop
 
+// fail when an index read from Brep data is outside the array it refers to
+#define SM_CHECK_INDEX(lIndex,rArray)  SER_MSG((ULONG)(lIndex) < (rArray).GetSize() ? SM_SUCCESS : SM_ERR_INVALID_INPUT, _T("Brep data holds an index out of range."))
+// fail when Brep data links to an entity that was never built
+#define SM_CHECK_LINK(pObj)  SER_MSG((pObj) != NULL ? SM_SUCCESS : SM_ERR_INVALID_INPUT, _T("Brep data links to an entity that is not built."))
+
 /*******************************************************************//**
 PURPOSE: Add attributes specified by index to target object
 
@@ -19490,6 +19496,7 @@ static SmStatus sm_AddAttributes
       {
         // get index
         ULONG lIndex = sIndexedAttributes[i];
+        SM_CHECK_INDEX(lIndex, rAttributes);
 
         // get attribute
         SmAttribute *pAttr = rAttributes[lIndex];
@@ -19718,6 +19725,12 @@ static ULONG lFileCount = 0;
 //        lColorIndex ++;
 //        lColorIndex = lColorIndex % 5;
 //    }
+  // reject unknown edgeuse types before building anything: the type decides which indices are used
+  for (ULONG ii=0; ii<pBrepData->m_vEdgeuses.GetSize(); ii++)
+    {
+      SER_MSG(pBrepData->m_vEdgeuses[ii].m_lEUType <= 3 ? SM_SUCCESS : SM_ERR_INVALID_INPUT, _T("Brep data holds an unknown edgeuse type."));
+    }
+
   // First pass of copying
   // 1) Allocate new objects and associate with old ones through map
   // 2) Set up as many of pointer/hierarchial relationships as possible
@@ -19846,6 +19859,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
         // for every shell
         for (ULONG jj=0; jj<rR.m_lNumShells; jj++)
           {
+            SM_CHECK_INDEX(rR.m_lStartShell+jj, pBrepData->m_vShells);
             SmShellData & rS = pBrepData->m_vShells[rR.m_lStartShell+jj];
 
             // allocate SmShell - attach attributes and set Object values
@@ -19863,7 +19877,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
             sNewShellCleanup.Clear();
             rS.m_pShell1 = pNewS;
             rS.m_pShell2 = NULL;
-            if(rS.m_lShellType > 2) SER(SM_ERR);
+            if(rS.m_lShellType > 2) SER(SM_ERR_INVALID_INPUT);
             pNewS->m_tShellType =   (rS.m_lShellType == 0) ? SmFaceuse_TYPE
                                   : (rS.m_lShellType == 1) ? SmEdgeuse_TYPE
                                   : (rS.m_lShellType == 2) ? SmVertexuse_TYPE
@@ -19926,6 +19940,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
         rF.m_pFace = pNewF;
 
         // Set Face data
+        SM_CHECK_INDEX(rF.m_lSurface, pBrepData->m_vSurfaces);
         SmSurface *pFaceSurf = pBrepData->m_vSurfaces[rF.m_lSurface];
         if (pFaceSurf->GetOwner() == NULL)
           {
@@ -20036,6 +20051,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
         // loops
         for (ULONG jj=0; jj<rF.m_lNumLoops; jj++)
           {
+            SM_CHECK_INDEX(rF.m_lStartLoop+jj, pBrepData->m_vLoops);
             SmLoopData & rL = pBrepData->m_vLoops[rF.m_lStartLoop+jj];
 
             // Now allocate new loop and loopuses
@@ -20077,6 +20093,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
             pNewLU2->m_tLoopuseType = SmEdgeuse_TYPE;
             if (rL.m_lNumEU == 1)
               {
+                SM_CHECK_INDEX(rL.m_lStartEU, pBrepData->m_vEdgeuses);
                 SmEUData & rEU = pBrepData->m_vEdgeuses[rL.m_lStartEU];
                 if (rEU.m_lEUType == 1)
                   { // Vertex type
@@ -20089,6 +20106,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
               {
                 pNewLU1->m_tLoopuseType   = SmVertexuse_TYPE;
                 pNewLU2->m_tLoopuseType   = SmVertexuse_TYPE;
+                SM_CHECK_INDEX(rL.m_lVertex, pBrepData->m_vVertices);
                 SmVertex *pV              = pBrepData->m_vVertices[rL.m_lVertex].m_pVertex;
                 SmVertexuse *pNewVU1      = new (this) SmVertexuse(); NER(pNewVU1);
                 SmPendingTopologyDelete sNewVU1Cleanup(pNewVU1);
@@ -20124,6 +20142,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
         pNewE->SetUserPtr1(rE.m_pUserPtr1);
 
         // Set Edge data
+        SM_CHECK_INDEX(rE.m_lCurve, pBrepData->m_v3DCurves);
         SmCurve * pEdgeCrv = pBrepData->m_v3DCurves[rE.m_lCurve] ;
         // SmBSplineCurve * pEdgeCrv = SM_CAST_PTR(SmBSplineCurve,pBrepData->m_v3DCurves[rE.m_lCurve]);
 
@@ -20259,12 +20278,13 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
 
         if (rEU.m_lEUType == 1)            // vertex
           { // Corresponds to a Single Vertex Loop
+            SM_CHECK_INDEX(rEU.m_lVertex, pBrepData->m_vVertices);
             SmVertex *pV = pBrepData->m_vVertices[rEU.m_lVertex].m_pVertex;
             SM_ASSERT(pV->m_lListSize == 2);
             SmVertexuse *pNewVU = SM_CAST_PTR(SmVertexuse,pV->m_pList);
-            NER(pNewVU);
+            SM_CHECK_LINK(pNewVU);
             SmVertexuse *pNewVU2 = SM_CAST_PTR(SmVertexuse,pNewVU->m_pNext);
-            NER(pNewVU2);
+            SM_CHECK_LINK(pNewVU2);
             rEU.m_pVertexuse1 = pNewVU;
             rEU.m_pVertexuse2 = pNewVU2;
           } // end add edgeuse to single vertex branch
@@ -20291,9 +20311,12 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
               //      after signaling an error to allow the write to continue.
               //     TO DO: we need to find the sequence that put the m_lEdge == SM_NO_OBJECT
               //            into the smb file and treat that sequence as a bug.
+            SM_CHECK_INDEX(rEU.m_lEdge, pBrepData->m_vEdges);
             SmEdgeData  & rE           = pBrepData->m_vEdges[rEU.m_lEdge];
             SmEdge      * pNewE        = rE.m_pEdge;
+            SM_CHECK_INDEX(rE.m_lStartVertex, pBrepData->m_vVertices);
             SmVertex    * pStartVertex = pBrepData->m_vVertices[rE.m_lStartVertex].m_pVertex;
+            SM_CHECK_INDEX(rE.m_lEndVertex, pBrepData->m_vVertices);
             SmVertex    * pEndVertex   = pBrepData->m_vVertices[rE.m_lEndVertex].m_pVertex;
 
             // next connect NewVertices to NewEdge with Vertex/Vertexuse/Edgeuse/Edge sequences
@@ -20387,6 +20410,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
             // Take care of WireEdge and Edge upward pointers
             if (rEU.m_lEUType == 2) // WireEdge
               { // WireEdge Edgeuse
+                SM_CHECK_INDEX(rEU.m_lShell, pBrepData->m_vShells);
                 SmShell *pS             = pBrepData->m_vShells[rEU.m_lShell].m_pShell1;
                 pNewEU1->m_tEdgeuseType = SmShell_TYPE;
                 pNewEU2->m_tEdgeuseType = SmShell_TYPE;
@@ -20395,7 +20419,9 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
               } // end Wire Edge Edgeuse branch
             else // rEU.m_lEUType == 0 // LoopEdge
               { // Loop Edgeuse
+                SM_CHECK_INDEX(rEU.m_lLoop, pBrepData->m_vLoops);
                 SmLoop *pL              = pBrepData->m_vLoops[rEU.m_lLoop].m_pLoop;
+                SM_CHECK_LINK(pL);
                 pNewEU1->m_tEdgeuseType = SmLoopuse_TYPE;
                 pNewEU2->m_tEdgeuseType = SmLoopuse_TYPE;
                 pNewEU1->m_pSorLU       = pL->m_pLU;
@@ -20404,6 +20430,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
                 // Put trim curve on EU1 if it is present
                 if (rEU.m_lUVCurve < 999999)
                   {
+                    SM_CHECK_INDEX(rEU.m_lUVCurve, pBrepData->m_vUVCurves);
                     SmCurve *pUVCurve = pBrepData->m_vUVCurves[rEU.m_lUVCurve];
                     SmCurve *pNewUV   = NULL;
                     SmObjDelete sNewUVCurveCleanup;
@@ -20518,26 +20545,32 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
           {
             SmEdgeuse *pNextEU;
             long lIndex = rEU.m_lNextEU;
-            if (lIndex < 0) { lIndex = - lIndex;
-                              lIndex --;
+            if (lIndex < 0) { lIndex = -(lIndex + 1);
+                              SM_CHECK_INDEX(lIndex, pBrepData->m_vEdgeuses);
                               pNextEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse2;
                             }
-            else            { pNextEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse1;
+            else            { SM_CHECK_INDEX(lIndex, pBrepData->m_vEdgeuses);
+                              pNextEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse1;
                             }
 
             SM_ASSERT (pNextEU != NULL); // RCLxx trouble
-            rEU.m_pEdgeuse1->m_pNext = pNextEU;
-            pNextEU->m_pLast         = rEU.m_pEdgeuse1;
+            SM_CHECK_LINK(pNextEU);
 
             SmEdgeuse *pMateNextEU;
             lIndex = rEU.m_lMateNextEU;
-            if (lIndex < 0) { lIndex = - lIndex;
-                              lIndex --;
+            if (lIndex < 0) { lIndex = -(lIndex + 1);
+                              SM_CHECK_INDEX(lIndex, pBrepData->m_vEdgeuses);
                               pMateNextEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse2;
                             }
-            else            { pMateNextEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse1;
+            else            { SM_CHECK_INDEX(lIndex, pBrepData->m_vEdgeuses);
+                              pMateNextEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse1;
                             }
 
+            SM_CHECK_LINK(pMateNextEU);
+
+            // link only after both lookups pass, so a bad index leaves no half-made link
+            rEU.m_pEdgeuse1->m_pNext = pNextEU;
+            pNextEU->m_pLast         = rEU.m_pEdgeuse1;
             rEU.m_pEdgeuse2->m_pNext = pMateNextEU;
             pMateNextEU->m_pLast = rEU.m_pEdgeuse2;
           } // end !pBrepData->m_bManifold check
@@ -20579,6 +20612,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
                 // Create a single vertex shell by adding
                 // a single vertexuse and connecting it to
                 // the shell.
+                SM_CHECK_INDEX(rShellData.m_lVertex, pBrepData->m_vVertices);
                 SmVertex * pVertex = pBrepData->m_vVertices[rShellData.m_lVertex].m_pVertex;
                 // Make a new vertexuse
                 SmVertexuse * pNewVU     = new (this) SmVertexuse(); NER(pNewVU);
@@ -20601,6 +20635,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
                 // Note that sometime later we need to do a
                 // traversal to collect all of the edgeuses and
                 // point them off to the shell.
+                SM_CHECK_INDEX(rShellData.m_lEdge, pBrepData->m_vEdges);
                 SmEdge    * pWireEdge = pBrepData->m_vEdges[rShellData.m_lEdge].m_pEdge;
                 SmEdgeuse * pEU       = pWireEdge->GetPrimaryEdgeuse();
                 pShell->m_pList       = pEU ;
@@ -20612,7 +20647,9 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
                 // Now handle case where Shell is a list of faceuses
                 for (ULONG kk=0; kk<rShellData.m_lNumFaceuses; kk++)
                   {
+                    SM_CHECK_INDEX(rShellData.m_lFaceuseStart + kk, pBrepData->m_vFaceuses);
                     SmFaceuseData & rFaceuseData = pBrepData->m_vFaceuses[ rShellData.m_lFaceuseStart + kk ];
+                    SM_CHECK_INDEX(rFaceuseData.m_lFace, pBrepData->m_vFaces);
                     SmFace        * pFace        = pBrepData->m_vFaces[rFaceuseData.m_lFace].m_pFace;
                     SmFaceuse     * pFU1         = pFace->m_pFU;       // Same oriented faceuse
                     SmFaceuse     * pFU2         = pFU1->m_pFUMate; // Opposite oriented faceuse
@@ -20624,25 +20661,16 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
                         pFU2              = pFUTmp;
                       }
 
-                    if (rFaceuseData.m_bOrientation)
-                      {
-                        SER(pShell->PostInsert(pFU1));
-                        SER(sm_AddAttributes(pFU1,rFaceuseData.m_sAttributes,rAllAttributes));
-                        pFU1->SetAllFlags(rFaceuseData.m_lFlags);
-                        pFU1->SetUserIndex1(rFaceuseData.m_lUserIndex1);
-                        pFU1->SetUserIndex2(rFaceuseData.m_lUserIndex2);
-                        pFU1->SetUserPtr1(rFaceuseData.m_pUserPtr1);
-                      }
-                    else
-                      {
-                        SER(pShell->PostInsert(pFU2));
-                        SER(sm_AddAttributes(pFU2,rFaceuseData.m_sAttributes,rAllAttributes));
-                        pFU2->SetAllFlags(rFaceuseData.m_lFlags);
-                        pFU2->SetUserIndex1(rFaceuseData.m_lUserIndex1);
-                        pFU2->SetUserIndex2(rFaceuseData.m_lUserIndex2);
-                        pFU2->SetUserPtr1(rFaceuseData.m_pUserPtr1);
-                        // Might need to do something here to flip the face??
-                      }
+                    SER_MSG(rFaceuseData.m_bOrientation == TRUE || rFaceuseData.m_bOrientation == FALSE ? SM_SUCCESS : SM_ERR_INVALID_INPUT, _T("Brep data holds an unknown faceuse orientation."));
+                    SmFaceuse * pFU = rFaceuseData.m_bOrientation ? pFU1 : pFU2;
+                    // a second record for the same faceuse would corrupt the shell's list
+                    SER_MSG(pFU->m_pListOwner == NULL ? SM_SUCCESS : SM_ERR_INVALID_INPUT, _T("Brep data uses a faceuse twice."));
+                    SER(pShell->PostInsert(pFU));
+                    SER(sm_AddAttributes(pFU,rFaceuseData.m_sAttributes,rAllAttributes));
+                    pFU->SetAllFlags(rFaceuseData.m_lFlags);
+                    pFU->SetUserIndex1(rFaceuseData.m_lUserIndex1);
+                    pFU->SetUserIndex2(rFaceuseData.m_lUserIndex2);
+                    pFU->SetUserPtr1(rFaceuseData.m_pUserPtr1);
 
                   } // end iter every shell->Faceuse
               } // end Shell is FaceuseShell branch
@@ -20664,6 +20692,7 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
 
         while (lPrevIndex > -1)
           {
+            SM_CHECK_INDEX(lPrevIndex, pBrepData->m_vEdgeuses);
             SmEUData & rLast = pBrepData->m_vEdgeuses[lPrevIndex];
             lPrevIndex --;
             if (rLast.m_lEUType != 3 && rLast.m_pEdgeuse1 != NULL)
@@ -20676,13 +20705,14 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
 
         if (pEU1Last == NULL)
           {
-            SER(SM_ERR); // Big problems here
+            SER(SM_ERR_INVALID_INPUT); // Big problems here
           }
 
         // for every Edgeuse
         SmBoolean bFirst = TRUE;
         for (ULONG jj=0; jj<rL.m_lNumEU; jj++)
           {
+            SM_CHECK_INDEX(rL.m_lStartEU + jj, pBrepData->m_vEdgeuses);
             SmEUData & rEU = pBrepData->m_vEdgeuses[ rL.m_lStartEU + jj ];
             SM_ASSERT (rEU.m_lEdge < SM_NO_OBJECT); // RCLxx problem here
             if(rEU.m_lEdge >= SM_NO_OBJECT )
@@ -20706,9 +20736,13 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
               }
 
             if (rEU.m_lEUType == 3) { continue; }
+            // only a loop edgeuse has a loopuse to link
+            SER_MSG(rEU.m_lEUType == 0 ? SM_SUCCESS : SM_ERR_INVALID_INPUT, _T("Brep data holds a loop with a non-loop edgeuse."));
 
             SmEdgeuse *pEU1Curr = rEU.m_pEdgeuse1;
             SmEdgeuse *pEU2Curr = rEU.m_pEdgeuse2;
+            SM_CHECK_LINK(pEU1Curr);
+            SM_CHECK_LINK(pEU2Curr);
             if (bFirst)
               {
                 bFirst          = FALSE;
@@ -20765,8 +20799,8 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
         long lIndex = rE.m_lPrimEU;
         if (lIndex < 0)
           {
-            lIndex = - lIndex;
-            lIndex --;
+            lIndex = -(lIndex + 1);
+            SM_CHECK_INDEX(lIndex, pBrepData->m_vEdgeuses);
             pPrimEU = pBrepData->m_vEdgeuses[lIndex].m_pEdgeuse2;
           }
         else if((ULONG)lIndex < lNumEdgeuses )
@@ -20932,6 +20966,9 @@ else  // branch to translate a non-manifold part or a SmBrepData object created
 
 } // end SmBrep::MakeTopologyFromData
 
+#undef SM_CHECK_INDEX
+#undef SM_CHECK_LINK
+
 /*******************************************************************//**
 PURPOSE: A MakeTopologyFromData helper method that heals database
          problems known to be common upon read.  
@@ -20989,8 +21026,6 @@ SmStatus SmBrep::HealBrep
                                                //                                                                                                                  <br>
                                                //      SM_HO_FIX_DEGEN_EDGES,                    // Ran All Healer Steps thru SmHealData::Fix_DegenEdges()         <br>
                                                //                                                                                                                  <br>
-                                               //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        <br>
-                                               //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          <br>
                                                //                                                                                                                  <br>
                                                //      SM_HO_CACHE_MISSED_EDGEXSECTS, /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_MissedEdgeXSects() <br>
                                                //      SM_HO_FIX_MISSED_EDGEXSECTS,   /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_MissedEdgeXSects()   <br>
@@ -21005,6 +21040,9 @@ SmStatus SmBrep::HealBrep
                                                //      SM_HO_FIX_BADSHEETS,                      // Ran All Healer Steps thru SmHealData::Fix_BadSheets()          <br>
                                                //                                                                                                                  <br>
                                                //      SM_HO_CACHE_FACEPROPS_3,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage3() <br>
+                                               //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        <br>
+                                               //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          <br>
+                                               //      SM_HO_CACHE_FACEPROPS_4,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage4() <br>
                                                //                                                                                                                  <br>
                                                //      SM_HO_FIX_SPLITFACE_ATSEAMS,              // Ran All Healer Steps thru SmHealData::Fix_SplitFaceAtSeams()   <br>
                                                //      SM_HO_FIX_BADLOOPS,                       // Ran All Healer Steps thru SmHealData::Fix_BadLoops()           <br>
@@ -29168,18 +29206,30 @@ SmStatus SmBrep::Transform
           { sm_SwapReflectionShells(*pFace); }
       }
 
-    // Scale Tolerances
-    if(cpOptScale && bScaleTol)
+    // Scale Tolerances - not when every scale is 1 or -1: the model size, and so the tolerances, stay as they are
+    if(   cpOptScale && bScaleTol
+       && !(SmVector3d(smos_Fabs(cpOptScale->x), smos_Fabs(cpOptScale->y), smos_Fabs(cpOptScale->z)) == sIdentityScale))
       {
-        // set ModelSizeEstimate from Vertex BBox size
+        // The model size is that of the whole transformed body. The box of the vertices alone can be
+        // a point (a torus has a single vertex) or much smaller than the body (a flat cylinder).
+        SmExtent3d sBodyBBox ;
+          {
+            // the box of the geometry as it is now, whether or not a box is locked
+            SmTemporaryChangeValue<SmExtent3d *> sUnlock(m_pLockedBoundingBox, NULL) ;
+            // whole body (edges and faces too), not tight, no tolerance expansion
+            SER(CalculateBoundingBox(sBodyBBox, FALSE, FALSE, FALSE)) ;
+          }
+        const double dModelSize = smos_Max(sVertBBox.GetSize().Length(), sBodyBBox.GetSize().Length()) ;
+
+        // set ModelSizeEstimate from the body BBox size
 #ifdef SM_USE_NEWTOL
-        SM_NEWTOL_LINE SmTol::SetModelSizeEstimate(this, sVertBBox.GetSize().Length());
+        SM_NEWTOL_LINE SmTol::SetModelSizeEstimate(this, dModelSize);
 #else // SM_USE_OLDTOL
         // double dOldModelSize                         = m_dThisModelSizeEstimate ;     
         // SM_OLDTOL_LINE SmZoneTol3d sOldBrepZoneTol3d = SmTol::SizeEstimateToZoneTol3d(dOldModelSize) ;
 
-        SmTol::SetModelSizeEstimate(*this, sVertBBox.GetSize().Length()) ;                      // set this->m_dThisModelSizeEstimate and this->m_sThisZoneTol3d
-        SmTol::SetModelSizeEstimate(*(SmContext *)GetContext(), sVertBBox.GetSize().Length()) ; // set this->pContext->m_dThisModelSizeEstimate and this->pContext->m_sThisZoneTol3d
+        SmTol::SetModelSizeEstimate(*this, dModelSize) ;                      // set this->m_dThisModelSizeEstimate and this->m_sThisZoneTol3d
+        SmTol::SetModelSizeEstimate(*(SmContext *)GetContext(), dModelSize) ; // set this->pContext->m_dThisModelSizeEstimate and this->pContext->m_sThisZoneTol3d
 #endif // SM_USE_OLDTOL 
 
 #ifdef SM_DEBUG_CODE
@@ -32273,6 +32323,7 @@ SmStatus SmBrep::ReadFromFile
       if (sErr != SM_SUCCESS)
       {
           SmObjsDelete<SmAttribute*> sCleanup(&sAttributes);
+          delete pBrepData;
           smos_ErrorMessage(sErr, FILE_NAME, LINE_NUMBER, (TCHAR*)0, (TCHAR*)0, FUNC_NAME);
           return (sErr);
       }
@@ -33100,8 +33151,7 @@ SmBoolean bDebugMe = FALSE;
           if (!pSrfBase->IsKindOf(SmBSplineSurface_TYPE))
               continue;
 
-          // allocate new bspline surface
-          SmBSplineSurface * pNewBSS = new (*pContext)SmBSplineSurface;
+          SmBSplineSurface * pNewBSS = NULL;
 
           // offset tolerance should be quite large compared to brep tol
           double dThisApproxTol3d = this->GetTolerance()*10.0;
@@ -33131,7 +33181,7 @@ SmBoolean bDebugMe = FALSE;
           // potentially a big problem, so
           // first extend the new surface in all directions by a small amount
           SmBSplineSurface *pExtBSS;
-          SmSurface        *pExtS = new( *pContext )SmSurface;
+          SmSurface        *pExtS = NULL;
 
           SmExtent3d srfBBox;
           SmExtent2d sUVDomain = pNewBSS->GetNaturalUVDomain();

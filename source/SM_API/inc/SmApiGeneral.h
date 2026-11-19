@@ -136,7 +136,7 @@ SMAPI_EXPORT SmApiStatus SmApiDraw(
  * built via SetFrom4x4 can encode scale/shear, which invalidates this reuse).
  */
 SMAPI_EXPORT SmApiStatus SmApiTransform(
-    SmObject* pObj,                 ///< [in ]: Object to transform                    <br>
+    SmObject* pObj,                 ///< [in/out]: Object to transform                 <br>
     const SmAxis2Placement & rRotateMove ///< [in ]: Transformation (rotate and translate) <br>
 );
 
@@ -146,25 +146,25 @@ SMAPI_EXPORT SmApiStatus SmApiTransform(
 /// Face or Edge afterward. Positive uniform Brep scales preserve those
 /// geometry pointers.
 SMAPI_EXPORT SmApiStatus SmApiScale(
-    SmObject* pObj,                 ///< [in ]: Object to scale        <br>
+    SmObject* pObj,                 ///< [in/out]: Object to scale     <br>
     const SmVector3d& rScale       ///< [in ]: Scale factor in x, y, z <br>
 );
 
 /// @warning The same borrowed-geometry invalidation contract as SmApiScale
 /// applies to representation-changing Brep scales about a point.
 SMAPI_EXPORT SmApiStatus SmApiScaleByPt(
-    SmObject* pObj,                 ///< [in ]: Object to scale                       <br>
+    SmObject* pObj,                 ///< [in/out]: Object to scale                    <br>
     const SmVector3d& rRefPt,       ///< [in ]: Point about which to scale             <br>
     const SmVector3d& rScale       ///< [in ]: Scale factor in x, y, z                <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiTranslate(
-    SmObject* pObj,                 ///< [in ]: Object to translate <br>
-    const SmVector3d& crTranslate  ///< [in ]: Translation vector  <br>
+    SmObject* pObj,                 ///< [in/out]: Object to translate <br>
+    const SmVector3d& crTranslate  ///< [in ]: Translation vector     <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiRotate(
-    SmObject* pObj,                  ///< [in ]: Object to rotate                 <br>
+    SmObject* pObj,                  ///< [in/out]: Object to rotate              <br>
     const SmVector3d& rRefPt,        ///< [in ]: Point on the rotation axis       <br>
     const SmVector3d& rAxis,         ///< [in ]: Rotation axis direction          <br>
     double dAngleDeg                ///< [in ]: Angle of rotation, in degrees    <br>

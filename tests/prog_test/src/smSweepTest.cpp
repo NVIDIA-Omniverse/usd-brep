@@ -1258,6 +1258,79 @@ PURPOSE ---
 
 USAGE NOTES ---
 **************************************************************/
+static SmStatus my_test_cylindrical_box_full_turn()
+{
+  MYPRINTF(_T("\nEntered: my_test_cylindrical_box_full_turn"));
+
+  // Shifted starts exercise angle wrapping. Both sides of the full-turn
+  // tolerance must produce a closed tube, while a distinct gap stays open.
+  struct SmCylindricalBoxCase
+  {
+    double dStartAngleDeg;
+    double dSweepAngleDeg;
+    ULONG  lExpectedFaces;
+  };
+  const SmCylindricalBoxCase aCases[] =
+  {
+    {   0.0, 360.0,                         4 },
+    { -90.0, 360.0,                         4 },
+    {  45.0, 360.0,                         4 },
+    { 360.0, 360.0,                         4 },
+    {   0.0, 360.0 - 0.5 * SM_EFF_ZERO_DEG, 4 },
+    {  45.0, 360.0 + 0.5 * SM_EFF_ZERO_DEG, 4 },
+    {   0.0, 359.99,                        6 },
+    {  45.0,  90.0,                         6 },
+  };
+  SmContext sContext;
+  for (ULONG ii = 0; ii < sizeof(aCases) / sizeof(aCases[0]); ii++)
+    {
+      // Exercise a translated frame whose cylinder axis is not world Z.
+      SmAxis2Placement sFrame;
+      SER(sFrame.SetCanonical(SmPoint3d(2.0, 3.0, 4.0), SmVector3d(0.0, 1.0, 0.0), SmVector3d(0.0, 0.0, 1.0)));
+      SmBrep * pBrep = new(sContext) SmBrep();
+      SmObjDelete sCleanup(pBrep);
+      SmPrimitiveCreation sCreation(pBrep->GetInfiniteRegion());
+      SER(sCreation.CreateCylindricalBox(10.0, 2.0, 5.0, aCases[ii].dStartAngleDeg,
+                                         aCases[ii].dStartAngleDeg + aCases[ii].dSweepAngleDeg, sFrame));
+      AERN_MSG(pBrep->GetNumFaces() == aCases[ii].lExpectedFaces, SM_ERR, _T("Cylindrical box has incorrect face count"));
+      AERN_MSG(pBrep->IsManifoldSolid(), SM_ERR, _T("Cylindrical box is not a manifold solid"));
+      SmAssertArray sAsserts;
+      SER(pBrep->ValidatePointers(&sAsserts, SM_LEVEL_2, NULL));
+      AERN_MSG(pBrep->AssertValid(&sAsserts, SM_LEVEL_2, SM_WALK) && sAsserts.GetSize() == 0,
+               SM_ERR, _T("Cylindrical box failed full validation"));
+
+      if (aCases[ii].lExpectedFaces == 4)
+        {
+          SmTArray<SmFace*> sFaces;
+          pBrep->GetFaces(sFaces);
+          ULONG lAnnularCaps = 0;
+          for (ULONG jj = 0; jj < sFaces.GetSize(); jj++)
+            {
+              if (sFaces[jj]->GetSurface()->IsKindOf(SmPlane_TYPE))
+                {
+                  SmTArray<SmLoop*> sLoops;
+                  sFaces[jj]->GetLoops(sLoops);
+                  AERN_MSG(sLoops.GetSize() == 2, SM_ERR, _T("Full-turn cap must have an outer loop and a hole"));
+                  lAnnularCaps++;
+                }
+            }
+          AERN_MSG(lAnnularCaps == 2, SM_ERR, _T("Full-turn box must have two annular caps"));
+        }
+
+      double dArea = 0.0, dVolume = 0.0, dMass = 0.0;
+      SmTArray<SmVector3d> sMoments;
+      sMoments.SetSize(8);
+      SmPoint3d sCenter = sFrame.GetOrigin() + 5.0 * sFrame.GetZAxis();
+      SER(pBrep->ComputePreciseProperties(1.0e-5, sCenter, SmMassPropertyBehavior(),
+                                          dArea, dVolume, dMass, sMoments));
+      double dSweepAngleDeg = aCases[ii].lExpectedFaces == 4 ? 360.0 : aCases[ii].dSweepAngleDeg;
+      double dExpectedVolume = SM_PI * (25.0 - 4.0) * 10.0 * dSweepAngleDeg / 360.0;
+      AERN_MSG(smos_Fabs(dVolume - dExpectedVolume) < 1.0e-4 * dExpectedVolume,
+               SM_ERR, _T("Cylindrical box has incorrect signed volume"));
+    }
+  return SM_SUCCESS;
+}
+
 SmStatus my_primsol_regression()
 {
 
@@ -1275,6 +1348,8 @@ SmStatus my_primsol_regression()
 
   DELETE_ALL_PARTS( sBreps );
 
+  SER(my_test_cylindrical_box_full_turn());
+
   // CreateCylindricalBox rejects invalid dimensions with SM_ERR_INVALID_INPUT
   // and builds nothing, in both debug and release builds.
   struct { double dLen, dIn, dOut, dStart, dEnd; SmStatus eExpect; } sCases[] =
@@ -1286,6 +1361,7 @@ SmStatus my_primsol_regression()
     { 10.0, 2.0, 5.0, 400.0, 450.0, SM_ERR_INVALID_INPUT },  // start angle out of range
     { 10.0, 2.0, 5.0,  90.0,  10.0, SM_ERR_INVALID_INPUT },  // end before start
     { 10.0, 2.0, 5.0,   0.0, 400.0, SM_ERR_INVALID_INPUT },  // sweep over 360
+    { 10.0, 2.0, 5.0,   0.0, 360.0 + 2.0 * SM_EFF_ZERO_DEG, SM_ERR_INVALID_INPUT }, // beyond snap tolerance
   };
   SmAxis2Placement sFrame;
   for( ULONG ii = 0; ii < sizeof(sCases) / sizeof(sCases[0]); ii++ )

@@ -51,6 +51,10 @@ stale healer state, crashes, and incomplete repairs in `SmHealData` or import he
 
 ## Change Rules
 
+- Whenever operation order changes in `SmHealData::HealTgts`, update `SmHealerOpType`
+  in the same change so its assigned values follow operation completion order. Stop-stage
+  and target catch-up checks compare these values. Keep stage-name mappings and diagnostics
+  consistent, and validate requested stop stages and property refresh after reordering.
 - Let the owning topology operation emit a completed edit notification. Maintain tracking lists
   and their debug index arrays through the callback; do not repair missing notifications with
   caller-specific list additions.

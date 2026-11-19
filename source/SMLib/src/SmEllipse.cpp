@@ -485,6 +485,8 @@ SmBoolean bDebugMe = FALSE ;
   // init output
   rbExactConversion = FALSE ;
 
+  NER( m_cpCurve ); // Can't do anything if not set.
+
   // locals
   SmExtent1d sSTEPIvl    = m_cpCurve->GetSTEPInterval() ;
   SmBoolean  bInsideOut  = m_cpCurve->GetInsideOut() ;

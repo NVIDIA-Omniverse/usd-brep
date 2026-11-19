@@ -23,7 +23,7 @@ class TestUsdBrepHeal(unittest.TestCase):
     def setUpClass(cls):
         cls.repo = Path(__file__).resolve().parents[3]
         Plug.Registry().RegisterPlugins(str(cls.repo / "_build/schema/omniSolid/resources"))
-        cls.cube = cls.repo / "TestFiles/brep_validator/CubeBrepArray.usda"
+        cls.cube = cls.repo / "TestFiles/usd_validator_TestFiles/CubeBrepArray.usda"
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

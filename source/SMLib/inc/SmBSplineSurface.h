@@ -1092,6 +1092,10 @@ public:
       SmBSplineSurface               *& rpNewSurf           // out:                                                                         
     );
 
+    // Divides out the NURBS weights, which changes the shape of a rational surface.
+    // Sends no change notification, so a face-owned surface keeps its stale
+    // trimmed-surface cache. Do not use on an analytic surface (sphere, cylinder,
+    // surface of revolution, etc.): its analytic data is left unchanged.
     SmStatus MakeNonRational();
     SmStatus MakeSingular
     (

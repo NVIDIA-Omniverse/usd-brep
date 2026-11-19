@@ -165,6 +165,13 @@ void bind_usd(py::module_& parent)
         .def_property_readonly("brep_count", [](const SmApiUsdBrepArrayHealResult& r) { return r.m_lBrepCount; })
         .def_property_readonly("message", [](const SmApiUsdBrepArrayHealResult& r) { return r.m_sMessage; });
 
+    py::class_<SmApiUsdGeometryPrimResult>(m, "GeometryValidationResult",
+        "Read-only outcome of validating one BrepArray prim in ``validate_geometry_file``.")
+        .def_property_readonly("prim_path", [](const SmApiUsdGeometryPrimResult& r) { return r.m_sPrimPath; })
+        .def_property_readonly("ok", [](const SmApiUsdGeometryPrimResult& r) { return r.m_sFailures.empty() && r.m_sMessage.empty(); })
+        .def_property_readonly("failures", [](const SmApiUsdGeometryPrimResult& r) { return r.m_sFailures; })
+        .def_property_readonly("message", [](const SmApiUsdGeometryPrimResult& r) { return r.m_sMessage; });
+
     py::class_<SmPyUsdBrepImportReport>(m, "BrepImportReport",
         "Results from a completed partial BRep import scan.")
         .def_property_readonly("breps", [](const SmPyUsdBrepImportReport& rReport) {
@@ -560,11 +567,13 @@ void bind_usd(py::module_& parent)
        "Tessellate every BrepArray prim in a USD file and write the scene with meshes.\n"
        "\n"
        "Writes a copy of the input stage with one ``UsdGeomMesh`` per Brep, named\n"
-       "``tess_<prim>_<brep>`` under the default prim (or ``/Output``). Each mesh is\n"
+       "``tess_<prim>_<brep>`` under the default prim (or ``/World``). Each mesh is\n"
        "bound to the material of its Brep's brep-element ``GeomSubset``, or else to the\n"
        "BrepArray's material, and keeps the Brep's visibility and purpose. Prims are\n"
        "tessellated in parallel. A failed Brep is reported and skipped; a partial mesh\n"
-       "is kept. The input layer is not modified.\n"
+       "is kept. An unusable parent is reported as a mesh failure; an alternate root\n"
+       "is never selected. The input layer is not modified, and its defaultPrim metadata\n"
+       "is preserved, including when absent.\n"
        "\n"
        "Args:\n"
        "    input: USD file with BrepArray prims.\n"
@@ -627,4 +636,29 @@ void bind_usd(py::module_& parent)
        "        The message names each failed BrepArray and why.\n"
        "\n"
        "Wraps: SmApiUsdHealFile");
+
+    m.def("validate_geometry_file",
+        [](const std::string& input, int level) {
+            std::vector<SmApiUsdGeometryPrimResult> results;
+            const SmStatus status = SmApiUsdValidateGeometryFile(input.c_str(), level, results);
+            if (status != SM_SUCCESS)
+                throw std::runtime_error("validate_geometry_file failed: " + std::string(sm_status_name(status)) + "; " +
+                                         results.front().m_sMessage);
+            return results;
+        },
+        py::arg("input"), py::kw_only(), py::arg("level") = 2,
+       "Run the kernel's validity checks on every BrepArray prim in a USD file.\n"
+       "\n"
+       "Args:\n"
+       "    input: USD file with BrepArray prims.\n"
+       "    level: Check depth, 0 (fastest) to 2 (every check). Keyword-only.\n"
+       "\n"
+       "Returns:\n"
+       "    list[GeometryValidationResult]: one per BrepArray, in prim path order. An invalid\n"
+       "    Brep is a result (``ok`` is ``False``, ``failures`` lists the checks), not an exception.\n"
+       "\n"
+       "Notes:\n"
+       "    Breps are not healed first. The file is not modified.\n"
+       "\n"
+       "Wraps: SmApiUsdValidateGeometryFile");
 }

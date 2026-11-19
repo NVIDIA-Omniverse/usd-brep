@@ -43,4 +43,4 @@ package. Importing the `usd_brep` Python package sets it to the package's own co
 isn't already set. Adding the folder to `PXR_PLUGINPATH_NAME` also works.
 
 To check that a file complies with the schema, use the
-[USD validator](../../tools/brep_validator/README.md).
+[USD validator](../../tools/brep_usdschema_validator/README.md).

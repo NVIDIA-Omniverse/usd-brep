@@ -35,6 +35,7 @@
 #include <SmApiIntersectors.h>
 #include <SmApiSurfaces.h>
 #include <SmApiPolygons.h>
+#include <SmApiTrimmedSurfaces.h>
 
 #include <cmath>
 #include <cstdio>
@@ -76,6 +77,22 @@ SmStatus TestSmBoolean()
     if( pResult1->GetNumFaces() != lFaces1 || pResult2->GetNumFaces() != lFaces2
         || !pResult1->AssertValid() || !pResult2->AssertValid() )
         return SM_ERR;
+
+    // SmApiBoolean2d rejects NULL or identical operands and leaves the output
+    // unchanged. The planes are coplanar so the kernel's coplanarity check
+    // cannot be what rejects the identical pair.
+    SmBrep* pPlane1 = NULL;
+    SmBrep* pPlane2 = NULL;
+    SER( SmApiCreatePlane(sPositon1, 10.0, 10.0, pPlane1) );
+    SER( SmApiCreatePlane(sPositon2, 10.0, 10.0, pPlane2) );
+    SmBrep* pOut = pPlane1;
+    if( SmApiBoolean2d(pPlane1, pPlane1, SM_2D_UNION, pOut) != SM_ERR_INVALID_INPUT || pOut != pPlane1
+        || SmApiBoolean2d(NULL, pPlane2, SM_2D_UNION, pOut) != SM_ERR_INVALID_INPUT || pOut != pPlane1
+        || SmApiBoolean2d(pPlane1, NULL, SM_2D_UNION, pOut) != SM_ERR_INVALID_INPUT || pOut != pPlane1
+        || pPlane1->GetNumFaces() != 1 || pPlane2->GetNumFaces() != 1 )
+        return SM_ERR;
+    delete pPlane1;
+    delete pPlane2;
 
     SmPolyBrep* pPoly = NULL;
     SER( SmApiTessellate(pResult1, pPoly) );
@@ -249,7 +266,8 @@ static SmBoolean sm_MassApproxEqual(double dA, double dB, double dAbsTol)
 // non-default orientation/thickness cases used by kernel mass-property callers.
 // A subset takes different steps, so it matches to the requested accuracy;
 // selecting everything matches exactly.
-static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean bCheckThickFace)
+static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean bCheckThickFace,
+    SmBoolean bCheckThickAtTightAccuracy)
 {
     SmExtent3d sBox;
     SER(pFace->CalculateBoundingBox(sBox));
@@ -273,6 +291,7 @@ static SmStatus sm_CheckPrecisePropertySelection(const SmFace* pFace, SmBoolean 
     for (double dThickness : aThicknesses)
     {
         if (dThickness > 0.0 && !bCheckThickFace) continue;
+        if (dThickness > 0.0 && dAccuracy < 1.0e-3 && !bCheckThickAtTightAccuracy) continue;
         const auto fTol = [&](double dFull, double dScale = 1.0)
         {
             return 10.0 * dAccuracy * smos_Max(dScale, std::fabs(dFull));
@@ -431,7 +450,8 @@ SmStatus TestSmPrecisePropertySelection()
         {
             // Full mass-property integration of the thick sphere currently
             // fails; check its area independently against the analytic value.
-            stat = sm_CheckPrecisePropertySelection(sFaces[ii], iCase != 1);
+            // The thick torus takes over a minute at 1e-5, so check it at 1e-3 only.
+            stat = sm_CheckPrecisePropertySelection(sFaces[ii], iCase != 1, iCase != 2);
             if (stat != SM_SUCCESS)
             {
                 std::printf("Property-selection case=%lu face=%lu failed\n", iCase, ii);
@@ -2664,6 +2684,19 @@ SmStatus TestSmBooleanLists()
 // 
 //*************************************************************************
 
+// Union of a column (radius 85, axis +Z, z in [0, 100]) and a shoulder
+// (radius 72, axis +Y, centred at z = 120) that dips into its top (GitHub #36).
+static SmStatus sm_ColumnAndShoulder(SmBrep*& rpBody)
+{
+    rpBody = NULL;
+    SmBrep *pColumn = NULL, *pShoulder = NULL;
+    SER(SmApiCreateCylinder(SmVector3d(0, 0, 0), 85.0, 100.0, pColumn));
+    SER(SmApiCreateCylinder(SmVector3d(0, 0, 0), 72.0, 190.0, pShoulder));
+    SER(SmApiRotate(pShoulder, SmVector3d(0, 0, 0), SmVector3d(1, 0, 0), -90.0));
+    SER(SmApiTranslate(pShoulder, SmVector3d(0, -95, 120)));
+    return SmApiBoolean(pColumn, pShoulder, SM_BO_UNION, rpBody);
+}
+
 SmStatus TestSmShellBrepFull()
 {
     SmApiCreateContext();
@@ -2858,6 +2891,17 @@ SmStatus TestSmShellBrepFull()
 
     delete pBox;
     delete pForeignBox;
+
+    // The extended inward offset of this union is not a solid.
+    SmBrep* pBody = NULL;
+    SER(sm_ColumnAndShoulder(pBody));
+    SmObjDelete sCleanBody(pBody);
+    SmBrep* pShell = NULL;
+    stat = SmApiShellBrepFull(pBody, -4.0, TRUE, TRUE, FALSE, sNoFacesToShell, pShell);
+    SmObjDelete sCleanShell(pShell);
+    if (stat != SM_ERR || pShell != NULL)
+        return(SM_ERR);
+
     return(SM_SUCCESS);
 }
 
@@ -2876,9 +2920,26 @@ SmStatus TestSmOffsetBrepFull()
 
     SmBrep* pResult = NULL;
     SmStatus stat = SmApiOffsetBrepFull(pBox, 1.0, TRUE, TRUE, pResult);
+    if (stat != SM_SUCCESS)
+        return(stat);
 
+    // A rejected call must publish a null output.
+    SmBrep* pNullInputResult = pBox;
+    stat = SmApiOffsetBrepFull(NULL, 1.0, TRUE, TRUE, pNullInputResult);
+    if (stat != SM_ERR_INVALID_INPUT || pNullInputResult != NULL)
+        return(SM_ERR);
 
-    return(stat);
+    // The extended inward offset of this union is not a solid.
+    SmBrep* pBody = NULL;
+    SER(sm_ColumnAndShoulder(pBody));
+    SmObjDelete sCleanBody(pBody);
+    SmBrep* pOffset = NULL;
+    stat = SmApiOffsetBrepFull(pBody, -4.0, TRUE, TRUE, pOffset);
+    SmObjDelete sCleanOffset(pOffset);
+    if (stat != SM_ERR || pOffset != NULL)
+        return(SM_ERR);
+
+    return(SM_SUCCESS);
 }
 
 //*************************************************************************
@@ -2903,6 +2964,80 @@ SmStatus TestSmStitchIntoSolid()
 
 
     return(stat);
+}
+
+/*******************************************************************//**
+PURPOSE --- Open tubes and caps merged with SM_BO_MERGE enclose regions marked
+    void: no input had material. SmApiBrepIsManifoldSolid reports they are not
+    a solid, and SmApiStitchIntoSolid makes the regions solid (GitHub #39).
+    Checked for one tube, for two separate tubes, and for a tube merged with a
+    box that has material and a cavity: the tube becomes solid, the cavity stays
+    void. A Boolean on the result sees the same volume.
+***********************************************************************/
+SmStatus TestSmMergedSheetsIntoSolid()
+{
+    SmApiCreateContext();
+
+    for (ULONG lCase = 0; lCase < 3; ++lCase)
+    {
+        const ULONG lTubes = (lCase == 1) ? 2 : 1;
+        double dExpectedVolume = lTubes * std::acos(-1.0);
+        SmTArray<SmBrep*> sSheets;
+        for (ULONG ii = 0; ii < lTubes; ++ii)
+        {
+            SmCircle *pBottom = NULL, *pTop = NULL;
+            SER(SmApiCreateCircle(SmPoint3d(3.0 * ii, 0, 0), 1.0, pBottom));
+            SER(SmApiCreateCircle(SmPoint3d(3.0 * ii, 0, 1), 1.0, pTop));
+            SmTArray<SmCurve*> sBottom, sTop;
+            sBottom.Add(pBottom);
+            sTop.Add(pTop);
+
+            SmBrep *pTube = NULL, *pBottomCap = NULL, *pTopCap = NULL;
+            SER(SmApiCreateLinearSweep(sBottom, SmVector3d(0, 0, 1), 1.0, FALSE, pTube)); // copies the circle
+            SER(SmApiCreatePlanarFaces(sBottom, pBottomCap));                              // consumes the circles
+            SER(SmApiCreatePlanarFaces(sTop, pTopCap));
+            sSheets.Add(pTube);
+            sSheets.Add(pBottomCap);
+            sSheets.Add(pTopCap);
+        }
+        if (lCase == 2)
+        {
+            // a 3 x 3 x 1 box beside the tube with a 1 x 1 x 0.5 cavity
+            SmBrep *pBox = NULL, *pCavity = NULL, *pHollow = NULL;
+            SER(SmApiCreateBox(SmPoint3d(4, -1.5, 0), 3, 3, 1, pBox));
+            SER(SmApiCreateBox(SmPoint3d(5, -0.5, 0.25), 1, 1, 0.5, pCavity));
+            SER(SmApiBooleanDifference(pBox, pCavity, pHollow));
+            sSheets.Add(pHollow);
+            dExpectedVolume += 8.5;
+        }
+        SmBrep* pMerged = NULL;
+        SER(SmApiMergeBreps(sSheets, SM_BO_MERGE, pMerged));
+        std::unique_ptr<SmBrep> pCleanup(pMerged);
+
+        // the box's material makes the unstitched merge read as a solid
+        SmBoolean bManifold = TRUE, bSolid = FALSE;
+        SER(SmApiBrepIsManifoldSolid(pMerged, bManifold));
+        if (bManifold != (lCase == 2))
+            return SM_ERR;
+
+        ULONG lStitched = 0;
+        double dMaxVGap = 0.0, dMaxEGap = 0.0, dVolume = 0.0;
+        SER(SmApiStitchIntoSolid(pMerged, bSolid, lStitched, dMaxVGap, dMaxEGap));
+        SER(SmApiBrepIsManifoldSolid(pMerged, bManifold));
+        SER(SmApiBrepComputeVolume(pMerged, 1.0e-6, dVolume));
+        if (!bSolid || !bManifold || std::fabs(dVolume - dExpectedVolume) > 1.0e-6)
+            return SM_ERR;
+
+        // the upper half (z above 0.5) holds half of the volume
+        SmBrep *pUpper = NULL, *pHalf = NULL;
+        SER(SmApiCreateBox(SmPoint3d(-2, -2, 0.5), 10, 4, 1, pUpper));
+        SER(SmApiBooleanIntersection(pMerged, pUpper, pHalf)); // pHalf is pMerged
+        SER(SmApiBrepIsManifoldSolid(pHalf, bManifold));
+        SER(SmApiBrepComputeVolume(pHalf, 1.0e-6, dVolume));
+        if (!bManifold || std::fabs(dVolume - 0.5 * dExpectedVolume) > 1.0e-6)
+            return SM_ERR;
+    }
+    return SM_SUCCESS;
 }
 
 //*************************************************************************

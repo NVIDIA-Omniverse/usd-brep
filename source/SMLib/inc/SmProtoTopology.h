@@ -471,7 +471,9 @@ class SM_EXPORT SmProtoVertex : public SmTopology
   // predicates
   SmBoolean            ContainsVertexDefinition    (SmVertexDefinition *pVD ) { return m_sVertexDefinitions.IsIn( pVD) ; }
   SmVertexDefinition * FindMatchingVertexDefinition(const SmTopology *pTopo1,    // rtn: VertexDefinition matching Tgt SrcTopo objs or NULL for none
-                                                    const SmTopology *pTopo2) ;
+                                                    const SmTopology *pTopo2,
+                                                    const SmPoint3d  *pOptPos = NULL, // optional: also within combining distance of this point
+                                                    double            dPosTol = 0.0) ;
   SmBoolean            IsOverlappingPEGroupMember() const ;
 
   // Queries/Predicates

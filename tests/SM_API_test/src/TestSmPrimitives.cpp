@@ -112,13 +112,25 @@ SmStatus TestSmCreateBox()
         return SM_ERR;
 
     // Invalid angles are rejected too: start outside [-360, 360], end not after
-    // start, and a sweep over 360 degrees.
-    const double aBadAngles[][2] = { { 400.0, 450.0 }, { 90.0, 10.0 }, { 45.0, 45.0 }, { 0.0, 400.0 } };
-    for( int ii = 0; ii < 4; ii++ )
+    // start, and a sweep beyond the full-turn snapping tolerance.
+    const double aBadAngles[][2] = { { 400.0, 450.0 }, { 90.0, 10.0 }, { 45.0, 45.0 }, { 0.0, 400.0 },
+                                    { 0.0, 360.0 + 2.0 * SM_EFF_ZERO_DEG } };
+    for( int ii = 0; ii < 5; ii++ )
     {
         pOut = pResult;
         if( SmApiCreateCylindricalBox(sPositon, 10, 2, 5, aBadAngles[ii][0], aBadAngles[ii][1], pOut) != SM_ERR_INVALID_INPUT
             || pOut != NULL )
+            return SM_ERR;
+    }
+
+    // The wrapper must admit exact and near-full turns to the kernel.
+    const double aFullTurns[] = { 360.0, 360.0 - 0.5 * SM_EFF_ZERO_DEG, 360.0 + 0.5 * SM_EFF_ZERO_DEG };
+    for( ULONG ii = 0; ii < sizeof(aFullTurns) / sizeof(aFullTurns[0]); ii++ )
+    {
+        SmBrep* pFullTurn = NULL;
+        SER(SmApiCreateCylindricalBox(sPositon, 10, 2, 5, 45.0, 45.0 + aFullTurns[ii], pFullTurn));
+        SmObjDelete sFullTurnCleanup(pFullTurn);
+        if( pFullTurn == NULL || pFullTurn->GetNumFaces() != 4 || !pFullTurn->IsManifoldSolid() )
             return SM_ERR;
     }
 
@@ -812,6 +824,46 @@ SmStatus TestSmCreateSkinPrimitive()
         sMultiLoopEndFaces.GetSize() == 0 ||
         fabs(dMultiLoopVolume-dExpectedMultiLoopVolume) > dExpectedMultiLoopVolume*1.0e-4 )
         return SM_ERR;
+
+    // Profiles whose knots differ slightly must still lie on the skin: merging close knots used to move them.
+    const double adX[] = { 1, 1, 0, -1, -1, -1,  0,  1, 1 };
+    const double adY[] = { 0, 1, 1,  1,  0, -1, -1, -1, 0 };
+    SmTArray<const SmCurve*> sKnotProfiles;
+    SmObjsDelete<const SmCurve*> sKnotProfilesCleanup(&sKnotProfiles);
+    SmTArray<ULONG> sKnotCurvesPerProfile;
+    for( ULONG ii=0; ii<4; ii++ )
+    {
+        SmTArray<SmPoint3d> sPts;
+        for( ULONG jj=0; jj<9; jj++ )
+            sPts.Add(SmPoint3d((4.0 + ii)*adX[jj], (3.0 - 0.3*ii)*adY[jj], 6.0*ii));
+        SmTArray<double> sKnots;
+        SmTArray<ULONG> sMults;
+        for( ULONG jj=0; jj<=6; jj++ )
+        {
+            sKnots.Add((jj == 0 || jj == 6) ? jj/6.0 : jj/6.0 + 2.0e-4*ii);
+            sMults.Add((jj == 0 || jj == 6) ? 4 : 1);
+        }
+        SmBSplineCurve* pProfile = NULL;
+        SER( SmApiCreateCanonicalCurve(sPts, sKnots, sMults, NULL, 3, SM_CF_UNSPECIFIED, pProfile) );
+        sKnotProfiles.Add(pProfile);
+        sKnotCurvesPerProfile.Add(1);
+    }
+
+    SmBrep* pKnotResult = NULL;
+    SER( SmApiCreateSkinPrimitive(sKnotCurvesPerProfile, sKnotProfiles, 1, TRUE, pKnotResult, NULL, NULL, NULL) );
+    SmObjDelete sKnotResultCleanup(pKnotResult);
+
+    // The middle profile lies only on the side face.
+    const SmExtent1d sIvl = sKnotProfiles[1]->GetNaturalInterval();
+    for( ULONG jj=0; jj<=10; jj++ )
+    {
+        SmPoint3d sPt, sClosest;
+        double dDist = 0.0;
+        SER( sKnotProfiles[1]->EvaluatePoint(sIvl.Evaluate(jj/10.0), sPt) );
+        SER( SmApiBrepClosestPoint(pKnotResult, sPt, sClosest, dDist) );
+        if( dDist > 1.0e-6 )
+            return SM_ERR;
+    }
 
     return SM_SUCCESS;
 }

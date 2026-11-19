@@ -281,8 +281,8 @@ SmStatus SmPrimitiveCreation::CreateBox
   SmBSplineSurface * pSurface = NULL;
   SmAxis2Placement   sRefFrame( rRefFrame.GetOrigin() , rRefFrame.GetXAxis(), rRefFrame.GetYAxis() );
 
-  // set m_pBrep for changes
-  pBrep->m_bEditingEnabled = TRUE;
+  // set m_pBrep for changes - the caller's edit mode is restored on every return, including errors
+  SmTemporaryChangeValue<SmBoolean> sChangeEditing(pBrep->m_bEditingEnabled, TRUE);
 
   // 1. Build Base plane using original ref frame, domain:[u=length, v=width]
   SmPlane::CreateCanonical( *pContext, sRefFrame, pPlane );
@@ -291,7 +291,7 @@ SmStatus SmPrimitiveCreation::CreateBox
   SmExtent2d sAnalDomain(sUVMin,sUVMax);
   pSurface = pPlane;
   pSurface->AdjustSTEPUVDomain(sAnalDomain);
-  pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace );
+  SER( pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace ) );
 
   // 2. Build Top plane by translating ref frame to top, domain:[same as BaseFace]
   SmVector3d sZAxis = sRefFrame.GetZAxis();
@@ -301,7 +301,7 @@ SmStatus SmPrimitiveCreation::CreateBox
   SmPlane::CreateCanonical( *pContext, sRefFrame, pPlane );
   pSurface = pPlane;
   pSurface->AdjustSTEPUVDomain(sAnalDomain);
-  pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace );
+  SER( pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace ) );
 
 
   // 3. Build Right plane by flipping ref frame to Y-Z plane, domain:[u=width, v=height]
@@ -311,7 +311,7 @@ SmStatus SmPrimitiveCreation::CreateBox
   sUVMax.Set( dWidth, dHeight );
   sAnalDomain.SetMinMax(sUVMin,sUVMax);
   pSurface->AdjustSTEPUVDomain(sAnalDomain);
-  pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace );
+  SER( pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace ) );
 
   // 4. Build Left plane by translating ref frame to opposite side, domain:[same as Right plane]
   sZAxis = sRefFrame.GetZAxis();
@@ -321,7 +321,7 @@ SmStatus SmPrimitiveCreation::CreateBox
   SmPlane::CreateCanonical( *pContext, sRefFrame, pPlane );
   pSurface = pPlane;
   pSurface->AdjustSTEPUVDomain(sAnalDomain);
-  pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace );
+  SER( pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace ) );
 
 
   // 5. Build Front plane by flipping ref frame to X-Z plane, domain:[u=length, v=height]
@@ -331,7 +331,7 @@ SmStatus SmPrimitiveCreation::CreateBox
   sUVMax.Set( dLength, dHeight );
   sAnalDomain.SetMinMax(sUVMin,sUVMax);
   pSurface->AdjustSTEPUVDomain(sAnalDomain);
-  pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace );
+  SER( pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace ) );
 
   // 6. Build Back plane by translating ref frame to opposite side, domain:[same as Front plane]
   sZAxis = sRefFrame.GetZAxis();
@@ -341,7 +341,7 @@ SmStatus SmPrimitiveCreation::CreateBox
   SmPlane::CreateCanonical( *pContext, sRefFrame, pPlane );
   pSurface = pPlane;
   pSurface->AdjustSTEPUVDomain(sAnalDomain);
-  pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace );
+  SER( pBrep->CreateFaceFromSurface( (SmSurface*)pSurface, pSurface->GetSTEPUVDomain(), pFace ) );
 
 #ifdef SM_DEBUG_CODE
 SmBoolean bDebugMe = FALSE ;
@@ -384,17 +384,69 @@ SmBoolean bDebugMe = FALSE ;
 #endif // SM_DEBUG_CODE
 
   // all done
-  pBrep->m_bEditingEnabled = FALSE;
   return( SM_SUCCESS );
 
 } // end SmPrimitiveCreation::CreateBox
 
 /*******************************************************************//**
+PURPOSE: Create the full-turn cylindrical box with two cylindrical walls
+         and two annular caps.
+
+NOTES: A full turn has no radial end faces. Use the cylinders' circular
+       boundaries instead of fitting arcs through coincident endpoints.
+***********************************************************************/
+static SmStatus sm_CreateFullCylindricalBox
+ (SmRegion               * pRegion,        // in : region to contain the solid
+  double                   dLength,        // in : length along the frame Z axis
+  double                   dInsideRadius,  // in : inside radius
+  double                   dOutsideRadius, // in : outside radius
+  const SmAxis2Placement & crRefFrame)     // in : position and orientation of the solid
+{
+  SmBrep          * pBrep         = pRegion->GetBrep();
+  const SmContext * pContext      = pBrep->GetContext();
+  SmCylinder      * aCylinders[2] = { NULL, NULL };
+  const double      aRadii[2]     = { dOutsideRadius, dInsideRadius };
+  SmExtent2d        sDomain(0.0, 0.0, 360.0, dLength);
+  SmTemporaryChangeValue<SmBoolean> sChangeEditing(pBrep->m_bEditingEnabled, TRUE);
+
+  for (ULONG ii = 0; ii < 2; ii++)
+    {
+      SER(SmCylinder::CreateCanonical(*pContext, crRefFrame, aRadii[ii], aCylinders[ii]));
+      SmObjDelete sCylinderCleanup(aCylinders[ii]);
+      SER(aCylinders[ii]->AdjustSTEPUVDomain(sDomain));
+      SmFace * pFace = NULL;
+      SER(pBrep->CreateFaceFromSurface(aCylinders[ii], aCylinders[ii]->GetNaturalUVDomain(), pFace));
+      sCylinderCleanup.Clear(); // The face now owns its cylinder.
+    }
+
+  for (ULONG ii = 0; ii < 2; ii++)
+    {
+      double          dHeight  = ii == 0 ? 0.0 : dLength;
+      SmBSplineCurve * pOutside = NULL;
+      SmBSplineCurve * pInside  = NULL;
+      SER(aCylinders[0]->CreateIsoParametricCurve(*pContext, SM_SP_V, dHeight, 0.0, pOutside));
+      SmObjDelete sOutsideCleanup(pOutside);
+      SER(aCylinders[1]->CreateIsoParametricCurve(*pContext, SM_SP_V, dHeight, 0.0, pInside));
+      SmObjDelete sInsideCleanup(pInside);
+
+      SmTArray<SmCurve*> sCurves;
+      sCurves.Add(pOutside);
+      sCurves.Add(pInside);
+      SmFace * pFace = NULL;
+      SER(pBrep->CreatePlanarFaceWith3DCurves(pRegion, sCurves, pBrep->GetTolerance(), pFace));
+      sOutsideCleanup.Clear(); // The annular face now owns both boundary curves.
+      sInsideCleanup.Clear();
+    }
+
+  return pBrep->StitchAndOrient();
+}
+
+/*******************************************************************//**
 PURPOSE: Create a cylindrical box solid in the given region of the Brep.
             
-NOTES: The 6-sided box is a piece of a thick walled cylinder centered on
-       the RefFrame z axis and trimed by top and bot planes and
-       start end planes.
+NOTES: For a partial turn, the 6-sided box is a piece of a thick walled
+       cylinder centered on the RefFrame z axis and trimmed by top and
+       bot planes and start and end planes.
 
        The cylindrical box has two cylindrical faces called the inside
        and outside faces whose radii are the inside and outside
@@ -412,6 +464,9 @@ NOTES: The 6-sided box is a piece of a thick walled cylinder centered on
        The End plane also contains the RefFrame Z axis and the ray at EndAngDeg
        from the RefFrame x axis in the XY plane.
 
+       A sweep within SM_EFF_ZERO_DEG of 360 degrees is snapped to a full
+       hollow cylinder, with annular caps and no Start or End plane faces.
+
   If the vertices/edges of the cylindrical box happen to coincide
   with any vertices/edges of the Brep, they will be 
   stitched together (cf SmStitch).
@@ -426,7 +481,8 @@ SmStatus SmPrimitiveCreation::CreateCylindricalBox
   double                   dInsideRadius,  // in : Inside Radius measured from Z Axis, [greater than zero]
   double                   dOutsideRadius, // in : Outside Radius measured from Z Axis, [greater than InsideRadius]
   double                   dStartAngDeg,   // in : Start AngDeg measured from X Axis in YX plane, [-360 to 360]
-  double                   dEndAngDeg,     // in : End   AngDeg measured from X Axis in YX plane, [EndAng-StartAng in range:(0 to 360)]
+  double                   dEndAngDeg,     // in : End angle; sweep in (0,360] with
+                                           //    : dEndAngDeg - dStartAngDeg <= 360, else sweep is rejected
   const SmAxis2Placement & rRefFrame)      // in : Z Axis  = Cylinder centers
                                            //      Origin  = Bot of CylBox
                                            //      XY Axes = Plane of Start and End angles measured from X Axis
@@ -446,7 +502,11 @@ SmStatus SmPrimitiveCreation::CreateCylindricalBox
   SmBoolean bAngDeg = dEndAngDeg > dStartAngDeg + SM_EFF_ZERO;
   AERN_MSG( bAngDeg, SM_ERR_INVALID_INPUT,                                                   _T( "SmPrimitiveCreation::CreateCylindricalBox, EndAngDeg not greater than StartAng - box not made" ) );
   
-  AERN_MSG( SM_IS_CONTAINED_TO_TOL(dEndAngDeg-dStartAngDeg, 0, 360, 0), SM_ERR_INVALID_INPUT, _T("SmPrimitiveCreation::CreateCylindricalBox, EndAngDeg-StartAng not in range:[0 360] - box not made")) ;
+  double dSweepAngleDeg = dEndAngDeg - dStartAngDeg;
+  AERN_MSG( dSweepAngleDeg <= 360.0 + SM_EFF_ZERO_DEG, SM_ERR_INVALID_INPUT,                _T("SmPrimitiveCreation::CreateCylindricalBox, sweep exceeds 360 degrees beyond angular tolerance - box not made")) ;
+
+  if (smos_Fabs(dSweepAngleDeg - 360.0) <= SM_EFF_ZERO_DEG)
+    { return sm_CreateFullCylindricalBox(m_pRegion, dLength, dInsideRadius, dOutsideRadius, rRefFrame); }
 
   // locals
   SmBrep           * pBrep     = m_pRegion->GetBrep();

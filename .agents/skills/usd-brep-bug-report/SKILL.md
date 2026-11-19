@@ -57,11 +57,11 @@ when USD BRep assets and live SMLib objects are involved:
   importing or processing it. From the repository root on Linux, run:
 
   ```bash
-  tools/brep_validator_cli/validate_usd.sh path/to/input.usda
+  tools/brep_usdschema_validator_cli/validate_usd.sh path/to/input.usda
   ```
 
-  On Windows, use `tools/brep_validator_cli/validate_usd.bat`. Follow the
-  [validator CLI setup instructions](../../../tools/brep_validator_cli/README.md)
+  On Windows, use `tools/brep_usdschema_validator_cli/validate_usd.bat`. Follow the
+  [validator CLI setup instructions](../../../tools/brep_usdschema_validator_cli/README.md)
   for this checkout's Python, USD, schema plugin, and validator dependencies.
   Capture the command, exit status, affected prim paths, and complete findings,
   including `BA.*` codes. Missing dependencies or undiscovered BrepArray prims

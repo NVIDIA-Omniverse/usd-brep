@@ -208,7 +208,8 @@ NL_FLAG N_CrvInsertKnot
    DESCRIPTION:
 
      This tools routine  splits a NURBS  curve into two NURBS curves. 
-     The split must be at an interior  parameter value. If the output 
+     The split must be at an interior  parameter value, strictly inside
+     the curve's domain [U[p],U[m-p]]. If the output 
      curves  are  initialized  to NULL, memory  to  store new control 
      points and knots is allocated. A typical calling example is: 
 
@@ -297,6 +298,11 @@ NL_FLAG N_CrvSplit( NL_CURVE *cur, NL_PARAMETER u, NL_CURVE *curL, NL_CURVE *cur
     if( error EQ NL_YES )
         NL_OUT;
 
+    /* u must also be inside the active domain [U[p],U[m-p]]; this only */
+    /* differs from the check above when the knot vector is unclamped   */
+    if( u LE U[p] OR u GE U[m - p] )
+        NL_ERROR( NL_PAR_ERR );
+
     /* Get span, and knot multiplicity */
 
     error = N_BasisFindSpanAndMult( knt, p, u, NL_LEFT, &spn, &mlt );
@@ -330,12 +336,14 @@ NL_FLAG N_CrvSplit( NL_CURVE *cur, NL_PARAMETER u, NL_CURVE *curL, NL_CURVE *cur
     for ( i = 0; i <= p - mlt; i++ )
         N_CopyCPt( Pw[spn - p + i], &Sw[i] );
 
-    /* Save unaltered control points */
+    /* Save unaltered control points. When u is already a knot of */
+    /* multiplicity p+1 the curve is broken there: curL takes    */
+    /* Pw[0..spn-mlt] and curR takes the rest, with no overlap   */
 
-    for ( i = 0; i <= spn - p; i++ )
+    for ( i = 0; i <= spn - p AND i <= spn - mlt; i++ )
         N_CopyCPt( Pw[i], &Lw[i] );
 
-    for ( i = spn - mlt; i <= n; i++ )
+    for ( i = (mlt GT p) ? spn - p : spn - mlt; i <= n; i++ )
         N_CopyCPt( Pw[i], &Rw[i + p - spn] );
 
     /* Now split the curve */

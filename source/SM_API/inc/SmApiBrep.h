@@ -42,8 +42,12 @@ class SmSweepOptions;
 /// Two-Brep Booleans (SmApiBoolean, SmApiBooleanUnion, SmApiBooleanDifference,
 /// SmApiBooleanIntersection, SmApiBooleanMerge, SmApiBooleanWithCurves,
 /// SmApiBooleanWithOptions, SmApiNonManifoldBoolean), in addition to the per-parameter notes:
-///  - pBrep2 is not deleted for SM_BO_PARTIAL_MERGE, SM_BO_IMPRINT_CLASSIFY, or
-///    SmApiBooleanWithOptions with bKeepOtherBrep = TRUE. SM_BO_IMPRINT does delete it.
+///  - pBrep2 is not deleted for SM_BO_PARTIAL_MERGE or SM_BO_IMPRINT_CLASSIFY, nor by
+///    SmApiBooleanWithOptions with bKeepOtherBrep = TRUE, or with bImprintAndClassifyFaces = TRUE
+///    and bImprinting = FALSE. SM_BO_IMPRINT does delete it.
+///  - SmApiNonManifoldBoolean always runs the non-manifold Boolean. The others choose up
+///    front: the manifold Boolean if both operands are manifold solids (IsManifoldSolid()),
+///    otherwise the non-manifold Boolean.
 ///  - A NULL operand, pBrep1 == pBrep2, or SM_BO_EXTRACT_SEPARATE (which has no single
 ///    result) returns SM_ERR_INVALID_INPUT with both inputs untouched.
 ///  - rpResult is NULL on failure.
@@ -105,7 +109,8 @@ SMAPI_EXPORT SmApiStatus SmApiBooleanWithCurves(
 );
 
 /// If either input has zero faces, returns SM_SUCCESS without assigning
-/// rpResult or deleting pBrep2.
+/// rpResult or deleting pBrep2. NULL or identical operands return
+/// SM_ERR_INVALID_INPUT without touching either Brep.
 SMAPI_EXPORT SmApiStatus SmApiBoolean2d(
   SmBrep*  pBrep1,                        ///< [in/out]: Primary Brep; modified and returned on non-empty success    <br>
   SmBrep*  pBrep2,                        ///< [in ]: Second Brep; deleted on non-empty success                      <br>
@@ -195,12 +200,12 @@ SMAPI_EXPORT SmApiStatus SmApiProjectCurve(
 );
 
 SMAPI_EXPORT SmApiStatus SmApiStitch(
-    SmBrep* pBrep                          ///< [in ]: Pointer to brep                                             <br>
+    SmBrep* pBrep                          ///< [in/out]: Pointer to brep                                          <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiStitch(
-    SmBrep* pBrep,                          ///< [in ]: Pointer to brep                                             <br>
-    SmFace* pFaceToStitch                  ///< [in ]: Pointer to curve to project                                 <br>
+    SmBrep* pBrep,                          ///< [in/out]: Pointer to brep                                          <br>
+    SmFace* pFaceToStitch                  ///< [in ]: Face of pBrep to stitch to the rest of pBrep                <br>
 );
 
 // Family of Sweep Functions
@@ -386,8 +391,9 @@ SMAPI_EXPORT SmApiStatus SmApiNonManifoldRotationalSweep(
 SMAPI_EXPORT SmApiStatus SmApiBooleanWithOptions(
     SmBrep* pBrep1,                       ///< [in/out]: Modified in place and returned as rpResult on success;
                                           ///<           remains allocated but may be modified on failure <br>
-    SmBrep* pBrep2,                       ///< [in ]: Deleted on success unless kept (see the Boolean notes
-                                          ///<        above); remains allocated but may be modified on failure <br>
+    SmBrep* pBrep2,                       ///< [in/out]: Deleted on success unless kept (see the Boolean notes
+                                          ///<           above), and may be modified when kept; remains
+                                          ///<           allocated but may be modified on failure <br>
     SmBooleanOperationType eOperation,    ///< [in ]: Boolean operation type                                  <br>
     SmBoolean bCookieCutter,              ///< [in ]: TRUE = only remove faces from BrepA                     <br>
     SmBoolean bImprinting,                ///< [in ]: TRUE = imprint intersection on BrepA and quit           <br>
@@ -400,8 +406,9 @@ SMAPI_EXPORT SmApiStatus SmApiBooleanWithOptions(
 SMAPI_EXPORT SmApiStatus SmApiNonManifoldBoolean(
     SmBrep* pBrep1,                       ///< [in/out]: Modified in place and returned as rpResult on success;
                                           ///<           remains allocated but may be modified on failure <br>
-    SmBrep* pBrep2,                       ///< [in ]: Deleted on success unless kept (see the Boolean notes
-                                          ///<        above); remains allocated but may be modified on failure <br>
+    SmBrep* pBrep2,                       ///< [in/out]: Deleted on success unless kept (see the Boolean notes
+                                          ///<           above), and may be modified when kept; remains
+                                          ///<           allocated but may be modified on failure <br>
     SmBooleanOperationType eOperation,    ///< [in ]: Boolean operation type                                  <br>
     SmBrep*& rpResult                    ///< [out]: Resulting SmBrep                                        <br>
 );
@@ -497,21 +504,26 @@ SMAPI_EXPORT SmApiStatus SmApiShellBrepFull(
     SmBoolean bCreateOffsetSolid,         ///< [in ]: For sheet bodies, TRUE = ruled surfaces between lamina  <br>
                                           ///<        edges; manifold inputs always return Boolean wall volume <br>
     const SmTArray<const SmFace*>& rFacesToShell, ///< [in ]: Faces from pBrep to shell; left unchanged        <br>
-    SmBrep*& rpResult                    ///< [out]: New shell, or NULL on failure                           <br>
+    SmBrep*& rpResult                    ///< [out]: New shell, or NULL on failure. Fails with SM_ERR when    <br>
+                                          ///<        pBrep is a solid and the shell would not be one        <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiOffsetBrepFull(
-    SmBrep* pBrep,                        ///< [in ]: Brep to offset                                         <br>
+    SmBrep* pBrep,                        ///< [in/out]: Brep to offset. Geometry unchanged; left            <br>
+                                          ///<           edit-enabled when bDoExtendedOffset and             <br>
+                                          ///<           bDoSelfInt are both TRUE                            <br>
     double dOffsetDistance,                ///< [in ]: Offset distance                                        <br>
     SmBoolean bDoExtendedOffset,          ///< [in ]: TRUE = extend/intersect convex edges                   <br>
     SmBoolean bDoSelfInt,                 ///< [in ]: TRUE = handle self-intersections                       <br>
-    SmBrep*& rpResult                    ///< [out]: Resulting offset                                       <br>
+    SmBrep*& rpResult                    ///< [out]: Resulting offset, or NULL on failure. With bDoSelfInt, <br>
+                                          ///<        fails with SM_ERR when pBrep is a solid and the offset <br>
+                                          ///<        would not be one                                       <br>
 );
 
 // Advanced Stitching Functions
 
 SMAPI_EXPORT SmApiStatus SmApiStitchIntoSolid(
-    SmBrep* pBrep,                        ///< [in ]: Brep to stitch                                         <br>
+    SmBrep* pBrep,                        ///< [in/out]: Brep to stitch                                      <br>
     SmBoolean& rbProducesASolid,          ///< [out]: TRUE if result is manifold solid                       <br>
     ULONG& rlStitchedEdges,               ///< [out]: Number of edges stitched                               <br>
     double& rdMaxVertexGap,               ///< [out]: Max vertex gap                                         <br>
@@ -519,7 +531,7 @@ SMAPI_EXPORT SmApiStatus SmApiStitchIntoSolid(
 );
 
 SMAPI_EXPORT SmApiStatus SmApiStitchIntoShell(
-    SmBrep* pBrep,                        ///< [in ]: Brep to stitch                                         <br>
+    SmBrep* pBrep,                        ///< [in/out]: Brep to stitch                                      <br>
     SmBoolean& rbShellIsWellFormed,       ///< [in ]: Stitching mode, not a result: pass TRUE only for a     <br>
                                           ///<        well-formed shell (e.g. from a solid modeler); FALSE  <br>
                                           ///<        glues edges/vertices and ignores other problems.      <br>
@@ -532,14 +544,14 @@ SMAPI_EXPORT SmApiStatus SmApiStitchIntoShell(
 );
 
 SMAPI_EXPORT SmApiStatus SmApiUnifyNormals(
-    SmBrep* pBrep,                        ///< [in ]: Brep to orient                                         <br>
+    SmBrep* pBrep,                        ///< [in/out]: Brep to orient                                      <br>
     SmFace* pStartFace,                   ///< [in ]: Face to use as orientation reference                   <br>
     ULONG lNumSamples,                    ///< [in ]: Number of samples for ray classification               <br>
     SmTArray<SmFace*>& rFlippedFaces     ///< [out]: Faces whose normals were flipped                      <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiSimpleFaceStitch(
-    SmBrep* pBrep,                        ///< [in ]: Brep to stitch                                         <br>
+    SmBrep* pBrep,                        ///< [in/out]: Brep to stitch                                      <br>
     const SmTArray<SmFace*>& rFacesToKeep,      ///< [in ]: Faces to keep                                         <br>
     const SmTArray<SmFace*>& rFacesToDelete,    ///< [in ]: Matching faces to delete (glued to keeps)             <br>
     ULONG& rlStitchedEdges,               ///< [out]: Number of edges stitched                               <br>
@@ -548,7 +560,7 @@ SMAPI_EXPORT SmApiStatus SmApiSimpleFaceStitch(
 );
 
 SMAPI_EXPORT SmApiStatus SmApiStitchAdvanced(
-    SmBrep* pBrep,                        ///< [in ]: Brep to stitch                                         <br>
+    SmBrep* pBrep,                        ///< [in/out]: Brep to stitch                                      <br>
     double dStitchTol3d,                  ///< [in ]: 3D tolerance for stitching                             <br>
     SmBoolean bSqueezeSmallEdges,         ///< [in ]: TRUE = remove edges shorter than tolerance             <br>
     SmBoolean bSplitEdgesWithVertices,    ///< [in ]: TRUE = split edges at nearby vertices                  <br>

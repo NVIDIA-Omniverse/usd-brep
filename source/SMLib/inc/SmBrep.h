@@ -258,6 +258,8 @@ public:
 
 private:
   SmExtent3d           * m_pLockedBoundingBox;     // pointer to locked bounding box
+protected:
+  SmStatus               m_sCopyStatus = SM_SUCCESS; // MergeBrep status of the copy constructor, see GetCopyStatus()
 public:
 
   // empty constructor
@@ -273,6 +275,9 @@ public:
                                                            //       NULL to ignore, default:[NULL]
          SmBoolean       bCopyAttributes = TRUE,          // NotUsed: in : If true copy attributes to new brep default:[TRUE]
          SmBoolean       bAddAnalytics = TRUE) ;          // in : TRUE = recognize analytic surfaces; FALSE = preserve surface types. Default:[TRUE]
+
+  // Status of the copy constructor's MergeBrep: anything but SM_SUCCESS means the copy is incomplete.
+  SmStatus GetCopyStatus() const { return m_sCopyStatus; }
 
   // destructor
   virtual ~SmBrep() ;
@@ -1101,8 +1106,6 @@ public:
                                                                        //                                                                                                                    
                                                                        //        SM_HO_FIX_DEGEN_EDGES,                    // Ran All Healer Steps thru SmHealData::Fix_DegenEdges()         
                                                                        //                                                                                                                    
-                                                                       //        SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        
-                                                                       //        SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          
                                                                        //                                                                                                                    
                                                                        //        SM_HO_CACHE_MISSED_EDGEXSECTS, /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_MissedEdgeXSects() 
                                                                        //        SM_HO_FIX_MISSED_EDGEXSECTS,   /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_MissedEdgeXSects()   
@@ -1117,6 +1120,9 @@ public:
                                                                        //        SM_HO_FIX_BADSHEETS,                      // Ran All Healer Steps thru SmHealData::Fix_BadSheets()          
                                                                        //                                                                                                                    
                                                                        //        SM_HO_CACHE_FACEPROPS_3,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage3() 
+                                                                       //        SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()
+                                                                       //        SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()
+                                                                       //        SM_HO_CACHE_FACEPROPS_4,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage4()
                                                                        //                                                                                                                    
                                                                        //        SM_HO_FIX_SPLITFACE_ATSEAMS,              // Ran All Healer Steps thru SmHealData::Fix_SplitFaceAtSeams()   
                                                                        //        SM_HO_FIX_BADLOOPS,                       // Ran All Healer Steps thru SmHealData::Fix_BadLoops()           

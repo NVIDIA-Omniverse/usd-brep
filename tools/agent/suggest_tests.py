@@ -218,31 +218,6 @@ def changed_paths_from_git() -> list[str]:
     commands = (
         ("git", "diff", "--name-only", "HEAD", "--"),
         ("git", "diff", "--name-only", "--"),
-        (
-            "git",
-            "-c",
-            "filter.lfs.process=",
-            "-c",
-            "filter.lfs.clean=cat",
-            "-c",
-            "filter.lfs.required=false",
-            "diff",
-            "--name-only",
-            "HEAD",
-            "--",
-        ),
-        (
-            "git",
-            "-c",
-            "filter.lfs.process=",
-            "-c",
-            "filter.lfs.clean=cat",
-            "-c",
-            "filter.lfs.required=false",
-            "diff",
-            "--name-only",
-            "--",
-        ),
     )
     paths: list[str] = []
     for command in commands:

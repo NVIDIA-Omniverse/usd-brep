@@ -6324,7 +6324,7 @@ SmBoolean bDebugMe2 = FALSE;
                 }
             } // end check accuracy of uv-curve.
 
-          // check UV curve does not reverse direction at ends - side effect - reversed curves are fixed in this call
+          // check UV curve does not reverse direction at ends
           if (!pEU->m_pUVTrimCurve->PassesValidityCheck(SM_VC_REVERSE_DIRECTION, eCheckFailed))
             {
 #ifdef SM_DEBUG_CODE

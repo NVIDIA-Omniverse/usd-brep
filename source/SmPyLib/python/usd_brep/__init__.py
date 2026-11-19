@@ -5,11 +5,42 @@
 
 import importlib.util
 import os
+import re
 import sys
 import types
 from pathlib import Path
 
 _HERE = Path(__file__).parent
+
+# The wheel bundles OpenUSD's C++ libraries but not its `pxr` Python package, so on the
+# first USD call OpenUSD's script-module loader warns "No module named 'pxr'" per library.
+# Stand in for the bundled modules only -- scoped by the `libusd_*` files, and only when no
+# real `pxr` is installed -- so unbundled names like `pxr.UsdImagingGL` stay absent to find_spec.
+if importlib.util.find_spec("pxr") is None:
+    _pxr_modules = {"pxr"}
+    # Case-sensitive on every platform: Path.glob is case-insensitive on Windows, so a
+    # glob plus split would hit names like `USD_*` that have no lowercase `usd_`.
+    _lib_re = re.compile(r"(?:lib)?usd_(\w+?)\.")
+    for _lib in _HERE.iterdir():
+        _match = _lib_re.match(_lib.name)
+        if _match:
+            _base = _match.group(1)
+            _pxr_modules.add("pxr." + _base[0].upper() + _base[1:])
+
+    class _PxrStub:
+        def find_spec(self, name, path=None, target=None):
+            if name in _pxr_modules:
+                return importlib.util.spec_from_loader(name, self, is_package=True)
+            return None
+
+        def create_module(self, spec):
+            return None  # default module creation; an empty module is all the loader needs
+
+        def exec_module(self, module):
+            pass
+
+    if len(_pxr_modules) > 1:
+        sys.meta_path.append(_PxrStub())
 
 # Not PATH: that loads whichever OpenUSD is installed system-wide.
 if sys.platform == "win32" and hasattr(os, "add_dll_directory"):

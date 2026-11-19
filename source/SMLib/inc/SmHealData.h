@@ -263,18 +263,19 @@ class SM_EXPORT SmHealData
   ULONG m_lRanRegion_TestClosure_Cnt = 0 ; // number of times SmBrep::TestClosureSplitRegion() was run
   ULONG m_lFixRegion_SplitRegion_Cnt = 0 ; // number of SplitRegion fixes = number of new shells
   
-  // Step: SmHealData::Cache_FaceProps_Stage3()
-  // Step: SmHealData::Fix_BadLoops()
-  SmProbArray<SmFaceProps> m_sBadFaceProps_LoopProblems ;        // link: SmFaceProps::&m_bBadLoopProblems    // Bad Faces = Union of all Loop problem lists - Never Cleared of Fixes 
+  // Stage 3 closure findings; LoopProblems also accumulates Stage 4 findings.
+  SmProbArray<SmFaceProps> m_sBadFaceProps_LoopProblems ;        // link: SmFaceProps::&m_bBadLoopProblems    // Bad Faces = Union of all Loop problem lists - Never Cleared of Fixes
 
+  SmProbArray<SmFaceProps> m_sBadFaceProps_Closed3dLoop ;        // link: SmFaceProps::&m_lBadClosed3d_LoopCnt    // Bad - NotYet - Edit EdgeGeom to Rm EdgeEnd/EdgeEnd Gaps - Cleared of Fixes
+  SmProbArray<SmFaceProps> m_sBadFaceProps_ClosedPtrLoop ;       // link: SmFaceProps::&m_lBadClosedPtr_LoopCnt   // Bad - NotYet - Edit EdgeusePtrs to close CCW LinkedList - Cleared of Fixes
+
+  // Step: SmHealData::Cache_FaceProps_Stage4()
   SmProbArray<SmFaceProps> m_sBadFaceProps_OuterLoopOrder ;      // link: SmFaceProps::&m_bBadOuterLoopOrder  // Bad - fix by reordering FaceLoop list  - Cleared of Fixes
   SmProbArray<SmFaceProps> m_sBadFaceProps_OrientLoop ;          // link: SmFaceProps::&m_lBadOrient_LoopCnt  // Bad - fix by flipping loop orientation - Cleared of Fixes
   SmProbArray<SmFaceProps> m_sBadFaceProps_NoArea_Loop ;         // link: SmFaceProps::&m_lBadNoArea_LoopCnt  // Bad - fix by SplitAtSeam               - Cleared of Fixes
   SmProbArray<SmFaceProps> m_sBadFaceProps_MultiOuterLoops ;     // link: SmFaceProps::&m_lOuterLoopCnt > 1   // Bad - fix by splitting face            - Cleared of Fixes
   SmProbArray<SmFaceProps> m_sBadFaceProps_NestedOuterLoops ;    // link: SmFaceProps::&m_lBadNested_LoopCnt  // Bad - fix by splitting face            - Cleared of Fixes
   SmProbArray<SmFaceProps> m_sBadFaceProps_UnpairedNoAreaLoop ;  // link: SmFaceProps::&m_bBadUnpairedNoArea_Loop // Bad - No fix ideas (yet?)              - Cleared of Fixes
-  SmProbArray<SmFaceProps> m_sBadFaceProps_Closed3dLoop ;        // link: SmFaceProps::&m_lBadClosed3d_LoopCnt    // Bad - NotYet - Edit EdgeGeom to Rm EdgeEnd/EdgeEnd Gaps - Cleared of Fixes
-  SmProbArray<SmFaceProps> m_sBadFaceProps_ClosedPtrLoop ;       // link: SmFaceProps::&m_lBadClosedPtr_LoopCnt   // Bad - NotYet - Edit EdgeusePtrs to close CCW LinkedList - Cleared of Fixes
   SmProbArray<SmFaceProps> m_sBadFaceProps_MissingPole ;         // link: SmFaceProps::&m_lBadMissingPoles        // Bad - fix by Adding Vertex at Pole     - Cleared of Fixes
 
   // Step: SmHealData::Fix_BadLoops()
@@ -284,7 +285,7 @@ class SM_EXPORT SmHealData
   //  - ForEvery m_sBadFaceProps_OuterLoopOrder            FaceProps - Make 1st Outer (or BotLoop) Loop 1st Loop on FaceLoop List
   //  - ForEvery m_sBadFaceProps_MultiOuterLoops            FaceProps - MakeFaceFromLoopOnFace()
   //  - ForEvery m_sBadFaceProps_NestedOuterLoops          FaceProps - MakeFaceFromLoopOnFace()
-  //  - for every changed Face - Rerun SmHealData::Cache_FaceProps_Stage2() and SmHealData::Cache_FaceProps_Stage3()
+  //  - for every changed Face - Rerun SmHealData::Cache_FaceProps_Stage2() and SmHealData::Cache_FaceProps_Stage4()
   //     + Remove fixed entries from: m_sBadFaceProps_SeamProbs
   //                                  m_sBadFaceProps_MultiOuterLoops
   //                                  m_sBadFaceProps_NestedOuterLoops
@@ -298,7 +299,7 @@ class SM_EXPORT SmHealData
   // Step: SmHealData::Fix_SplitFaceAtSeams()
   //  - ForEvery m_sBadFaceProps_SeamProbs  FaceProps - SmFace::SplitAtSeams()
   // (TODO ?)
-  //  - forEvery Changed Face ReRun SmHealData::Cache_FaceProps_Stage3()
+  //  - forEvery Changed Face ReRun SmHealData::Cache_FaceProps_Stage4()
   //     + Removed fixed FaceProps from Problem Lists
   SmTriedProbArray<SmFaceProps> m_sRanFaceProps_SplitFaceAtSeam ;  // link: SmFaceProps::&m_eBeenThroughSplitFacesAtSeam
                                                                    //       SM_TRY_NONE, SM_TRY_RAN, SM_TRY_FIXED, SM_TRY_NOFIX
@@ -443,9 +444,7 @@ class SM_EXPORT SmHealData
                                                          //                                                                                                                  
                                                          //      SM_HO_FIX_DEGEN_EDGES,                    // Ran All Healer Steps thru SmHealData::Fix_DegenEdges()         
                                                          //                                                                                                                  
-                                                         //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        
-                                                         //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          
-                                                         //                                                                                                                  
+                                                         //
                                                          //      SM_HO_CACHE_MISSED_EDGEXSECTS, /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_MissedEdgeXSects() 
                                                          //      SM_HO_FIX_MISSED_EDGEXSECTS,   /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_MissedEdgeXSects()   
                                                          //                                                                                                                  
@@ -459,6 +458,9 @@ class SM_EXPORT SmHealData
                                                          //      SM_HO_FIX_BADSHEETS,                      // Ran All Healer Steps thru SmHealData::Fix_BadSheets()          
                                                          //                                                                                                                  
                                                          //      SM_HO_CACHE_FACEPROPS_3,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage3() 
+                                                         //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()
+                                                         //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()
+                                                         //      SM_HO_CACHE_FACEPROPS_4,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage4()
                                                          //                                                                                                                  
                                                          //      SM_HO_FIX_SPLITFACE_ATSEAMS,              // Ran All Healer Steps thru SmHealData::Fix_SplitFaceAtSeams()   
                                                          //      SM_HO_FIX_BADLOOPS,                       // Ran All Healer Steps thru SmHealData::Fix_BadLoops()           
@@ -506,8 +508,9 @@ class SM_EXPORT SmHealData
   SmStatus Fix_MoveSeam              (SmBrep * pBrep, SmNewMarkAndLock & rMarkLock, SmHealerOpType eThisHealerOp) ;          // eThisHealerOp NotUsed: in :
   SmStatus Fix_SplitEdgesAtSeam      (SmBrep * pBrep, SmNewMarkAndLock & rMarkLock, SmHealerOpType eThisHealerOp) ;          // eThisHealerOp NotUsed: in :
   SmStatus Fix_BadSheets             (SmBrep * pBrep, SmNewMarkAndLock & rMarkLock, SmHealerOpType eThisHealerOp) ;          // eThisHealerOp NotUsed: in :
-                                                                                                                             // eThisHealerOp NotUsed: in :
-  SmStatus Cache_FaceProps_Stage3    (SmBrep * pBrep, SmBoolean * pbNewProbs, SmHealerOpType eThisHealerOp) ;                
+                                                                                                                            
+  SmStatus Cache_FaceProps_Stage3    (SmBrep * pBrep, SmBoolean * pbNewProbs, SmHealerOpType  eThisHealerOp);                // eThisHealerOp NotUsed: in :
+  SmStatus Cache_FaceProps_Stage4    (SmBrep * pBrep, SmBoolean * pbNewProbs, SmHealerOpType  eThisHealerOp);                // eThisHealerOp NotUsed: in :
                                                                                                                              
   SmStatus Fix_SplitFaceAtSeams      (SmBrep * pBrep, SmHealerOpType     eThisHealerOp) ;                                    // eThisHealerOp NotUsed: in :
   SmStatus Fix_BadLoops              (SmBrep * pBrep, SmNewMarkAndLock & rMarkLock, SmHealerOpType     eThisHealerOp) ;      // eThisHealerOp NotUsed: in :

@@ -16,6 +16,7 @@
 #include <SmSurfTypes.h>
 #include <SmVolumeTypes.h>
 #include <limits.h>
+#include <iomanip>
 
 // Note:  BigEndian machines  ( IBM/SPARC/MAC) will store binary
 // SMS data in Little-endian format , and all reads/writes will
@@ -403,11 +404,13 @@ SmStatus SmDatabaseIO::ReadType(long & rlType,   // in : type object to load fro
   if(m_eFileType == SM_ASCII) { char sBuff[SM_MAXSIZE];
 
                                 // Object Type:
-                                *m_pStreamIn >> sBuff >> sBuff >> rlType ;  GoToNextLine() ;
+                                *m_pStreamIn >> std::setw(sizeof(sBuff)) >> sBuff >> std::setw(sizeof(sBuff)) >> sBuff >> rlType ;  GoToNextLine() ;
 
                                 // optional dimension
                                 if(pOptDim)
-                                  { *m_pStreamIn >> sBuff >> sBuff >> *pOptDim ; GoToNextLine() ; }
+                                  { *m_pStreamIn >> std::setw(sizeof(sBuff)) >> sBuff >> std::setw(sizeof(sBuff)) >> sBuff >> *pOptDim ; GoToNextLine() ; }
+
+                                SER_MSG(ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("SmDatabaseIO::ReadType: unreadable object type")) ;
                               }
   else                        { SER(ReadLong(rlType)) ;
 
@@ -415,6 +418,8 @@ SmStatus SmDatabaseIO::ReadType(long & rlType,   // in : type object to load fro
                                   { SER(ReadLong(*pOptDim)) ; }
                               }
 
+  // the type is not set when the data ends early
+  SER_MSG(ReadFailed() ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("Object type missing or not a number.")) ;
 
 #ifdef SM_DEBUG_CODE
   if(!IsValidType(rlType))

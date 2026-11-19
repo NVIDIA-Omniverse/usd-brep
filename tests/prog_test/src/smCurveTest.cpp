@@ -21,6 +21,7 @@
 #include <SmCompositeCurve.h>
 #include <SmPolynomial.h>
 #include <SmLine.h>
+#include <SmProjectedCurve.h>
 #include <SmCubicBezierSurface.h>
 #include <SmMatrix.h>
 #include <SmGeomUtility.h>
@@ -1551,6 +1552,17 @@ PT_EXPORT SmStatus my_test_array(void)
 
   //cbi next: Append().
 
+  //## test FindElementInMaskedArray(): searches element ii only when bit ii of the mask is set
+  {
+    SmTArray<ULONG> sMasked;
+    for (ULONG ii = 0; ii < 4; ii++)
+      sMasked.Add(10 + ii);
+    ULONG lFound = SM_UNDEF_ULONG;
+    if (   !sMasked.FindElementInMaskedArray(11, 0x2, lFound) || lFound != 1
+        || sMasked.FindElementInMaskedArray(12, 0x1, lFound)
+        || sMasked.FindElementInMaskedArray(13, 0x7, lFound))
+      { SER( SM_ERR ); }
+  }
 
     return SM_SUCCESS;
 } // end my_test_array
@@ -8095,6 +8107,107 @@ PT_EXPORT SmStatus my_test_curve_properties(void)
     return SM_SUCCESS;
 } // end my_test_curve_properties
 
+/***********************************************************************
+PURPOSE --- A rotation's aux vector is made perpendicular to the axis, so a
+            tilted aux vector and the X axis give equal projected curves.
+***********************************************************************/
+PT_EXPORT SmStatus my_test_projected_curve_rotation_axes(void)
+{
+    SmContext sContext;
+    SmLine sLine;
+    SmPoint3d sOrigin(0.0, 0.0, 0.0);
+    SmVector3d sAxis(0.0, 0.0, 1.0), sTilted(1.0, 0.0, 1.0), sXAxis(1.0, 0.0, 0.0);
+    SmProjectedCurve sTiltedRot(&sLine, &sOrigin, &sAxis, &sTilted, SM_PT_ROTATION, FALSE, &sContext);
+    SmProjectedCurve sXAxisRot(&sLine, &sOrigin, &sAxis, &sXAxis, SM_PT_ROTATION, FALSE, &sContext);
+    return (sTiltedRot == sXAxisRot) ? SM_SUCCESS : SM_ERR;
+}
+
+
+/***********************************************************************
+PURPOSE --- ScaleKnotVector must leave a healthy knot vector: no two distinct
+  knots closer than SM_EFF_ZERO, even when the target interval is short.
+***********************************************************************/
+static SmStatus my_test_scale_knot_vector_heal()
+{
+  SmContext sContext;
+
+  // polyline of 101 spans
+  const ULONG lSpans = 101;
+  SmTArray<SmPoint3d> sPoints;
+  SmTArray<ULONG>     sMults;
+  SmTArray<double>    sUniqueKnots;
+  for(ULONG ii=0; ii<=lSpans; ++ii)
+    {
+      sPoints.Add(SmPoint3d(ii,smos_Sine(ii),0));
+      sMults.Add(ii == 0 || ii == lSpans ? 2 : 1);
+      sUniqueKnots.Add(ii);
+    }
+  SmBSplineCurve * pCurve = NULL;
+  SER(SmBSplineCurve::CreateCanonical(sContext,3,1,sPoints,SM_CF_POLYLINE_FORM,sMults,sUniqueKnots,
+                                      SM_KT_UNSPECIFIED,NULL,NULL,pCurve));
+  SmObjDelete sCleanupCurve(pCurve);
+
+  // 101 spans of about 1e-12, just under SM_EFF_ZERO
+  SER(pCurve->ScaleKnotVector(0,1e-10));
+
+  SmTArray<double> sKnots;
+  SER(pCurve->GetKnotsAll(sKnots));
+  for(ULONG ii=0; ii+1<sKnots.GetSize(); ++ii)
+    {
+      double dSpan = sKnots[ii+1] - sKnots[ii];
+      if(dSpan != 0 && dSpan < SM_EFF_ZERO)
+        { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
+
+/***********************************************************************
+PURPOSE --- PassesValidityCheck reports a control polygon that folds back at
+  its start every time it is called, and does not move the control points.
+***********************************************************************/
+static SmStatus my_test_reverse_direction_check_is_const()
+{
+  SmContext sContext;
+
+  // the second control point is past the third: the polygon folds back
+  SmTArray<SmPoint3d> sPoints;
+  sPoints.Add(SmPoint3d(0,0,0));
+  sPoints.Add(SmPoint3d(2,0,0));
+  sPoints.Add(SmPoint3d(1,0,0));
+  sPoints.Add(SmPoint3d(3,0,0));
+  sPoints.Add(SmPoint3d(4,0,0));
+  SmTArray<ULONG>  sMults;
+  SmTArray<double> sUniqueKnots;
+  sMults.Add(4);
+  sMults.Add(1);
+  sMults.Add(4);
+  sUniqueKnots.Add(0);
+  sUniqueKnots.Add(0.5);
+  sUniqueKnots.Add(1);
+  SmBSplineCurve * pCurve = NULL;
+  SER(SmBSplineCurve::CreateCanonical(sContext,3,3,sPoints,SM_CF_UNSPECIFIED,sMults,sUniqueKnots,
+                                      SM_KT_UNSPECIFIED,NULL,NULL,pCurve));
+  SmObjDelete sCleanupCurve(pCurve);
+
+  SmTArray<SmPoint3d> sBefore, sAfter;
+  SmTArray<double>    sWeights;
+  SER(pCurve->GetControlPolygon(sBefore,sWeights));
+  for(int ii=0; ii<2; ++ii)
+    {
+      SmValidityCheckType eFailed = SM_VC_NONE;
+      if(pCurve->PassesValidityCheck(SM_VC_REVERSE_DIRECTION,eFailed) || eFailed != SM_VC_REVERSE_DIRECTION)
+        { return SM_ERR; }
+    }
+  SER(pCurve->GetControlPolygon(sAfter,sWeights));
+  for(ULONG ii=0; ii<sBefore.GetSize(); ++ii)
+    {
+      if(sBefore[ii].DistanceBetween(sAfter[ii]) != 0.0)
+        { return SM_ERR; }
+    }
+  return SM_SUCCESS;
+}
+
 
 /***********************************************************************
 PURPOSE ---
@@ -8107,6 +8220,8 @@ PT_EXPORT SmStatus my_test_bsplinecurve(void)
     SE( my_test_curve_interface() );
 
     SER(my_test_curve_properties());
+    SER(my_test_scale_knot_vector_heal());
+    SER(my_test_reverse_direction_check_is_const());
     
     SmContext sContext;
     

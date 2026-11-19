@@ -203,9 +203,8 @@ library. Use the exported interfaces in `prog_test.h` for external native caller
 The CLI expects `../../TestFiles/pt_TestFiles` relative to its working directory
 and checks that directory before running any selected suite. Fixtures include
 native `.smb` BReps, `.smp` parts, and mesh files, with subdirectories such as
-`Solids`, `Fillet`, `Shell`, `Tess`, and `Defeature`. Ensure the checkout's large
-fixtures are materialized as described in the repository prerequisites. A wrong
-working directory or missing fixture tree can fail a run before its first test.
+`Solids`, `Fillet`, `Shell`, `Tess`, and `Defeature`. A wrong working directory or
+missing fixture tree can fail a run before its first test.
 
 The application enables long and thin logs and creates `OutputFiles/` here when
 needed. Typical filenames are:

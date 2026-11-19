@@ -728,7 +728,7 @@ SmApiStatus SmApiBrepClosestPointAll
 PURPOSE --- Query whether a Brep is a manifold solid.
 
 USAGE NOTES --- A manifold solid has at least two regions, only manifold
-    edges, and no vertex shells.
+    edges, no vertex shells, and a solid (not void) region.
 
     Migrated from SmApiBrep.cpp on the rationale that read-only Brep
     properties belong with the rest of the SmApiQueries surface.
@@ -742,7 +742,9 @@ SmApiStatus SmApiBrepIsManifoldSolid
     if( pBrep == NULL )
         { return SM_ERR_INVALID_INPUT; }
 
-    rbIsManifoldSolid = pBrep->IsManifoldSolid();
+    long lSolids = 0, lVoids = 0;
+    SER( SmApiBrepMaterialCensus( pBrep, lSolids, lVoids ) );
+    rbIsManifoldSolid = pBrep->IsManifoldSolid() && lSolids > 0;
 
     return SM_SUCCESS;
 
@@ -1069,6 +1071,16 @@ SmApiStatus SmApiBrepCopy
 
     if( rpResult == NULL )
         { return SM_ERR; }
+
+    // A constructor cannot return a status, so a failed MergeBrep leaves a
+    // non-NULL but incomplete copy; report the failure instead of returning it.
+    const SmStatus sCopyStatus = rpResult->GetCopyStatus();
+    if( sCopyStatus != SM_SUCCESS )
+    {
+        delete rpResult;
+        rpResult = NULL;
+        return sCopyStatus;
+    }
 
     return SM_SUCCESS;
 

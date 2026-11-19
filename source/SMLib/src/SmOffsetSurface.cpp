@@ -1761,10 +1761,10 @@ NOTES:
 ***********************************************************************/
 SmStatus SmOffsetSurface::SwapUV()
 {
+  // the extension shares the base surface parameterization - negate the distance once for both
   if (m_pExtendedSurface) 
     {
       SER(m_pExtendedSurface->SwapUV());
-      m_dOffsetDistance = -m_dOffsetDistance;
     }
   if (m_bOwnsSurface) 
     {

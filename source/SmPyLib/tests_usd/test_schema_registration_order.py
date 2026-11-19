@@ -11,7 +11,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-CUBE = Path(__file__).resolve().parents[3] / "TestFiles" / "brep_validator" / "CubeBrepArray.usda"
+CUBE = Path(__file__).resolve().parents[3] / "TestFiles" / "usd_validator_TestFiles" / "CubeBrepArray.usda"
 
 # Windows loads extension DLLs from added directories only, as in test_heal_file.py.
 PROLOGUE = """

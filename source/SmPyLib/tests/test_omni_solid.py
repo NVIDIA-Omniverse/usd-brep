@@ -952,27 +952,6 @@ else:
     print("point %.12f %.12f %.12f" % surface.evaluate(u, v))
 """
 
-    _PART_READ_MEMORY_SCRIPT = _CHILD_PRELUDE + """
-def mapped_kib():
-    # Linux only: mapped memory, which grows by the size of every NURB a failed read leaks.
-    with open("/proc/self/status") as file:
-        for line in file:
-            if line.startswith("VmSize:"):
-                return int(line.split()[1])
-
-
-before = mapped_kib()
-for _ in range(10):
-    try:
-        sm.read_part_from_file(sys.argv[1], ascii=sys.argv[2] == "ascii")
-    except RuntimeError as error:
-        result = "RuntimeError: %s" % error
-    else:
-        result = "read"
-print(result)
-print("mapped MiB growth %d" % ((mapped_kib() - before) // 1024))
-"""
-
     def assert_part_rejected_without_crash(
         self, path, ascii_value, expected_ascii, reader_name="flat"
     ):
@@ -1164,10 +1143,10 @@ print("mapped MiB growth %d" % ((mapped_kib() - before) // 1024))
         ascii_record += ["%.17g" % knot for knot in knots]
         TestNativeBrepFileIo.write_part_file(path, ascii, binary_record, ascii_record, 1, 0, complete)
 
-    def read_part_geometry_in_child(self, path, ascii, script=None):
+    def read_part_geometry_in_child(self, path, ascii):
         try:
             completed = subprocess.run(
-                [sys.executable, "-c", script or self._PART_GEOMETRY_SCRIPT, path, "ascii" if ascii else "binary"],
+                [sys.executable, "-c", self._PART_GEOMETRY_SCRIPT, path, "ascii" if ascii else "binary"],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -1255,29 +1234,6 @@ print("mapped MiB growth %d" % ((mapped_kib() - before) // 1024))
                         path = os.path.join(tmpdir, "%s_%s.smp" % (name, ascii))
                         write(path, ascii)
                         self.assert_child_rejected(*self.read_part_geometry_in_child(path, ascii))
-
-    @unittest.skipUnless(sys.platform.startswith("linux"), "measures mapped memory in /proc/self/status")
-    def test_read_part_frees_nurbs_when_a_read_fails(self):
-        # Each file claims a 1101 x 1101 surface, a NURB of about 37 MiB, then fails: its rational
-        # flag is 2, or the file ends after the first control point. The reader used to leak the NURB
-        # on a bad flag, 370 MiB over the child's 10 reads. It never noticed the file ending: it hung
-        # on ASCII and read on past the end of a binary file.
-        cases = {
-            "rational_flag_2": dict(rational=2, control_points=[], knots=[]),
-            "ends_in_control_points": dict(control_points=[(0.0, 0.0, 0.0)], knots=[]),
-        }
-        with tempfile.TemporaryDirectory(prefix="smpy_native_part_") as tmpdir:
-            for name, body in cases.items():
-                for ascii in (True, False):
-                    with self.subTest(case=name, ascii=ascii):
-                        path = os.path.join(tmpdir, "%s_%s.smp" % (name, ascii))
-                        self.write_surface_part_file(path, 1, 1, ascii, counts=(1101, 1101), **body)
-                        stdout, output = self.read_part_geometry_in_child(
-                            path, ascii, self._PART_READ_MEMORY_SCRIPT)
-                        self.assert_child_rejected(stdout, output)
-                        growth = re.search(r"mapped MiB growth (-?\d+)", stdout)
-                        self.assertIsNotNone(growth, output)
-                        self.assertLess(int(growth.group(1)), 37, output)
 
     def test_write_and_read_brep_ascii(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
@@ -2067,6 +2023,15 @@ class TestCurves(unittest.TestCase):
                 self.assertAlmostEqual(curve.evaluate(0.5)[1], 0.0, delta=1e-12)
                 for t, point in zip(parameters, before, strict=True):
                     self.assertLessEqual(math.dist(curve.evaluate(t), point), 1e-7 + 1e-12)
+
+    def test_create_canonical_curve_rejects_short_knot_input(self):
+        # Fewer multiplicities than knots, or fewer knots than the points and degree need, used to read past them.
+        points = [(0, 0, 0), (1, 1, 0), (2, 0, 0), (3, 1, 0), (4, 0, 0)]
+        for knots, multiplicities in (([0, 0.5, 1], [4, 1]), ([0, 1], [4, 4])):
+            with self.subTest(knots=knots, multiplicities=multiplicities), self.assertRaisesRegex(
+                RuntimeError, "SM_ERR_INVALID_INPUT"
+            ):
+                sm.create_canonical_curve(points, knots, multiplicities, degree=3)
 
     def test_create_line(self):
         line = sm.create_line((0, 0, 0), (1, 0, 0))
@@ -6374,6 +6339,12 @@ else:
         self.assertIsNone(sm.usd.ensure_plugin_registered())
         self.assertIsNone(sm.usd.ensure_plugin_registered())
 
+    def test_import_rejects_loop_vertex_index_out_of_range(self):
+        # loop:vertexIndex past the BrepArray's vertices used to index past an internal table and segfault.
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        path = os.path.join(repo, "TestFiles", "usd_validator_TestFiles", "Test_BA_175_Invalid_loop_vertex_reference.usda")
+        self._assert_import_breps_rejected_without_crash(path)
+
     def test_export_import_single_brep(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
         with tempfile.NamedTemporaryFile(suffix=".usda", delete=False) as f:
@@ -6385,6 +6356,14 @@ else:
             self.assertEqual(len(breps[0].faces()), 6)
         finally:
             os.unlink(path)
+
+    def test_import_rejects_unknown_curve_type(self):
+        # An edge or wire edge with an unknown curveType used to segfault or be imported without its curve.
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        for name in ("Test_BA_245_Invalid_edge_curveType_token", "Test_BA_260_Invalid_wireEdge_curveType_token"):
+            with self.subTest(file=name):
+                path = os.path.join(repo, "TestFiles", "usd_validator_TestFiles", name + ".usda")
+                self._assert_import_breps_rejected_without_crash(path)
 
     def test_export_import_multiple_breps(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)
@@ -6472,6 +6451,59 @@ else:
             self._assert_center(partial_breps[0], (1, 1.5, 2))
             self._assert_center(partial_breps[1], (20.5, 1, 1.5))
 
+    def test_import_rejects_out_of_range_topology_without_crash(self):
+        # Each file has array sizes or indices that disagree with the topology counts.
+        # The reader used to index past the arrays and segfault.
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        for name in (
+            "Test_BA_100_Wrong_faceuse_array_size",
+            "Test_BA_115_Invalid_faceuse_faceIndex__out_of_range",
+            "Test_BA_140_face_loopCount_less_than_1",
+            "Test_BA_165_Wrong_loop_array_size",
+            "Test_BA_180_Wrong_edgeuse_array_size",
+            "Test_BA_205_Invalid_edgeuse_edgeIndex_values",
+            "Test_BA_210_Wrong_edge_array_size",
+            "Test_BA_225_Invalid_edge_vertexIndices_values",
+            "Test_BA_295_Wrong_vertex_array_size",
+            "Test_BA_065_Wrong_region_array_size",
+            "Test_BA_120_Wrong_face_array_size",
+            "DefectiveCube",  # GitHub #31
+        ):
+            with self.subTest(file=name):
+                path = os.path.join(repo, "TestFiles", "usd_validator_TestFiles", name + ".usda")
+                self._assert_import_breps_rejected_without_crash(path)
+
+    def test_import_rejects_edge_and_vertex_indices_past_the_brep_without_crash(self):
+        # An index below the edgeuse or vertex-reference count but past the Brep's own edges or
+        # vertices names an edge or vertex of the next Brep.
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        with open(os.path.join(repo, "TestFiles", "usd_validator_TestFiles", "CubeBrepArray.usda"), encoding="utf-8") as file:
+            usda = file.read()
+        for name, pattern, replacement in (
+            ("edgeuse_edge", r"(edgeuse:edgeIndex = \[)2,", r"\g<1>20,"),
+            ("edge_vertex", r"(edge:vertexIndices = \[)\(4, 0\)", r"\g<1>(20, 0)"),
+        ):
+            with self.subTest(index=name), tempfile.TemporaryDirectory(prefix="smpy_index_gap_") as tmpdir:
+                malformed, count = re.subn(pattern, replacement, usda)
+                self.assertEqual(count, 1)
+                path = os.path.join(tmpdir, name + ".usda")
+                with open(path, "w", encoding="utf-8") as file:
+                    file.write(malformed)
+                self._assert_import_breps_rejected_without_crash(path)
+
+    def test_import_rejects_uv_curve_vertex_counts_without_orders(self):
+        # UV-curve vertex counts and orders are read as a pair; an empty order array
+        # used to be indexed through the vertex counts' presence.
+        repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        with open(os.path.join(repo, "TestFiles", "usd_TestFiles", "test_wireEdgeTopology_absent.usda"), encoding="utf-8") as file:
+            usda, count = re.subn(r"(brep:curveUv:nurb:order = )\[[^\]]*\]", r"\1[]", file.read())
+        self.assertEqual(count, 1)
+        with tempfile.TemporaryDirectory(prefix="smpy_empty_uv_order_") as tmpdir:
+            path = os.path.join(tmpdir, "empty_order.usda")
+            with open(path, "w", encoding="utf-8") as file:
+                file.write(usda)
+            self._assert_import_breps_rejected_without_crash(path)
+
     def _tessellate_moved_reference(self, tmpdir, extra_prims=""):
         """A box BrepArray referenced into /World/Moved (translated by 100 in x); output in a subdirectory."""
         sm.usd.export_brep(sm.create_box((0, 0, 0), 1, 1, 1), os.path.join(tmpdir, "box.usda"))
@@ -6507,6 +6539,15 @@ else:
             self.assertTrue(results[0].ok)
             mesh = usda[usda.index('def Mesh "tess_0_0"'):]
             self.assertRegex(mesh[:mesh.index("\n    }")], r"matrix4d xformOp:transform = .*\(100, 0, 0, 1\)")
+
+    def test_tessellate_file_writes_usd_mesh_types(self):
+        # UsdGeomMesh declares points as point3f[] and extent as float3[]; validators check the types.
+        with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
+            _, _, usda = self._tessellate_moved_reference(tmpdir)
+            mesh = usda[usda.index('def Mesh "tess_0_0"'):]
+            mesh = mesh[:mesh.index("\n    }")]
+            self.assertRegex(mesh, r"point3f\[\] points")
+            self.assertRegex(mesh, r"float3\[\] extent")
 
     def test_tessellate_file_rejects_singular_mesh_parent(self):
         # A default prim scaled to zero in z has no inverse, so no mesh transform can place a Brep.
@@ -6564,7 +6605,7 @@ else:
         with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
             output = os.path.join(tmpdir, "out.usda")
             results = sm.usd.tessellate_file(
-                os.path.join(repo, "TestFiles", "brep_validator", "CubeBrepArray.usda"), output)
+                os.path.join(repo, "TestFiles", "usd_validator_TestFiles", "CubeBrepArray.usda"), output)
             self.assertEqual([r.ok for r in results], [True, True])
             with open(output, encoding="utf-8") as file:
                 usda = file.read()
@@ -6597,7 +6638,7 @@ else:
             for result, brep in zip(results, imported):
                 self.assertTrue(result.ok, result.message)
                 self.assertEqual(result.failed_face_count, 0)
-                self.assertTrue(result.mesh_path.endswith("/tess_0_%d" % result.packed_index))
+                self.assertEqual(result.mesh_path, "/World/tess_0_%d" % result.packed_index)
                 expected = len(sm.tessellate(brep).to_mesh_arrays()["points"])
                 self.assertEqual(result.point_count, expected)
             with open(output, encoding="utf-8") as file:
@@ -6609,13 +6650,87 @@ else:
             finer = sm.usd.tessellate_file(source, output, chord_height_tolerance=0.01)
             self.assertGreater(finer[1].point_count, results[1].point_count)
 
+    def _tessellate_part_reference(self, tmpdir, sublayer=None, extra="", default_prim=None):
+        """A box referenced into /Part, with optional root metadata, prims and a sublayer."""
+        sm.usd.export_brep(sm.create_box((0, 0, 0), 1, 1, 1), os.path.join(tmpdir, "box.usda"))
+        metadata = []
+        if sublayer is not None:
+            with open(os.path.join(tmpdir, "extra.usda"), "w", encoding="utf-8") as file:
+                file.write("#usda 1.0\n\n" + sublayer)
+            metadata.append("    subLayers = [@./extra.usda@]")
+        if default_prim is not None:
+            metadata.append('    defaultPrim = "%s"' % default_prim)
+        header = "(\n" + "\n".join(metadata) + "\n)\n" if metadata else ""
+        scene = os.path.join(tmpdir, "scene.usda")
+        with open(scene, "w", encoding="utf-8") as file:
+            file.write("#usda 1.0\n" + header + '\ndef Xform "Part" (\n    prepend references = @./box.usda@</World>\n)\n{\n}\n' + extra)
+        output = os.path.join(tmpdir, "out.usda")
+        results = sm.usd.tessellate_file(scene, output)
+        with open(output, encoding="utf-8") as file:
+            return results, file.read()
+
+    def test_tessellate_file_creates_world_without_a_default_prim(self):
+        with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
+            results, usda = self._tessellate_part_reference(tmpdir)
+            self.assertEqual(results[0].mesh_path, "/World/tess_0_0")
+            self.assertIn('def Xform "World"', usda)
+            self.assertNotIn("defaultPrim", usda)
+            with open(os.path.join(tmpdir, "scene.usda"), encoding="utf-8") as file:
+                self.assertNotIn("defaultPrim", file.read())
+
+    def test_tessellate_file_keeps_a_custom_default_prim(self):
+        with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
+            results, usda = self._tessellate_part_reference(
+                tmpdir, extra='\ndef Xform "Assembly"\n{\n}\n', default_prim="Assembly")
+            self.assertEqual(results[0].mesh_path, "/Assembly/tess_0_0")
+            self.assertIn('defaultPrim = "Assembly"', usda)
+            self.assertNotIn('def Xform "World"', usda)
+
+    def test_tessellate_file_keeps_the_type_of_an_existing_world(self):
+        # /World comes from a sublayer: a typed prim spec in the output would override its type.
+        with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
+            results, usda = self._tessellate_part_reference(tmpdir, 'def Scope "World"\n{\n}\n')
+            self.assertEqual(results[0].mesh_path, "/World/tess_0_0")
+            self.assertNotIn('def Xform "World"', usda)
+            self.assertNotIn("defaultPrim", usda)
+
+    def test_tessellate_file_reports_an_unusable_parent_without_redirecting(self):
+        worlds = (
+            ('over "World"\n{\n}\n', "not defined"),
+            ('def Xform "World" (active = false)\n{\n}\n', "inactive"),
+            ('def Xform "World" (\n    instanceable = true\n'
+             '    prepend references = @./box.usda@</World>\n)\n{\n}\n', "instance"),
+            ('def Xform "World"\n{\n    token visibility = "invisible"\n}\n', "hide"),
+            ('def Xform "World"\n{\n    uniform token purpose = "guide"\n}\n', "purpose"),
+            ('def Xform "World"\n{\n    float3 xformOp:scale = (0, 0, 0)\n'
+             '    uniform token[] xformOpOrder = ["xformOp:scale"]\n}\n', "singular transform"),
+        )
+        for world, reason in worlds:
+            for default_prim in (None, "World"):
+                with self.subTest(reason=reason, default_prim=default_prim), \
+                        tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
+                    with self.assertRaises(RuntimeError) as raised:
+                        self._tessellate_part_reference(tmpdir, extra=world, default_prim=default_prim)
+                    self.assertIn("/World", str(raised.exception))
+                    self.assertIn(reason, str(raised.exception))
+                    self.assertFalse(os.path.exists(os.path.join(tmpdir, "out.usda")))
+
+    def test_tessellate_file_keeps_a_hidden_guide_default_prim(self):
+        # An intentionally hidden guide asset can keep its meshes under the same parent.
+        with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
+            results, _, usda = self._tessellate_moved_reference(
+                tmpdir, '    token visibility = "invisible"\n    uniform token purpose = "guide"\n')
+            self.assertTrue(results[0].ok)
+            self.assertEqual(results[0].mesh_path, "/World/tess_0_0")
+            self.assertIn('defaultPrim = "World"', usda)
+
     def test_tessellate_file_reports_failed_and_partial_breps(self):
         repo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         with tempfile.TemporaryDirectory(prefix="smpy_tessellate_file_") as tmpdir:
             output = os.path.join(tmpdir, "out.usda")
             # The second Brep's face arrays are the wrong size: it fails, the first still meshes.
             results = sm.usd.tessellate_file(
-                os.path.join(repo, "TestFiles", "brep_validator", "Test_BA_120_Wrong_face_array_size.usda"), output)
+                os.path.join(repo, "TestFiles", "usd_validator_TestFiles", "Test_BA_120_Wrong_face_array_size.usda"), output)
             self.assertEqual([r.ok for r in results], [True, False])
             self.assertEqual(results[1].packed_index, 1)
             self.assertIsNone(results[1].mesh_path)

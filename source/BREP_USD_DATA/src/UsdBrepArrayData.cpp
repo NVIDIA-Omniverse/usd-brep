@@ -218,6 +218,31 @@ bool UsdBrepGetAttribute(const UsdPrim& crPrim, const TfToken& crProp, T& rValue
     return true;
 } // end UsdBrepGetAttribute<type> from prims and their single applied APIs
 
+// True when [lStart, lStart + lCount) lies inside rArray, with lPerItem array entries per item.
+template <typename ArrayType>
+static bool IsSpanInRange(const ArrayType& rArray, uint32_t lStart, uint32_t lCount, uint64_t lPerItem = 1)
+{
+    return (static_cast<uint64_t>(lStart) + lCount) * lPerItem <= rArray.size();
+}
+
+// Add lCount to rTotal; false when the total would pass lLimit, the size of the array it spans, so it cannot wrap.
+static bool AddCountWithin(uint32_t& rTotal, uint32_t lCount, size_t lLimit)
+{
+    if (static_cast<uint64_t>(rTotal) + lCount > lLimit)
+    {
+        return false;
+    }
+    rTotal += lCount;
+    return true;
+}
+
+// As IsSpanInRange, but an empty rArray means the optional array is absent.
+template <typename ArrayType>
+static bool IsOptionalSpanInRange(const ArrayType& rArray, uint32_t lStart, uint32_t lCount)
+{
+    return rArray.empty() || IsSpanInRange(rArray, lStart, lCount);
+}
+
 // Function to safely access array elements, returning 0 if array is empty or index is out of bounds
 template <typename ArrayType>
 uint32_t GetArraySubscript(const ArrayType& array, size_t index)
@@ -288,7 +313,7 @@ uint32_t GetUsdBrepArray_BrepCount(const pxr::UsdPrim& crUsdBrepArray) // in : t
         lBrepCount = static_cast<uint32_t>(sBrepRegionCountArray.size());
     }
 
-    return (lBrepCount);
+    return lBrepCount;
 
 } // end GetUsdBrepArray_BrepCount
 
@@ -324,7 +349,7 @@ uint32_t UsdBrepArrayData::TotalShellVertexCount() const
     }
 
     // all done
-    return (lVSCnt);
+    return lVSCnt;
 
 } // end UsdBrepArrayData::TotalShellVertexCount()
 
@@ -348,7 +373,7 @@ uint32_t UsdBrepArrayData::TotalLoopVertexCount() const
     }
 
     // all done
-    return (lLSCnt);
+    return lLSCnt;
 
 } // end UsdBrepArrayData::TotalLoopVertexCount()
 
@@ -906,8 +931,8 @@ bool UsdBrepArraySpans::SetStartsForNextBrepAdd(const UsdBrepArrayData& rArrays)
         Save some time and leave the Brep_ii count values at 0 when
         those values are not needed for the next BrepArray call.
 
-Errors: returns false and makes no changes when iBrepIndex is out of range
-        else returns true after updating starts and counts as asked
+Errors: returns false when iBrepIndex is out of range or the arrays are malformed (a count or index runs past
+        an array); starts and counts are then partly updated. Else returns true after updating them as asked
  ********************************************************************************************************************/
 bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
     const UsdBrepArrayData& rArrays, // eff: set Brep_ii start
@@ -963,10 +988,20 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
     {
         // Regions
         m_lRegionCount = GetArraySubscript(rArrays.m_sBrepRegionCountArray, ii);
+        if (!IsSpanInRange(rArrays.m_sRegionShellCountArray, m_lRegionStartIndex, m_lRegionCount) ||
+            !IsSpanInRange(rArrays.m_sRegionTypeArray, m_lRegionStartIndex, m_lRegionCount))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated region data");
+            return false;
+        }
         for (uint32_t iGlobal = m_lRegionStartIndex, iLocal = 0; iLocal < m_lRegionCount; iGlobal++, iLocal++)
         {
             // accumulate topology counts
-            m_lShellCount += GetArraySubscript(rArrays.m_sRegionShellCountArray, iGlobal);
+            if (!AddCountWithin(m_lShellCount, GetArraySubscript(rArrays.m_sRegionShellCountArray, iGlobal), rArrays.m_sShellFaceuseCountArray.size()))
+            {
+                USDBREP_ERROR("Malformed BrepArray: region shell counts run past the shell data");
+                return false;
+            }
         } // end iter every Region
 
         // Shells
@@ -980,8 +1015,20 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
             }
 
             // accumulate topology and shape counts
-            m_lFaceuseCount += GetArraySubscript(rArrays.m_sShellFaceuseCountArray, iGlobal);
-            m_lWireEdgeCount += GetArraySubscript(rArrays.m_sShellWireEdgeCountArray, iGlobal);
+            if (!AddCountWithin(
+                    m_lFaceuseCount,
+                    GetArraySubscript(rArrays.m_sShellFaceuseCountArray, iGlobal),
+                    rArrays.m_sFaceuseFaceIndexArray.size()
+                ) ||
+                !AddCountWithin(
+                    m_lWireEdgeCount,
+                    GetArraySubscript(rArrays.m_sShellWireEdgeCountArray, iGlobal),
+                    rArrays.m_sWireEdgeVertexIndicesArray.size()
+                ))
+            {
+                USDBREP_ERROR("Malformed BrepArray: shell faceuse or wire edge counts run past their data");
+                return false;
+            }
             if (rArrays.IsBrepPointShell(iGlobal))
             {
                 const uint32_t iPointPosition = m_lShellPointPosition_StartIndex + m_lShellPointPosition_Count;
@@ -1003,12 +1050,44 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
 
         // FaceCount = FaceuseCount / 2
         m_lFaceCount = m_lFaceuseCount / 2;
+        if (!IsSpanInRange(rArrays.m_sFaceuseFaceIndexArray, m_lFaceuseStartIndex, m_lFaceuseCount) ||
+            !IsSpanInRange(rArrays.m_sFaceuseOrientationTypeArray, m_lFaceuseStartIndex, m_lFaceuseCount))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated faceuse data");
+            return false;
+        }
+        for (uint32_t iGlobal = m_lFaceuseStartIndex, iLocal = 0; iLocal < m_lFaceuseCount; iGlobal++, iLocal++)
+        {
+            if (rArrays.MapGlobalToLocal(rArrays.m_sFaceuseFaceIndexArray[iGlobal], m_lFaceStartIndex) >= m_lFaceCount)
+            {
+                USDBREP_ERROR("Malformed BrepArray: faceuse face index out of range");
+                return false;
+            }
+        }
+        if (!IsSpanInRange(rArrays.m_sFaceLoopCountArray, m_lFaceStartIndex, m_lFaceCount) ||
+            !IsSpanInRange(rArrays.m_sFaceSurfaceTypeArray, m_lFaceStartIndex, m_lFaceCount) ||
+            !IsSpanInRange(rArrays.m_sFaceTrimTypeArray, m_lFaceStartIndex, m_lFaceCount) ||
+            !IsSpanInRange(rArrays.m_sFaceRangeArray, m_lFaceStartIndex, m_lFaceCount, 2))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated face data");
+            return false;
+        }
 
         // Faces
         for (uint32_t iGlobal = m_lFaceStartIndex, iLocal = 0; iLocal < m_lFaceCount; iGlobal++, iLocal++)
         {
             // accumulate topology and shape counts
-            m_lLoopCount += GetArraySubscript(rArrays.m_sFaceLoopCountArray, iGlobal);
+            const uint32_t lFaceLoopCount = GetArraySubscript(rArrays.m_sFaceLoopCountArray, iGlobal);
+            if (lFaceLoopCount == 0)
+            {
+                USDBREP_ERROR("Malformed BrepArray: face with no loops");
+                return false;
+            }
+            if (!AddCountWithin(m_lLoopCount, lFaceLoopCount, rArrays.m_sLoopEdgeuseCountArray.size()))
+            {
+                USDBREP_ERROR("Malformed BrepArray: face loop counts run past the loop data");
+                return false;
+            }
 
             // accumulate shape counts
             if (rArrays.m_sFaceSurfaceTypeArray.size() > 0 && rArrays.m_sFaceSurfaceTypeArray[iGlobal] == UsdBrepSurfaceTokens->brepSurfaceNurbAPI)
@@ -1056,10 +1135,24 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
         } // end iter every Face
 
         // Loops
+        if (!IsSpanInRange(rArrays.m_sLoopEdgeuseCountArray, m_lLoopStartIndex, m_lLoopCount) ||
+            !IsSpanInRange(rArrays.m_sLoopVertexIndexArray, m_lLoopStartIndex, m_lLoopCount))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated loop data");
+            return false;
+        }
         for (uint32_t iGlobal = m_lLoopStartIndex, iLocal = 0; iLocal < m_lLoopCount; iGlobal++, iLocal++)
         {
             // accumulate topology and shape counts
-            m_lEdgeuseCount += GetArraySubscript(rArrays.m_sLoopEdgeuseCountArray, iGlobal);
+            if (!AddCountWithin(
+                    m_lEdgeuseCount,
+                    GetArraySubscript(rArrays.m_sLoopEdgeuseCountArray, iGlobal),
+                    rArrays.m_sEdgeuseEdgeIndexArray.size()
+                ))
+            {
+                USDBREP_ERROR("Malformed BrepArray: loop edgeuse counts run past the edgeuse data");
+                return false;
+            }
             m_lLoopVertexCount += ((!rArrays.m_sLoopEdgeuseCountArray.empty()) && (rArrays.m_sLoopEdgeuseCountArray[iGlobal] == 0)) ?
                                       1U :
                                       0U; // this Loop is a vertexLoop,
@@ -1068,6 +1161,18 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
                                                                                                                                   0U; // this Loop is
                                                                                                                                       // a vertexLoop
         } // end iter every Loop
+
+        if (!IsSpanInRange(rArrays.m_sEdgeuseEdgeIndexArray, m_lEdgeuseStartIndex, m_lEdgeuseCount) ||
+            !IsSpanInRange(rArrays.m_sEdgeuseNextRadialEUIndexArray, m_lEdgeuseStartIndex, m_lEdgeuseCount) ||
+            !IsSpanInRange(rArrays.m_sEdgeuseThisRadialEntryTypeArray, m_lEdgeuseStartIndex, m_lEdgeuseCount) ||
+            !IsSpanInRange(rArrays.m_sEdgeuseOrientationTypeArray, m_lEdgeuseStartIndex, m_lEdgeuseCount) ||
+            !IsOptionalSpanInRange(rArrays.m_sEdgeuse_CurveNurb_VertexCountArray, m_lEdgeuseStartIndex, m_lEdgeuseCount) ||
+            !IsOptionalSpanInRange(rArrays.m_sEdgeuse_CurveNurb_OrderArray, m_lEdgeuseStartIndex, m_lEdgeuseCount) ||
+            rArrays.m_sEdgeuse_CurveNurb_VertexCountArray.empty() != rArrays.m_sEdgeuse_CurveNurb_OrderArray.empty()) // a pair
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated edgeuse data");
+            return false;
+        }
 
         // local - edgeCount aide
         VtArray<bool> bEdgeReference(m_lEdgeuseCount, false); // boolean array, sized:[MaxEdgeCount = EdgeuseCount]
@@ -1078,6 +1183,11 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
             // Parse flag to edgeIndex and orientation
             uint32_t iGlobalEdgeuseEdgeIndex = GetArraySubscript(rArrays.m_sEdgeuseEdgeIndexArray, iGlobal);
             uint32_t iLocalEdgeuseEdgeIndex = rArrays.MapGlobalToLocal(iGlobalEdgeuseEdgeIndex, m_lEdgeStartIndex);
+            if (iLocalEdgeuseEdgeIndex >= bEdgeReference.size())
+            {
+                USDBREP_ERROR("Malformed BrepArray: edgeuse edge index out of range");
+                return false;
+            }
 
             // accumulate topology data counts
             if (bEdgeReference[iLocalEdgeuseEdgeIndex] == false)
@@ -1096,6 +1206,23 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
                                                                   rArrays.m_sEdgeuse_CurveNurb_OrderArray[iGlobal] :
                                                               0;
         } // end iter every Edgeuse
+        // EdgeCount is the number of distinct edges referenced, so an index at or past it names no edge of this Brep.
+        for (uint32_t iLocal = m_lEdgeCount; iLocal < bEdgeReference.size(); iLocal++)
+        {
+            if (bEdgeReference[iLocal])
+            {
+                USDBREP_ERROR("Malformed BrepArray: edgeuse edge index out of range");
+                return false;
+            }
+        }
+
+        if (!IsSpanInRange(rArrays.m_sWireEdgeVertexIndicesArray, m_lWireEdgeStartIndex, m_lWireEdgeCount) ||
+            !IsSpanInRange(rArrays.m_sWireEdgeCurveTypeArray, m_lWireEdgeStartIndex, m_lWireEdgeCount) ||
+            !IsSpanInRange(rArrays.m_sWireEdgeRangeArray, m_lWireEdgeStartIndex, m_lWireEdgeCount, 2))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated wire edge data");
+            return false;
+        }
 
         // local - vertexCount aide - waited until LoopCount, EdgeCount, and WireEdgeCount were computed to calc a max
         // bVertexReference size
@@ -1110,15 +1237,30 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
         for (uint32_t iGlobal = m_lLoopStartIndex, iLocal = 0; iLocal < m_lLoopCount; iGlobal++, iLocal++)
         {
             // accumulate Vertex counts from LoopVertices
-            if (rArrays.m_sLoopEdgeuseCountArray[iGlobal] == 0 // this Loop is a vertexLoop
-                && bVertexReference[rArrays.m_sLoopVertexIndexArray[iGlobal]] == false) // and its loop vertex hasn't
-                                                                                        // been used yet
+            if (rArrays.m_sLoopEdgeuseCountArray[iGlobal] != 0) // not a vertexLoop
             {
-                bVertexReference[rArrays.m_sLoopVertexIndexArray[iGlobal]] = true;
+                continue;
             }
+            // loop:vertexIndex is global to the BrepArray; the reference table is local to this Brep.
+            const uint32_t iLocalVertexIndex = rArrays.MapGlobalToLocal(rArrays.m_sLoopVertexIndexArray[iGlobal], m_lVertexStartIndex);
+            // The index must also name a vertex of the BrepArray at or after this Brep's first one.
+            const uint32_t iGlobalVertexIndex = rArrays.m_sLoopVertexIndexArray[iGlobal];
+            if (iLocalVertexIndex >= bVertexReference.size() || iGlobalVertexIndex >= rArrays.TotalVertexCount())
+            {
+                USDBREP_ERROR("Malformed BrepArray: loop vertex index out of range");
+                return false;
+            }
+            bVertexReference[iLocalVertexIndex] = true;
         } // end iter every Loop
 
         // Edges
+        if (!IsSpanInRange(rArrays.m_sEdgeVertexIndicesArray, m_lEdgeStartIndex, m_lEdgeCount) ||
+            !IsSpanInRange(rArrays.m_sEdgeCurveTypeArray, m_lEdgeStartIndex, m_lEdgeCount) ||
+            !IsSpanInRange(rArrays.m_sEdgeRangeArray, m_lEdgeStartIndex, m_lEdgeCount, 2))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated edge data");
+            return false;
+        }
         for (uint32_t iGlobal = m_lEdgeStartIndex, iLocal = 0; iLocal < m_lEdgeCount; iGlobal++, iLocal++)
         {
             // Map global to local vertex indices
@@ -1131,6 +1273,12 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
                 GetArray2Subscript(rArrays.m_sEdgeVertexIndicesArray, iGlobal, 1),
                 m_lVertexStartIndex
             );
+
+            if (iStartVertexLocalIndex >= bVertexReference.size() || iEndVertexLocalIndex >= bVertexReference.size())
+            {
+                USDBREP_ERROR("Malformed BrepArray: edge vertex index out of range");
+                return false;
+            }
 
             // accumulate topology data counts
             if (bVertexReference[iStartVertexLocalIndex] == false)
@@ -1151,8 +1299,11 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
                 // which only have entries for NURB edges (not circle/line/ellipse edges)
                 uint32_t iNurbIdx = m_lEdgeBSplineCurve3d_StartIndex + m_lEdgeBSplineCurve3d_Count;
                 m_lEdgeBSplineCurve3d_Count++;
-                assert(iNurbIdx < rArrays.m_sEdge_CurveNurb_VertexCountArray.size());
-                if (iNurbIdx < rArrays.m_sEdge_CurveNurb_VertexCountArray.size())
+                if (iNurbIdx >= rArrays.m_sEdge_CurveNurb_VertexCountArray.size() || iNurbIdx >= rArrays.m_sEdge_CurveNurb_OrderArray.size())
+                {
+                    USDBREP_ERROR("Malformed BrepArray: truncated NURBS curve metadata");
+                    return false;
+                }
                 {
                     m_lEdgeBSplineCurve3d_ControlVerticesCount += rArrays.m_sEdge_CurveNurb_VertexCountArray[iNurbIdx];
                     m_lEdgeBSplineCurve3d_KnotCount += rArrays.m_sEdge_CurveNurb_VertexCountArray[iNurbIdx] +
@@ -1187,6 +1338,12 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
                 m_lVertexStartIndex
             );
 
+            if (iStartVertexLocalIndex >= bVertexReference.size() || iEndVertexLocalIndex >= bVertexReference.size())
+            {
+                USDBREP_ERROR("Malformed BrepArray: edge vertex index out of range");
+                return false;
+            }
+
             // accumulate topology data counts
             if (bVertexReference[iStartVertexLocalIndex] == false)
             {
@@ -1204,8 +1361,11 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
             {
                 uint32_t iNurbIdx = m_lWireEdgeBSplineCurve3d_StartIndex + m_lWireEdgeBSplineCurve3d_Count;
                 m_lWireEdgeBSplineCurve3d_Count++;
-                assert(iNurbIdx < rArrays.m_sWireEdge_CurveNurb_VertexCountArray.size());
-                if (iNurbIdx < rArrays.m_sWireEdge_CurveNurb_VertexCountArray.size())
+                if (iNurbIdx >= rArrays.m_sWireEdge_CurveNurb_VertexCountArray.size() || iNurbIdx >= rArrays.m_sWireEdge_CurveNurb_OrderArray.size())
+                {
+                    USDBREP_ERROR("Malformed BrepArray: truncated NURBS curve metadata");
+                    return false;
+                }
                 {
                     m_lWireEdgeBSplineCurve3d_ControlVerticesCount += rArrays.m_sWireEdge_CurveNurb_VertexCountArray[iNurbIdx];
                     m_lWireEdgeBSplineCurve3d_KnotCount += rArrays.m_sWireEdge_CurveNurb_VertexCountArray[iNurbIdx] +
@@ -1226,7 +1386,23 @@ bool UsdBrepArraySpans::SetStartsAndCountsForBrepIndex(
             }
         } // end iter every WireEdge
 
+        // As for edges: VertexCount is the number of distinct vertices referenced.
+        for (uint32_t iLocal = m_lVertexCount; iLocal < bVertexReference.size(); iLocal++)
+        {
+            if (bVertexReference[iLocal])
+            {
+                USDBREP_ERROR("Malformed BrepArray: vertex index out of range");
+                return false;
+            }
+        }
+
         // Vertices
+        if (!IsSpanInRange(rArrays.m_sVertexPointTypeArray, m_lVertexStartIndex, m_lVertexCount) ||
+            !IsSpanInRange(rArrays.m_sVertex_PointPositionArray, m_lVertexStartIndex, m_lVertexCount))
+        {
+            USDBREP_ERROR("Malformed BrepArray: truncated vertex data");
+            return false;
+        }
         for (uint32_t iGlobal = m_lVertexStartIndex, iLocal = 0; iLocal < m_lVertexCount; iGlobal++, iLocal++)
         {
             // accumulate shape data counts

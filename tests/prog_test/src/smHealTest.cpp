@@ -851,6 +851,8 @@ static SmStatus my_test_healer_continues_after_pole_split_failure()
           SmTriedLinkType eResult = pProps->m_eBeenThroughSplitEdgesAtSeam;
           bReportedFailure |= pProps->m_pFace == pFaces[0] && eResult == SM_TRY_NOFIX;
           bReportedSuccess |= pProps->m_pFace == pFaces[1] && eResult == SM_TRY_FIXED;
+          pProps->ReSet(SM_PROPSTAGE_4);
+          if(pProps->m_eBeenThroughSplitEdgesAtSeam != eResult) { return SM_ERR; }
           pProps->ReSet(SM_PROPSTAGE_3);
           if(pProps->m_eBeenThroughSplitEdgesAtSeam != eResult) { return SM_ERR; }
         }
@@ -1059,7 +1061,7 @@ static SmStatus my_test_pole_crossing_endpoint_tolerances()
         pFar->SetTolerance(SmZoneTol3d(1e-7), FALSE);
         for(ULONG lEdge=0; lEdge<2; ++lEdge)
           { pEdges[lEdge]->SetTolerance(SmZoneTol3d(1e-7), FALSE); }
-        SmFaceProps sProps(&sContext);
+        SmFaceProps sProps(pFace,0,&sContext);
         SER(sProps.SetProps_Stage2(pFace, 0, SM_HO_CACHE_FACEPROPS_2));
         SmBooleanUL bCrossing = lCase == 1;
         if(sProps.m_bBadCrossedPole != bCrossing) { return SM_ERR; }
@@ -1366,6 +1368,207 @@ static SmStatus my_test_torus_seams_with_vertex_loops()
   return SM_SUCCESS;
 }
 
+/*******************************************************************//**
+PURPOSE: Copy face properties with nonempty U/V seam-touch lists safely.
+***********************************************************************/
+static SmStatus my_test_faceprops_copy_seam_touches()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_faceprops_copy_seam_touches"));
+  SmContext   sContext;
+  SmFaceProps sProps(&sContext);
+  SmTArray<SmTouchData> *apLists[4] =
+    { &sProps.m_sRawTouchListU, &sProps.m_sDoneTouchListU,
+      &sProps.m_sRawTouchListV, &sProps.m_sDoneTouchListV };
+  // Exercise each copy loop with a different nonzero size. No classification
+  // is needed: the failure is in copying the already-cached touch records.
+  for(ULONG lList=0; lList<4; ++lList)
+    {
+      for(ULONG lTouch=0; lTouch<=lList; ++lTouch)
+        {
+          SmTouchData sTouch;
+          sTouch.m_pConnectedTo    = NULL;
+          sTouch.m_eLoopDir        = lTouch % 2 ? SM_CD_IN : SM_CD_OUT;
+          sTouch.m_lLoopIndx       = lList;
+          sTouch.m_dParam          = .25*lTouch;
+          sTouch.m_lPtClassifyIndx = lTouch;
+          sTouch.m_pPtClassify     = NULL;
+          apLists[lList]->Add(sTouch);
+        }
+    }
+
+  SmFaceProps sCopy(sProps);
+  AERN_MSG(sCopy == sProps,SM_ERR,_T("Copy construction must preserve all seam-touch properties"));
+  sCopy.ReSet(SM_PROPSTAGE_2);
+  sCopy = sProps;
+  AERN_MSG(sCopy == sProps,SM_ERR,_T("Assignment must restore seam-touch properties after a reset"));
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: Reset cached face properties and reproduce the same computed results.
+***********************************************************************/
+static SmStatus my_test_faceprops_reset()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_faceprops_reset"));
+  SmContext           sContext;
+  SmBrep             *pBrep = new(sContext) SmBrep();
+  SmObjDelete         sCleanup(pBrep);
+  SmPrimitiveCreation sPrimitive(pBrep->GetInfiniteRegion());
+  SER(sPrimitive.CreateBox(1.,1.,1.,SmAxis2Placement()));
+  SmTArray<SmFace*> sFaces;
+  pBrep->GetFaces(sFaces);
+  for(ULONG lFace=0; lFace<sFaces.GetSize(); ++lFace)
+    {
+      SmFaceProps sProps(sFaces[lFace],lFace,&sContext);
+      SER(sProps.SetProps(SM_PROPSTAGE_4,sFaces[lFace],lFace,SM_HO_ALL));
+      AERN(sProps.m_pLooptreeRoot != NULL && sProps.m_sLoopProps.GetSize() == 1,SM_ERR);
+      SmLoopProps sExpectedLoop = sProps.m_sLoopProps[0];
+      ULONG       lClosedLoops  = sProps.m_lClosedLoopCnt;
+      ULONG       lOuterLoops   = sProps.m_lOuterLoopCnt;
+      SmBoolean   bProblems     = sProps.HasProblems();
+
+      // Exercise the cache reset API directly; do not prescribe where the
+      // healer runs property collection or any repair operation.
+      const SmPropStageType aeResets[2] = {SM_PROPSTAGE_4,SM_PROPSTAGE_3};
+      for(ULONG lReset=0; lReset<2; ++lReset)
+        {
+          sProps.ReSet(aeResets[lReset]);
+          AERN(!sProps.HasProps(SM_PROPSTAGE_4,sFaces[lFace]) && sProps.m_pLooptreeRoot == NULL,SM_ERR);
+          if(aeResets[lReset] == SM_PROPSTAGE_4)
+            {
+              AERN(sProps.m_sLoopProps.GetSize() == 1,SM_ERR);
+              const SmLoopProps &crRetained = sProps.m_sLoopProps[0];
+              AERN(crRetained.m_cpLoop == sExpectedLoop.m_cpLoop,SM_ERR);
+              AERN(crRetained.m_bClosed3d == sExpectedLoop.m_bClosed3d,SM_ERR);
+              AERN(crRetained.m_bClosedPtrs == sExpectedLoop.m_bClosedPtrs,SM_ERR);
+              AERN(sProps.m_lClosedLoopCnt == lClosedLoops,SM_ERR);
+              AERN(crRetained.m_eContainmentType == SM_CMT_UNKNOWN,SM_ERR);
+              AERN(crRetained.m_eLoopOrient == SM_OT_UNKNOWN && crRetained.m_eDesiredLoopOrient == SM_OT_UNKNOWN,SM_ERR);
+            }
+          else
+            {
+              AERN(!sProps.HasProps(SM_PROPSTAGE_3,sFaces[lFace]),SM_ERR);
+              AERN(sProps.m_sLoopProps.GetSize() == 0 && sProps.m_lClosedLoopCnt == SM_UNDEF_ULONG,SM_ERR);
+              AERN(sProps.m_lBadClosed3d_LoopCnt == SM_UNDEF_ULONG && sProps.m_lBadClosedPtr_LoopCnt == SM_UNDEF_ULONG,SM_ERR);
+            }
+          SER(sProps.SetProps(SM_PROPSTAGE_4,sFaces[lFace],lFace,SM_HO_ALL));
+          AERN(sProps.m_pLooptreeRoot != NULL && sProps.m_sLoopProps.GetSize() == 1,SM_ERR);
+          AERN(sProps.m_sLoopProps[0] == sExpectedLoop,SM_ERR);
+          AERN(sProps.m_lClosedLoopCnt == lClosedLoops && sProps.m_lOuterLoopCnt == lOuterLoops,SM_ERR);
+          AERN(sProps.HasProblems() == bProblems,SM_ERR);
+        }
+    }
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: Continue caching healthy faces after another face cannot be classified.
+***********************************************************************/
+static SmStatus my_test_faceprops_failure_isolation()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_faceprops_failure_isolation"));
+  SmContext           sContext;
+  SmBrep             *pBrep = new(sContext) SmBrep();
+  SmObjDelete         sCleanup(pBrep);
+  // Separate patches keep malformed boundaries independent of healthy faces.
+  for(ULONG lFace=0; lFace<6; ++lFace)
+    {
+      double            dX = 3.0*lFace;
+      SmBSplineSurface *pSurface = NULL;
+      SmFace           *pFace = NULL;
+      SER(SmBSplineSurface::CreateBilinearSurface
+        (sContext,             // in : allocation context
+         SmPoint3d(dX,0,0),    // in : U minimum, V minimum corner
+         SmPoint3d(dX+1,0,0),  // in : U maximum, V minimum corner
+         SmPoint3d(dX,1,0),    // in : U minimum, V maximum corner
+         SmPoint3d(dX+1,1,0),  // in : U maximum, V maximum corner
+         pSurface));          // out: independent planar patch
+      SER(pBrep->CreateFaceFromSurface(pSurface,pSurface->GetNaturalUVDomain(),pFace));
+    }
+  SmHealData sHealData;
+  SER(sHealData.HealBrep(pBrep,SM_HO_ALL));
+  AERN_MSG(sHealData.m_sTgtFaceProps.GetSize() == 6,SM_ERR,_T("Expected six independent faces before testing property failure recovery"));
+
+  SmFace *apFailedFaces[2] = {sHealData.m_sTgtFaceProps[0]->m_pFace,sHealData.m_sTgtFaceProps[5]->m_pFace};
+  SmLoop *apDetachedLoops[2];
+  for(ULONG lFace=0; lFace<2; ++lFace)
+    {
+      SmTArray<SmLoop*> sLoops;
+      apFailedFaces[lFace]->GetLoops(sLoops);
+      AERN_MSG(sLoops.GetSize() == 1,SM_ERR,_T("Expected one boundary loop on each patch"));
+      apDetachedLoops[lFace] = sLoops[0];
+    }
+  for(ULONG lFace=0; lFace<sHealData.m_sTgtFaceProps.GetSize(); ++lFace)
+    { sHealData.m_sTgtFaceProps[lFace]->ReSet(SM_PROPSTAGE_4); }
+
+  // Faces without loops produce an ordinary classification error. Put them
+  // at both ends of the target list to exercise removal during iteration.
+  for(ULONG lFace=0; lFace<2; ++lFace)
+    { SER(apFailedFaces[lFace]->RemoveLoop(apDetachedLoops[lFace])); }
+  SmBoolean bNewProblems = FALSE;
+  SmStatus  sRtn = sHealData.Cache_FaceProps_Stage4(pBrep,&bNewProblems,SM_HO_CACHE_FACEPROPS_4);
+  // Restore ownership before checking the result or destroying the brep.
+  for(ULONG lFace=0; lFace<2; ++lFace)
+    { SER(apFailedFaces[lFace]->InsertLoop(apDetachedLoops[lFace])); }
+  SER(sRtn);
+
+  AERN_MSG(bNewProblems && sHealData.m_sNotYetFaceProps.GetSize() == 2,SM_ERR,_T("Failed faces must be retained for diagnostics"));
+  AERN_MSG(sHealData.m_sTgtFaceProps.GetSize() == 4,SM_ERR,_T("Only the healthy faces should remain active"));
+  for(ULONG lFace=0; lFace<sHealData.m_sTgtFaceProps.GetSize(); ++lFace)
+    {
+      SmFaceProps *pProps = sHealData.m_sTgtFaceProps[lFace];
+      AERN_MSG(pProps->HasProps(SM_PROPSTAGE_4,pProps->m_pFace) && !pProps->HasProblems(12),SM_ERR,_T("Healthy faces must finish classification after another face fails"));
+    }
+  for(ULONG lFace=0; lFace<sHealData.m_sNotYetFaceProps.GetSize(); ++lFace)
+    {
+      SmFaceProps *pProps = sHealData.m_sNotYetFaceProps[lFace];
+      AERN_MSG(pProps->m_eNotYetFaceType == SM_HNF_PROPERTY_CALC_FAILED,SM_ERR,_T("Failed property calculations must have a diagnostic reason"));
+      AERN_MSG(!pProps->HasProps(SM_PROPSTAGE_4,pProps->m_pFace),SM_ERR,_T("Failed classification must not publish completed properties"));
+    }
+  AERN_MSG(sHealData.m_sBadFaceProps_LoopProblems.GetSize() == 0,SM_ERR,_T("Incomplete properties must not create loop problem entries"));
+  AERN_MSG(sHealData.m_sBadFaceProps_OrientLoop.GetSize() == 0 && sHealData.m_sBadFaceProps_NoArea_Loop.GetSize() == 0,SM_ERR,_T("Undefined counters must not create orientation or no-area problems"));
+  AERN_MSG(sHealData.m_sBadFaceProps_MultiOuterLoops.GetSize() == 0 && sHealData.m_sBadFaceProps_MissingPole.GetSize() == 0,SM_ERR,_T("Undefined counters must not create outer-loop or missing-pole problems"));
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: Healing a Brep read from an old native file merges every pair of
+         coincident vertices, whatever the process allocated before.
+
+NOTES: fillet_ts.smb gives each of its 9 unstitched faces its own corner
+       vertices: 34 vertices at 15 points within the healer's tolerance.
+       Each merge replaced the survivor's vertex props, and the later pairs
+       at that point were skipped unless the new props reused the old
+       address, so the read left exact duplicates and 17 to 21 vertices.
+***********************************************************************/
+static SmStatus my_test_read_merges_coincident_vertices()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_merges_coincident_vertices"));
+  SmContext   sContext;
+  SmBrep     *pBrep = new(sContext) SmBrep();
+  SmObjDelete sCleanBrep(pBrep);
+  SER(pBrep->ReadFromFile(sContext,_T("../../TestFiles/pt_TestFiles/Solids/fillet_ts.smb"),SM_ASCII));
+
+  // No two vertices are left within the healer's coincidence distance, the sum of their tolerances.
+  SmTArray<SmVertex*> sVertices;
+  pBrep->GetVertices(sVertices);
+  AERN_MSG(sVertices.GetSize() == 15,SM_ERR,_T("The 34 vertices must merge to the 15 distinct points"));
+  for(ULONG ii=0; ii<sVertices.GetSize(); ++ii)
+    {
+      for(ULONG jj=ii+1; jj<sVertices.GetSize(); ++jj)
+        {
+          double dGap    = sVertices[ii]->GetPoint().DistanceBetween(sVertices[jj]->GetPoint());
+          double dTolSum = (double)SmTol::GetZoneTol3d(sVertices[ii]) + (double)SmTol::GetZoneTol3d(sVertices[jj]);
+          AERN_MSG(dGap >= dTolSum,SM_ERR,_T("Coincident vertices must be merged"));
+        }
+    }
+
+  SmAssertArray sReports;
+  SER(pBrep->ValidatePointers(&sReports));
+  AERN(sReports.GetSize() == 0,SM_ERR);
+  return SM_SUCCESS;
+}
+
 SmStatus my_test_healing()
 {
   // Run every independent test and retain the first failure in either build mode.
@@ -1374,6 +1577,9 @@ SmStatus my_test_healing()
   MYPRINTF(_T("\n********** Entered: my_test_healing"));
 
   PT_RUN(sResult, my_test_heal_infinite_region_with_plausible_void_flags());
+  PT_RUN(sResult,my_test_faceprops_reset());
+  PT_RUN(sResult,my_test_faceprops_copy_seam_touches());
+  PT_RUN(sResult,my_test_faceprops_failure_isolation());
 
   // Seam completion, degenerate boundaries, and stability through another pass.
   PT_RUN(sResult, my_test_missing_seams_from_loop_orientation());
@@ -1382,6 +1588,9 @@ SmStatus my_test_healing()
   PT_RUN(sResult, my_test_heal_single_vertex_sphere());
   PT_RUN(sResult, my_test_heal_vertex_only_closed_surfaces());
   PT_RUN(sResult, my_test_closed_face_containment_repeated());
+
+  // Coincident vertices of a read Brep merge whatever the heap holds.
+  PT_RUN(sResult, my_test_read_merges_coincident_vertices());
 
   // Surface-pole detection, edge splitting, and continuation after a failed repair.
   PT_RUN(sResult, my_test_healer_splits_boundary_at_pole());

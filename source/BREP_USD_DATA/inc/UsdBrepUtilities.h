@@ -63,6 +63,6 @@ USDBREP_EXPORT pxr::SdfAttributeSpecHandle setMultiAppliedAttributeSpec(
     bool custom = false
 );
 
-}; // end namespace UsdBrepData
+} // end namespace UsdBrepData
 
 #endif // no _USD_BREP_UTILITIES_H_

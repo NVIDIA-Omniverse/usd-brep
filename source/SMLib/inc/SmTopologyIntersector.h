@@ -128,6 +128,10 @@ public:
   SmBoolean   m_bDoingFillets;           // TRUE = change coincident edge and vertex handling in SmCurveClassification for fillets (adds Fillet Data to SmCurveClass objs)
                                          // FALSE= Normal behavior used by Booleans and every other package.
                                          //   default:[FALSE]
+  double      m_dCaptureDistance;        // > 0 = distance within which IntersectInsertRelate() collects intersection
+                                         //       points and curves into one proto vertex or proto edge. ManifoldBoolean
+                                         //       sets it for each operation and restores it on return.
+                                         //   default:[0.0] = 0.01, or 2000 times the tolerance when that is larger
 
   // algorithm state
   SmBoolean   m_bTopologyDeleted;        // TRUE = some topological objects have been
@@ -423,6 +427,9 @@ public:
     double   GetThisApproxTol3d() const  { SM_ASSERT_TOL(m_dThisApproxTol3d) ; return m_dThisApproxTol3d; }
 
     double   GetThisAngTolRad()   const  { SM_ASSERT_TOL(m_dThisAngTolRad) ; return m_dThisAngTolRad; }
+
+    // distance within which intersection points and curves are collected into the same proto topology
+    double   GetCaptureDistance() const;
 
     void SetPrimaryBrep    (SmBrep *pBrep)           { m_pBrep            = pBrep;  }
 

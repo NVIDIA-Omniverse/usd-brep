@@ -116,7 +116,7 @@ breps = sm.usd.import_breps("out.usda")
 Common docstring contracts for BRep operations are listed below. Consult the individual operation
 for exceptions and ownership details:
 
-- **`Pure: returns new <type>; inputs unchanged.`** — read-only producer. The result is a fresh handle; inputs survive untouched. Examples: `create_box`, `create_sphere`, `linear_sweep`, `offset_brep`, `shell_brep`, `tessellate`.
+- **`Pure: returns new <type>; inputs unchanged.`** — read-only producer. The result is a fresh handle; inputs survive untouched. Examples: `create_box`, `create_sphere`, `linear_sweep`, `shell_brep`, `tessellate`.
 - **`Consumes: <args>; returns new Brep.`** — ownership of the named inputs transfers to the operation; use only the returned Brep afterward. The result can reuse the modified primary operand, so a fresh allocation is not guaranteed. Examples: `boolean_union`, `boolean_difference`, `merge_breps`.
 - **`Mutates: <arg>; returns the same handle for chaining.`** — modifies the first argument in place *and* returns it, so calls compose: `box = sm.fillet_edges(sm.translate(box, (0, 0, 5)), edges, radius=0.5)`. Examples: `fillet_edges`, `cut`, `translate`, `rotate`, `heal_brep`. The mutator variant `Mutates: <arg>; returns (handle, ...diagnostics) for chaining.` returns a tuple with the handle first plus a few report values (e.g. `stitch_into_solid`, `unify_normals`); destructure as `brep, *diag = sm.stitch_into_solid(brep, ...)`.
 

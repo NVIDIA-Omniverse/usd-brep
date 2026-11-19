@@ -10,17 +10,17 @@
 #define _USD_BREP_CONFIG_H_
 
 #if defined(_WIN32)
-#    ifdef USDBREP_ENABLE_EXPORTS
-#        define USDBREP_EXPORT __declspec(dllexport)
-#    else // no USDBREP_ENABLE_EXPORTS
-#        define USDBREP_EXPORT __declspec(dllimport)
-#    endif // no USDBREP_ENABLE_EXPORTS
+#ifdef USDBREP_ENABLE_EXPORTS
+#define USDBREP_EXPORT __declspec(dllexport)
+#else // no USDBREP_ENABLE_EXPORTS
+#define USDBREP_EXPORT __declspec(dllimport)
+#endif // no USDBREP_ENABLE_EXPORTS
 #else // no _WIN32
-#    ifdef USDBREP_ENABLE_EXPORTS
-#        define USDBREP_EXPORT __attribute__((visibility("default")))
-#    else
-#        define USDBREP_EXPORT
-#    endif
+#ifdef USDBREP_ENABLE_EXPORTS
+#define USDBREP_EXPORT __attribute__((visibility("default")))
+#else
+#define USDBREP_EXPORT
+#endif
 #endif // no _WIN32
 
 #endif // no _USD_BREP_CONFIG_H_

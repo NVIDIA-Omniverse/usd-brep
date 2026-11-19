@@ -96,7 +96,8 @@ brep = sm.trim_surface_with_3d_curves(surface, curves_per_loop, curves)
 ### trim_project_parallel
 Project a curve onto the faces of a `Brep` or standalone `Surface` and trim, with options for keeping/deleting sides or splitting.
 
-- **Success:** the input is consumed and the result is returned as a new `Brep`.
+- **Success, Brep input:** the Brep is trimmed in place and returned as the same handle, left in an internal edit-enabled state.
+- **Success, standalone Surface input:** the surface is consumed into a new `Brep`, which is returned.
 - **Failure, Brep input:** the call raises; the Brep stays with the caller but may be partially trimmed.
 - **Failure, standalone Surface input:** the call raises. If the kernel trim itself fails, the surface stays attached to an internal Brep that is not freed.
 - **Rejected inputs:** a standalone surface with a zero `projection_dir`, or a surface owned by a Brep face (transform or trim the owning Brep instead). The call raises before trimming and the input is untouched.

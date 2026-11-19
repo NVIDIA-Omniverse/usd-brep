@@ -178,6 +178,31 @@ static SmStatus sm_FindPositionFromPCs
 } // end static sm_FindPositionFromPCs
 
 /*******************************************************************//**
+PURPOSE: Static helper: TRUE when two VertexDefinition positions are
+         close enough to be one vertex.
+
+USAGE NOTES----
+   SmProtoVertex::AddVertexDefinition() and
+   SmProtoTopologyManager::CanCombineVertexDefinitions() both use this,
+   so a VertexDefinition is only reused for a point that Resolve()
+   would combine with it.
+
+   The tightest logical tolerance causes problems, so the summed
+   tolerances are scaled; 4.0 is not quite enough.
+   [Reg_091215_s....; Reg_091215_s...._closed]
+***********************************************************************/
+static SmBoolean sm_AreVertexDefinitionPositionsCombinable
+ (const SmPoint3d & crPos1, // in : 1st VertexDefinition position
+  double            dTol1,  // in : 1st VertexDefinition tolerance, used as a ZoneTol3d
+  const SmPoint3d & crPos2, // in : 2nd VertexDefinition position
+  double            dTol2)  // in : 2nd VertexDefinition tolerance, used as a ZoneTol3d
+{
+  static constexpr double sdTolFactor = 5.0;
+  return ( crPos1.DistanceBetween( crPos2) <= sdTolFactor * ( dTol1 + dTol2 )) ? TRUE : FALSE ;
+
+} // end static sm_AreVertexDefinitionPositionsCombinable
+
+/*******************************************************************//**
 PURPOSE: Static helper: Classify a uv position against two Faces.
 
 USAGE NOTES---- 
@@ -1928,11 +1953,17 @@ SmBoolean SmProtoVertex::ContainsPoint( const SmPoint3d &crPosition )
 PURPOSE: Return VertexDefinition matching Tgt Brep1/Brep2 SrcTopo objs
          or NULL for none
 
-USAGE NOTES---- 
+USAGE NOTES----
+   With pOptPos, the VertexDefinition must also be close enough to
+   combine with a point at pOptPos (sm_AreVertexDefinitionPositionsCombinable).
+   A ProtoVertex collects points within the CaptureDistance, and an Edge
+   can cross a Face at two of them; each needs its own VertexDefinition.
 ***********************************************************************/
 SmVertexDefinition * SmProtoVertex::FindMatchingVertexDefinition
- (const SmTopology * pTopo1, // in : Brep1 SrcTopo for desired ProtoDefinition
-  const SmTopology * pTopo2) // in : Brep2 SrcTopo for desired ProtoDefinition
+ (const SmTopology * pTopo1,  // in : Brep1 SrcTopo for desired ProtoDefinition
+  const SmTopology * pTopo2,  // in : Brep2 SrcTopo for desired ProtoDefinition
+  const SmPoint3d  * pOptPos, // in : position of the point to match, NULL to match SrcTopos only, default:[NULL]
+  double             dPosTol) // in : tolerance of the point at pOptPos, default:[0.0]
 {
   // locals
   ULONG ii ;
@@ -1943,7 +1974,10 @@ SmVertexDefinition * SmProtoVertex::FindMatchingVertexDefinition
     {
       SmVertexDefinition *pVD = m_sVertexDefinitions[ii];
       if(   pVD->GetSrcTopo( 1 ) == pTopo1
-         && pVD->GetSrcTopo( 2 ) == pTopo2)
+         && pVD->GetSrcTopo( 2 ) == pTopo2
+         && (   pOptPos == NULL
+             || sm_AreVertexDefinitionPositionsCombinable( pVD->GetPosition(), pVD->GetTolerance(),
+                                                           *pOptPos, dPosTol)))
         { return pVD; }
     }
 
@@ -2462,10 +2496,17 @@ SmStatus SmProtoVertex::AddVertexDefinition
   SmTopology * pTopo1 = SM_CAST_PTR( SmTopology, rPC1.GetObject()) ; NER(pTopo1) ;
   SmTopology * pTopo2 = SM_CAST_PTR( SmTopology, rPC2.GetObject()) ; NER(pTopo2) ;
 
-  // get VertexDefinition matching Tgt SrcTopo objs or NULL for none
-  SmVertexDefinition *pVD = this->FindMatchingVertexDefinition(pTopo1, pTopo2) ;
+  // position and tolerance a new VertexDefinition would get (see CreateVertexDefinition)
+  SmPoint3d sPos ;
+  double    dGap ;
+  SmBoolean bHavePos = ( sm_FindPositionFromPCs( rPC1, rPC2, sPos, dGap) == SM_SUCCESS ) ? TRUE : FALSE ;
+  double    dTol     = smos_3Max( (double)rPC1.GetTolerance(), (double)rPC2.GetTolerance(), (double)m_pProtoTopoMgr->GetTolerance()) ;
 
-  // no work - VertexDefintion with input Tgt SrcTopos already exists
+  // get VertexDefinition matching Tgt SrcTopo objs, and close enough to combine with
+  // the new point, or NULL for none
+  SmVertexDefinition *pVD = this->FindMatchingVertexDefinition(pTopo1, pTopo2, bHavePos ? &sPos : NULL, dTol) ;
+
+  // no work - VertexDefintion with input Tgt SrcTopos already exists at this point
   if(pVD != NULL) { // set output and return
       rpNewVD = pVD;
       return SM_SUCCESS;
@@ -5933,7 +5974,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
       SmBoolean bDebugMe = FALSE ;
       if(bDebugMe )
       {
-          TCHAR sBuff[SM_MAXSIZE];
+          TCHAR sBuff[SM_TBLOCK_SIZE];
           smos_sprintf( sBuff, _T( "ProtoVertex #%lu, VertexDefinition #0 \n" ), ii) ;
           smos_WriteBuffer( sBuff) ;
           SmVertex *pDBrep1Vtx1 = pVD1->GetFinalVertex( 1) ;  
@@ -5951,7 +5992,7 @@ SmStatus SmProtoTopologyManager::GlueCoincidentBrepVertices()
 #ifdef SM_DEBUG_CODE
           if(bDebugMe )
           {
-              TCHAR sBuff[SM_MAXSIZE];
+              TCHAR sBuff[SM_TBLOCK_SIZE];
               smos_sprintf( sBuff, _T( "ProtoVertex #%lu, VertexDefinition #%lu \n" ), ii, jj) ;
               smos_WriteBuffer( sBuff) ;
               SmVertex *pDBrep1Vtx2 = pVD2->GetFinalVertex( 1) ;
@@ -6413,19 +6454,9 @@ SmBoolean bDebugMe = FALSE;
     { return SM_SUCCESS; }
 
   // Check distance: if they're too far apart, we can't combine them.
-  // Use the same criteria as in CanCombineVertexDefinitions().
   // We were generous with tols while collecting (CaptureDistance), so we should test here.
-  // Unfortunately, if we use the tightest logical tolerance, this causes problems.
-  // We have to increase it somewhat.  4.0 is not quite enough.
-  // We should look closely into this.
-  // [Reg_091215_s....; Reg_091215_s...._closed]
-  static constexpr double sdTolFactor = 5.0;
-  SmPoint3d sPos1( pVD1->GetPosition()) ;
-  SmPoint3d sPos2( pVD2->GetPosition()) ;
-  double dDist = sPos1.DistanceBetween( sPos2) ;
-  double dTol  = pVD1->GetTolerance() + pVD2->GetTolerance(); // tolerance used as a ZoneTol3d
-  dTol *= sdTolFactor; // (ouch)
-  if(dDist > dTol )
+  if(! sm_AreVertexDefinitionPositionsCombinable( pVD1->GetPosition(), pVD1->GetTolerance(),
+                                                  pVD2->GetPosition(), pVD2->GetTolerance()) )
     { return SM_SUCCESS; }
 
   // They're both connected.  Since they're within tolerance, get rid of the ones
@@ -6972,7 +7003,7 @@ SmBoolean bDebugMe3=FALSE;
                                           SM_SR_ALL,             // in : SM_SR_SINGLE=get best solution, SM_SR_ALL=get all solutions                           
                                           sSols) ;                // out: array of problem solutions reported as curve parameter values                         
   if(eStat != SM_SUCCESS || sSols.GetSize() == 0 )
-    { return SM_SUCCESS; }
+    { return FALSE ; }
 
   // First idea that was causing problems
   //  // locals - new Topology

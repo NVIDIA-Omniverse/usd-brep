@@ -120,10 +120,10 @@ class SM_EXPORT SmLoopProps : public SmObjProps
   SmBoolean             m_bArea_Loop         = UNSURE ;         // set : [SetProps() from SmFaceProps::m_pCrvClassU and m_pCrvClassV]
                                                                 //       [checked against SmFace::ClassifyLoops() value - for lamina and singly periodic surfaces]
   
-  // Properties set later in SmFaceProps::SetProps_Stage3()
+  // Properties set later in SmFaceProps::SetProps_Stage4()
   //   Because - calc Containment uses ClassifyCrvs that transect the Face Domain XSecting many Loops at once,
   //             calc orient comes from those ClassifyCrv/Loop XSections
-  SmContainmentType     m_eContainmentType   = SM_CMT_UNKNOWN ; // set : [SmFaceProps::SetProps_Stage3() -> SmFace::ClassifyLoops()]
+  SmContainmentType     m_eContainmentType   = SM_CMT_UNKNOWN ; // set : [SmFaceProps::SetProps_Stage4() -> SmFace::ClassifyLoops()]
                                                                 // use : oneof: SM_CMT_OUTERLOOP,       // Area_Loop not contained by any other loops, contains all UVPoints 'inside' loop  
                                                                 //     :        SM_CMT_INNERLOOP,       // Area_Loop contained by another, excludes all UVPoints 'inside' loop
                                                                 //     :        SM_CMT_NESTEDLOOP_EVEN, // Area_Loop (invalid) nested in an InnerLoop with an even nesting depth (0,2,4) - healed to outer loops
@@ -131,9 +131,9 @@ class SM_EXPORT SmLoopProps : public SmObjProps
                                                                 //     :        SM_CMT_BOTLOOP,         // NoArea_Loop (invalid) contains all UVPoints in its upperdomain
                                                                 //     :        SM_CMT_TOPLOOP,         // NoArea_Loop (invalid) contains all UVPoints in its lowerdomain
                                                                 //     :        SM_CMT_WIRELOOP,        // A set of conneted Edgeuses without a closed portion.
-  SmOrientType          m_eLoopOrient        = SM_OT_UNKNOWN ;  // set : [SmFaceProps::SetProps_Stage3() -> SmFace::ClassifyLoops()]
-  SmOrientType          m_eDesiredLoopOrient = SM_OT_UNKNOWN ;  // set : [SmFaceProps::SetProps_Stage3() -> SmFace::ClassifyLoops()]
-  SmBoolean             m_bGoodOrient        = UNSURE ;         // set : [SmFaceProps::SetProps_Stage3() -> SmFace::ClassifyLoops()]
+  SmOrientType          m_eLoopOrient        = SM_OT_UNKNOWN ;  // set : [SmFaceProps::SetProps_Stage4() -> SmFace::ClassifyLoops()]
+  SmOrientType          m_eDesiredLoopOrient = SM_OT_UNKNOWN ;  // set : [SmFaceProps::SetProps_Stage4() -> SmFace::ClassifyLoops()]
+  SmBoolean             m_bGoodOrient        = UNSURE ;         // set : [SmFaceProps::SetProps_Stage4() -> SmFace::ClassifyLoops()]
 
  public:                
   // constructor and destructor
@@ -166,7 +166,7 @@ class SM_EXPORT SmLoopProps : public SmObjProps
   //                ::m_eDesiredLoopOrient ## m_bGoodOrient ##   
   // currently only called from SmFaceProps::SetProps_Stage3()
   //   where *  = properties set in SmLoopProps::SetProps()
-  //         ## = properties set later in SmFaceProps::SetProps_Stage3()
+  //         ## = properties set later in SmFaceProps::SetProps_Stage4()
   SmStatus SetProps(const SmLoop * cpLoop,              ///< [in] : tgt Loop                                                           <br>
                     SmFaceProps  & rFaceProps) ;        ///< [in] : Owner Face's FaceProps processed with SetProps_BeforeEdgeSplits()  <br>
 

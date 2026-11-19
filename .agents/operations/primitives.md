@@ -148,7 +148,7 @@ pyr = sm.create_pyramid((0, 0, 0), 10.0, 15.0)
 - **`create_partial_cone(origin, radius_base, radius_top, height, start_angle_deg, end_angle_deg)`** — conical sector
 - **`create_partial_cylinder(origin, radius, height, start_angle_deg, end_angle_deg)`** — cylindrical sector
 - **`create_partial_torus(origin, radius_major, radius_minor, start_angle_deg, end_angle_deg)`** — toroidal sector
-- **`create_cylindrical_box(origin, length, inside_radius, outside_radius, start_angle_deg, end_angle_deg)`** — wedge-shaped solid in cylindrical coordinates
+- **`create_cylindrical_box(origin, length, inside_radius, outside_radius, start_angle_deg, end_angle_deg)`** — hollow cylinder sector with caps
 - **`create_swung_primitive(xy_curves, xz_curves, scale=1.0)`** — surface of revolution from XY/XZ profiles
 - **`create_blend_primitive(brep, edge1, face1, edge2, face2, same_dir_curves=True)`** — G2 blend surface between two boundary edges on existing faces (uses stable `Edge` / `Face` handles)
 - **`create_skin_primitive(curves_per_profile, curves, degree=1, cap_ends=True)`** — pure loft from ordered

@@ -3148,6 +3148,9 @@ SmBoolean bDebugMe = FALSE ;
                           &SG,          // in : curP's stack
                           &SG) ;        // in : curQ's stack
 
+          // refresh CurrCrv knot locals - the in-place insertion freed the old knot array
+          N_CrvGetCPtsDegreeAndKnots(pCurrCrv, &nCurrCrv_CPtIndex, &pCurrCrv_CPts, &nCurrCrv_Degree, &nCurrCrv_KnotIndex, &pCurrCrv_Knts) ;
+
           // keep count     
           if(nNewKnts[ii] <= dBreak1 + nNearParamDist/2) { nCurrCrv_InReg1_KntCnt++ ; } // TODO: Different Reg1 definition than above. Resolve
           else                                           { nCurrCrv_InReg3_KntCnt++ ; }
@@ -4373,7 +4376,9 @@ SmStatus SmBSplineCurve::Scale
 /*******************************************************************//**
 PURPOSE: Scale a curve's knot vector to fit a given interval.
 
-NOTES: This function does not modify the shape of the curve.
+NOTES: Knots the scaling brings within tolerance of each other are healed, as in
+    the constructors, so a later copy leaves the curve unchanged.  Spans shorter
+    than the tolerance are merged, which can change the shape of the curve.
     This method is only available for users with NLib
     
 ***********************************************************************/
@@ -4384,6 +4389,7 @@ SmStatus SmBSplineCurve::ScaleKnotVector
   NL_CURVE * cur = GetOrCreateGwNurbPointer();
   Notify(SM_NO_PRE_EDIT, this, SM_NO_GET_OWNER(this), NULL);
   N_CrvReparam(cur, dIntervalMin, dIntervalMax);
+  sm_FixupKnotVector(cur->knt, SM_EFF_ZERO);
   Notify(SM_NO_POST_EDIT, this, SM_NO_GET_OWNER(this), NULL);
   return SM_SUCCESS;
 

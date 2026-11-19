@@ -131,13 +131,13 @@ SMAPI_EXPORT SmApiStatus SmApiCreatePyramid
 
 SMAPI_EXPORT SmApiStatus SmApiCreateCylindricalBox
 (
-    const SmVector3d& crOrigin,      ///< [in ]: Position of origin on Z axis at base                        <br>
-    double dLength,            ///< [in ]: Length along Z axis, greater than zero                       <br>
-    double dInsideRadius,      ///< [in ]: Inside radius from Z axis, greater than zero                <br>
-    double dOutsideRadius,     ///< [in ]: Outside radius from Z axis, greater than inside radius      <br>
-    double dStartAngleDeg,     ///< [in ]: Start angle from X axis in XY plane, degrees                <br>
-    double dEndAngleDeg,       ///< [in ]: End angle from X axis in XY plane, degrees                  <br>
-    SmBrep*& rpResult         ///< [out]: Resulting SmBrep                                            <br>
+    const SmVector3d& crOrigin,     ///< [in ]: Position of origin on Z axis at base                                                  <br>
+    double dLength,                 ///< [in ]: Length along Z axis, greater than zero                                                <br>
+    double dInsideRadius,           ///< [in ]: Inside radius from Z axis, greater than zero                                          <br>
+    double dOutsideRadius,          ///< [in ]: Outside radius from Z axis, greater than inside radius                                <br>
+    double dStartAngleDeg,          ///< [in ]: Start angle from X axis in XY plane, degrees                                          <br>
+    double dEndAngleDeg,            ///< [in ]: End angle; sweep in (0,360], dEndAngDeg - dStartAngDeg <= 360, else sweep is rejected <br>
+    SmBrep*& rpResult               ///< [out]: Resulting SmBrep                                                                      <br>
 );
 
 SMAPI_EXPORT SmApiStatus SmApiCreatePartialSphere
@@ -214,7 +214,7 @@ SMAPI_EXPORT SmApiStatus SmApiCreateOffsetProfile
 
 SMAPI_EXPORT SmApiStatus SmApiCreateBlendPrimitive
 (
-    SmBrep* pBrep,                      ///< [in ]: Brep containing the boundary edges                  <br>
+    SmBrep* pBrep,                      ///< [in/out]: Brep containing the boundary edges               <br>
     SmEdge* pEdge1,                     ///< [in ]: First boundary edge (start of blend)                <br>
     SmFace* pFace1,                     ///< [in ]: Target start blend surface                          <br>
     SmEdge* pEdge2,                     ///< [in ]: Second boundary edge (end of blend)                 <br>

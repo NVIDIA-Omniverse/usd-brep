@@ -221,7 +221,7 @@ SmStatus SmAttributeData::ReadIndexedAttributesFromDB
 
   // locals
   SmFileType eType = rDB.GetFileType();
-  ULONG lCnt;
+  ULONG lCnt = 0;
 
   // get number of attributes
   if (eType == SM_ASCII) 
@@ -248,7 +248,7 @@ SmStatus SmAttributeData::ReadIndexedAttributesFromDB
 
   // allocate an index for each attribute
   // rpAttributes = new(crContext) SmTArray<ULONG>(crContext);
-  rAttributes.SetSize(lCnt);
+  SER_MSG(rAttributes.SetSize(lCnt) == SM_BIG_ULONG ? SM_ERR_INVALID_INPUT : SM_SUCCESS, _T("Attribute count too big to allocate."));
   ULONG *pData = rAttributes.GetDataArray();
 
   // read the attribute index array
@@ -271,10 +271,11 @@ SmStatus SmAttributeData::ReadIndexedAttributesFromDB
     {
       ULONG lIndex = rAttributes[i];
 
-      // make room in rAllAttributes for every index value
-      if (rAllAttributes.GetSize() < lIndex+1) 
+      // make room in rAllAttributes for every index value; lIndex < SM_BIG_ULONG keeps lIndex+1 from wrapping to 0
+      if (rAllAttributes.GetSize() <= lIndex)
         {
-          rAllAttributes.SetSize(lIndex+1);
+          SER_MSG(lIndex < SM_BIG_ULONG && rAllAttributes.SetSize(lIndex+1) != SM_BIG_ULONG ? SM_SUCCESS : SM_ERR_INVALID_INPUT,
+                  _T("Attribute index too big to allocate."));
         }
 
       // allocate an attribute for every attribute index value
@@ -1630,19 +1631,11 @@ SmAttribute::~SmAttribute()
 /*******************************************************************/ /**
  PURPOSE: FS attribute clearing for SmAObject::ClearAttributes(). 
 
- NOTES:
+ NOTES: Goes through the virtual RemoveUser() for every owner, the last one
+        included, so a derived attribute learns of each owner it loses.
  ***********************************************************************/
 void SmAttribute::fromClearAttributes(SmAObject* pThis) {
-  if (m_vUsers.GetSize() != 1) {
-    RemoveUser(pThis);
-    return;
-  }
-  //(*mUsersMutex).lock();
-  m_vUsers.ReSet();
-  //(*mUsersMutex).unlock();
-	if (m_eBehavior != SM_AB_STANDALONE_COPY && m_eBehavior != SM_AB_STANDALONE_REFERENCE){
-		delete this;
-	}
+  RemoveUser(pThis);
 }
 
 

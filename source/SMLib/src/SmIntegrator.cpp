@@ -109,13 +109,15 @@ SmStatus SmIntegrator::IntegrateIt
     dY.Add(0.0);
     SmODEIntegrator sODE(sEval);
     ULONG lOK, lBad;
-    if (sODE.RungeKuttaODEIntegrate(dY,dA,dB,dDesiredAccuracy,
-        (dB-dA)/10.0,(dB-dA)/100000000.0,lOK,lBad) == SM_SUCCESS) {
+    SmStatus eODEStatus = sODE.RungeKuttaODEIntegrate(dY,dA,dB,dDesiredAccuracy,
+        (dB-dA)/10.0,(dB-dA)/100000000.0,lOK,lBad);
+    if (eODEStatus == SM_SUCCESS) {
         double dODEResult = dY[0];
         rdResult = dODEResult;
     }
     else {
         rdResult = 0.0;
+        SER(eODEStatus);
     }
 //#endif
     return SM_SUCCESS;

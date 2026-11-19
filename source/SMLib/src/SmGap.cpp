@@ -1903,7 +1903,7 @@ static constexpr ULONG lTgtCount = 0 ;
           // for every internal V value - NaturalInterval even stride sampling
           for(ii=2,jj=pThisGF->m_lSampleCntU+1;ii<pThisGF->m_lSampleCntV;ii++,jj++)
             {
-              sSampleNormalizedVals.SetAt(jj, (double)jj/(double)(pThisGF->m_lSampleCntV-1) ) ;
+              sSampleNormalizedVals.SetAt(jj, (double)(ii-1)/(double)(pThisGF->m_lSampleCntV-1) ) ;
             }
         } // end ThisGeometry is not BSpline Geometry branch
     } // end Scope to build sampling point normalized param values

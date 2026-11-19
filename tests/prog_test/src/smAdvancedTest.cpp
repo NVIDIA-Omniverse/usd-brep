@@ -2122,14 +2122,12 @@ PT_EXPORT SmStatus my_test_tsurface_regression()
 
 
 /*********************************************************
-PURPOSE ---
+PURPOSE --- Two curves of a Rhino model cross twice
 
-USER NOTES ---
+USER NOTES --- Used by my_test_cci_adv.
 *********************************************************/
-
-PT_EXPORT SmStatus my_test_cci_adv(void)
+static SmStatus my_test_cci_rhino_curves(void)
 {
-  MYPRINTF(_T("\nEntered my_test_cci_adv 1")) ;
     if (TRUE) {
         SmContext sContext;
         SmTArray<SmCurve*> sCurves;
@@ -2160,6 +2158,63 @@ PT_EXPORT SmStatus my_test_cci_adv(void)
         SM_ASSERT(lNumFound == 2);
     }
     return SM_SUCCESS;
+}
+
+/***********************************************************************
+PURPOSE --- Both crossings of curves that cross twice close together,
+            where they run nearly parallel, are found
+
+USAGE NOTES --- Used by my_test_cci_adv. The base rim of a cone, a circle of
+                radius 0.122, and the intersection of the base with a torus of
+                minor radius 0.01 whose tube the rim runs 0.0001 inside, from
+                my_test_torus_cone_rim_crossings. They meet at about 10 degrees
+                and cross twice, 0.0033 apart. The usual Newton starts all
+                failed in the pair of spans holding the first crossing, so only
+                the second was found. Both must be found, each on both curves.
+***********************************************************************/
+static SmStatus my_test_cci_rim_crossings(void)
+{
+  MYPRINTF(_T("\n********** Entered: my_test_cci_rim_crossings")) ;
+  SmContext              sContext;
+  SmTArray<SmCurve*>     sCurves;
+  SmObjsDelete<SmCurve*> sCleanCurves(&sCurves);
+  SmTArray<SmSurface*>   sSurfaces;
+  SmTArray<SmBrep*>      sBreps;
+  SmTArray<long>         sBooleanTrees;
+  SER(SmBrepData::ReadPartFromFile(sContext, _T("../../TestFiles/pt_TestFiles/cci_torus_cone_rim.smp"),
+                                   sCurves, sSurfaces, sBooleanTrees, sBreps, SM_ASCII));
+  AERN(sCurves.GetSize() == 2 && sSurfaces.GetSize() == 0 && sBreps.GetSize() == 0, SM_ERR);
+
+  SmSolutionArray sSolutions;
+  SER(sCurves[0]->GlobalCurveIntersect(sCurves[0]->GetNaturalInterval(), *sCurves[1],
+                                       sCurves[1]->GetNaturalInterval(), SM_ZONE_TOL_3D, sSolutions));
+  AERN_MSG(sSolutions.GetSize() == 2, SM_ERR, _T("Both crossings, 0.0033 apart, must be found"));
+  SmPoint3d sCrossings[2];
+  for (ULONG ii = 0; ii < 2; ii++)
+    {
+      SmPoint3d sOnRim;
+      SER(sCurves[0]->EvaluatePoint(sSolutions[ii].m_vStart[0], sCrossings[ii]));
+      SER(sCurves[1]->EvaluatePoint(sSolutions[ii].m_vStart[1], sOnRim));
+      AERN(sCrossings[ii].DistanceBetween(sOnRim) <= SM_ZONE_TOL_3D, SM_ERR);
+    }
+  double dApart = sCrossings[0].DistanceBetween(sCrossings[1]);
+  AERN(dApart > 0.003 && dApart < 0.0036, SM_ERR);
+  return SM_SUCCESS;
+}
+
+/*********************************************************
+PURPOSE --- Advanced curve/curve intersection tests
+
+USER NOTES --- Runs every test and returns the first failure.
+*********************************************************/
+PT_EXPORT SmStatus my_test_cci_adv(void)
+{
+  // Run every independent test and retain the first failure in either build mode.
+  SmStatus sResult = SM_SUCCESS;
+  MYPRINTF(_T("\nEntered my_test_cci_adv 1")) ;
+  PT_RUN(sResult, my_test_cci_rhino_curves());
+  PT_RUN(sResult, my_test_cci_rim_crossings());
+  return sResult;
 }
 
 /***********************************************************************
@@ -4907,6 +4962,48 @@ SmStatus my_test_ssi_analytic()
 } // end my_test_ssi_analytic
 
 /***********************************************************************
+PURPOSE --- SmAllocator fails, rather than allocating a wrapped-around size,
+            when n * sizeof(T) overflows size_t.
+***********************************************************************/
+static SmStatus my_test_allocator_size_overflow()
+{
+  SmAllocator<double> sAllocator;
+  double * pData = NULL;
+  try { pData = sAllocator.allocate(SIZE_MAX / sizeof(double) + 1); }
+  catch (const std::bad_alloc &) {}
+  if (pData != NULL)
+    {
+      sAllocator.deallocate(pData, 1);
+      SER_MSG(SM_ERR, _T("SmAllocator allocated a size that overflows size_t"));
+    }
+  return SM_SUCCESS;
+} // end my_test_allocator_size_overflow
+
+/***********************************************************************
+PURPOSE --- SM_SPRINTF truncates to its destination array, rather than
+            writing up to SM_TBLOCK_SIZE characters past a smaller one.
+***********************************************************************/
+static SmStatus my_test_sprintf_truncates_to_destination()
+{
+  struct { TCHAR sDest[8]; TCHAR sGuard[8]; } sBuffs;
+  for (TCHAR & c : sBuffs.sGuard)
+    {
+      c = _T('#');
+    }
+  // A string's length is not known at compile time, so -Wformat-truncation does not fire.
+  const std::basic_string<TCHAR> sLong(31, _T('a'));
+
+  SM_SPRINTF(sBuffs.sDest, _T("%s"), sLong.c_str());
+  if (SM_STRLEN(sBuffs.sDest) != std::size(sBuffs.sDest) - 1)
+    { SER_MSG(SM_ERR, _T("SM_SPRINTF did not truncate to its destination")); }
+  for (TCHAR c : sBuffs.sGuard)
+    {
+      if (c != _T('#')) { SER_MSG(SM_ERR, _T("SM_SPRINTF wrote past its destination")); }
+    }
+  return SM_SUCCESS;
+} // end my_test_sprintf_truncates_to_destination
+
+/***********************************************************************
 PURPOSE --- Run all unit known unit tests
 
 USAGE NOTES ---
@@ -5004,6 +5101,8 @@ if ( cbiJavaOnly )
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve Properties\n"));
     PT_RUN(sResult, my_test_curve_properties());
+    MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Projected Curve Rotation Axes\n"));
+    PT_RUN(sResult, my_test_projected_curve_rotation_axes());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Angle Minimize\n"));
     PT_RUN(sResult, my_test_crv_angle_min());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Curve/Curve Directed Maximize\n"));
@@ -5049,6 +5148,8 @@ if ( cbiJavaOnly )
     PT_RUN(sResult, my_test_drop_curve());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - BSpline Surface Component Constructor\n"));
     PT_RUN(sResult, my_test_bspline_surface_component_ctor());
+    MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Sphere From Arcs\n"));
+    PT_RUN(sResult, my_test_sphere_from_arcs());
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Surface/Surface Solve Nurb\n"));
     PT_RUN(sResult, my_test_ss_nurb());
 
@@ -5065,6 +5166,9 @@ if ( cbiJavaOnly )
 
     MYPRINTF(_T("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& - Test Projection\n"));
     PT_RUN(sResult, my_test_projection());
+
+    PT_RUN(sResult, my_test_allocator_size_overflow());
+    PT_RUN(sResult, my_test_sprintf_truncates_to_destination());
 
   } // end smsurf_test file tests scope
 

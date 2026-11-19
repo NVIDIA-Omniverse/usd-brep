@@ -241,13 +241,15 @@ void bind_cut_project_trim(BoundModule& m)
     }, py::return_value_policy::reference,
        py::arg("object"), py::arg("curve"), py::arg("projection_dir"),
        py::arg("ref_point"), py::arg("trim_type") = SM_TT_KEEP_POINT,
-       "Consumes: object; returns new Brep.\n"
+       "Mutates: object if a Brep, returned as the same handle; a surface is consumed into a new Brep.\n"
        "\n"
        "Project a curve onto an object's faces and trim, keeping or splitting per option.\n"
        "\n"
        "Args:\n"
-       "    object: Brep or standalone surface to trim. Consumed on\n"
-       "        success; see Notes for failure.\n"
+       "    object: Brep or standalone surface to trim. A Brep is trimmed in\n"
+       "        place and returned as the same handle (left in an internal\n"
+       "        edit-enabled state); a surface is consumed and a new Brep is\n"
+       "        returned. See Notes for failure.\n"
        "    curve: B-spline curve to project. Typically a closed loop.\n"
        "    projection_dir: Projection direction as ``(dx, dy, dz)``.\n"
        "    ref_point: Reference point as ``(x, y, z)``. Used only when\n"

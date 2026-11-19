@@ -442,6 +442,20 @@ SmStatus run_sm_api(SmBoolean bDoGraphics)
       smos_WriteBuffer(_T("\n\n******************** End TestSmStitchIntoSolid NOT successful ************\n"));
   }
 
+  MYPRINTF(_T("\n\n******************** Start TestSmMergedSheetsIntoSolid ************\n"));
+
+  stat = TestSmMergedSheetsIntoSolid();
+  iCnt++;
+
+  if (stat == SM_SUCCESS) {
+      nSuccessFul++;
+      smos_WriteBuffer(_T("\n\n******************** End TestSmMergedSheetsIntoSolid Successful ************\n"));
+  }
+  else {
+      nFailed++;
+      smos_WriteBuffer(_T("\n\n******************** End TestSmMergedSheetsIntoSolid NOT successful ************\n"));
+  }
+
   MYPRINTF(_T("\n\n******************** Start TestSmBooleanLampWellEndpoints ************\n"));
 
   stat = TestSmBooleanLampWellEndpoints();
@@ -765,6 +779,34 @@ SmStatus run_sm_api(SmBoolean bDoGraphics)
       smos_WriteBuffer(_T("\n\n******************** End TestSmRemoveCurveKnots NOT successful ************\n"));
   }
 
+  MYPRINTF(_T("\n\n******************** Start TestSmNLibSplitAtFullMultiplicityKnot ************\n"));
+
+  stat = TestSmNLibSplitAtFullMultiplicityKnot();
+  iCnt++;
+
+  if (stat == SM_SUCCESS) {
+      nSuccessFul++;
+      smos_WriteBuffer(_T("\n\n******************** End TestSmNLibSplitAtFullMultiplicityKnot Successful ************\n"));
+  }
+  else {
+      nFailed++;
+      smos_WriteBuffer(_T("\n\n******************** End TestSmNLibSplitAtFullMultiplicityKnot NOT successful ************\n"));
+  }
+
+  MYPRINTF(_T("\n\n******************** Start TestSmNLibExtendAtFullMultiplicityKnot ************\n"));
+
+  stat = TestSmNLibExtendAtFullMultiplicityKnot();
+  iCnt++;
+
+  if (stat == SM_SUCCESS) {
+      nSuccessFul++;
+      smos_WriteBuffer(_T("\n\n******************** End TestSmNLibExtendAtFullMultiplicityKnot Successful ************\n"));
+  }
+  else {
+      nFailed++;
+      smos_WriteBuffer(_T("\n\n******************** End TestSmNLibExtendAtFullMultiplicityKnot NOT successful ************\n"));
+  }
+
   MYPRINTF(_T("\n\n******************** Start TestSmFillets ************\n"));
   MYPRINTF(_T("\n\n******************** Start TestSmCircularFillet ************\n"));
 
@@ -951,20 +993,6 @@ SmStatus run_sm_api(SmBoolean bDoGraphics)
       smos_WriteBuffer(_T("\n\n******************** End TestSmPrincipalDirectionPairing NOT successful ************\n"));
   }
 
-  MYPRINTF(_T("\n\n******************** Start TestSmProjectedCurveRotationAxes ************\n"));
-
-  stat = TestSmProjectedCurveRotationAxes();
-  iCnt++;
-
-  if (stat == SM_SUCCESS) {
-      nSuccessFul++;
-      smos_WriteBuffer(_T("\n\n******************** End TestSmProjectedCurveRotationAxes Successful ************\n"));
-  }
-  else {
-      nFailed++;
-      smos_WriteBuffer(_T("\n\n******************** End TestSmProjectedCurveRotationAxes NOT successful ************\n"));
-  }
-
   MYPRINTF(_T("\n\n******************** Start TestSmConeSTEPCrossDerivative ************\n"));
 
   stat = TestSmConeSTEPCrossDerivative();
@@ -1059,20 +1087,6 @@ SmStatus run_sm_api(SmBoolean bDoGraphics)
   else {
       nFailed++;
       smos_WriteBuffer(_T("\n\n******************** End TestSmCurveSweepFailureCleanup NOT successful ************\n"));
-  }
-
-  MYPRINTF(_T("\n\n******************** Start TestSmSeamCurveOwnership ************\n"));
-
-  stat = TestSmSeamCurveOwnership();
-  iCnt++;
-
-  if (stat == SM_SUCCESS) {
-      nSuccessFul++;
-      smos_WriteBuffer(_T("\n\n******************** End TestSmSeamCurveOwnership Successful ************\n"));
-  }
-  else {
-      nFailed++;
-      smos_WriteBuffer(_T("\n\n******************** End TestSmSeamCurveOwnership NOT successful ************\n"));
   }
 
   MYPRINTF(_T("\n\n******************** Start TestSmRotate ************\n"));

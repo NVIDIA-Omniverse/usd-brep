@@ -320,7 +320,7 @@ void SmLoopProps::ReSet()
 
 /*******************************************************************//**
 PURPOSE: Set all following SmLoopProps vals marked with '*'.
-           (Vals marked with '##' = props set later in SmFaceProps::SetProps_Stage3())
+           (Vals marked with '##' = props set later in SmFaceProps::SetProps_Stage4())
          set SmLoopProps::m_cpLoop *              m_tLoopuseType *
                         ::m_bVertexLoopOnPole *
                         ::m_lEdgeCnt *            m_lEdgeuseCnt *
@@ -331,10 +331,10 @@ PURPOSE: Set all following SmLoopProps vals marked with '*'.
                         ::m_eWindingOrientU *     m_eWindingOrientV *  - set to SM_OT_UNKNOWN for Loops that don't cross seams
                         ::m_bDegen_Loop * - NotYetDone       
                         ::m_bArea_Loop *          
-                        ::m_eContainmentType ##   m_eLoopOrient ##  - set later in SmFaceProps::SetProps_Stage3()      
+                        ::m_eContainmentType ##   m_eLoopOrient ##  - set later in SmFaceProps::SetProps_Stage4()
                         ::m_eDesiredLoopOrient ## m_bGoodOrient ##
            * = value set in SmLoopProps::SetProps
-           ## = value set later in SmFaceProps::SetProps_Stage3() 
+           ## = value set later in SmFaceProps::SetProps_Stage4()
 NOTES:     
 ***********************************************************************/
 SmStatus SmLoopProps::SetProps

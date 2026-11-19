@@ -383,7 +383,9 @@ partial = [r for r in results if r.ok and r.failed_face_count]
 **Returns:** a list of `MeshTessellationResult`, one per Brep in prim order: `prim_path`, `packed_index` (`None` for a prim that could not be read), `mesh_path` (`None` when no mesh), `ok`, `failed_face_count` (nonzero = partial mesh kept), `point_count`, `status_code` / `status_name`, `message`.
 
 **Design notes:**
-- Meshes are named **`tess_<prim>_<brep>`** under the default prim (or **`/Output`**); a name already in use gets a **`_<n>`** suffix, so existing prims are never overwritten. Each mesh is bound to the material of its Brep's brep-element `GeomSubset`, or else to the BrepArray's material.
+- Meshes are named **`tess_<prim>_<brep>`** under the default prim, or **`/World`** when there is no default prim. A missing `/World` is created as an `Xform`; an existing prim keeps its type. A mesh name already in use gets a **`_<n>`** suffix, so existing prims are never overwritten. Each mesh is bound to the material of its Brep's brep-element `GeomSubset`, or else to the BrepArray's material.
+- Following [USD Exchange's explicit-root approach](https://github.com/NVIDIA-Omniverse/usd-exchange/blob/3faf293720c8aa6854b92a16f492f4f8159cf494/source/core/library/StageAlgo.cpp#L96), an unusable parent produces a mesh failure instead of redirecting output to `/Output` or another root. Undefined, inactive, instanced or singular parents cannot hold the meshes. Inherited visibility and purpose are allowed when they preserve the source Brep's state; otherwise the affected mesh fails with a reason.
+- The input's `defaultPrim` metadata is preserved, including when absent. This operation augments an existing scene; assigning `/World` as a new default could exclude original sibling roots and their materials from references that omit a prim path. This differs deliberately from USD Exchange's `configureStage`, which explicitly configures a chosen default root for an authored asset.
 - Each mesh carries its Brep's world transform (default time), so it lands where the Brep is even under transformed parents; each instance of an instanced Brep gets its own mesh.
 - Each mesh also carries its Brep's computed visibility and purpose, since it is not under the Brep's ancestors.
 - The meshes are authored on the stage's session layer and merged into the written copy, so the input layer is never modified, even when the caller has it open.
@@ -410,9 +412,13 @@ C++: `SmApiUsdHealFile(pInputFile, pOutputFile, iThreadCount, rResults)` in `SmA
 - All or nothing: if any BrepArray fails, nothing is written, and the `RuntimeError` names each failure.
 - Rejected, because the result could not be written back faithfully: BRep geometry authored in a variant or composed from several layers or prim specs, GeomSubsets other than face or Brep material bindings, and purpose-specific subset material bindings. Material subsets must be authored entirely under the BRep's defining prim spec: overrides or additional subsets in consuming layers or internal-reference sites are rejected before publishing output, since rebuilding subset names/indices would invalidate those opinions. Array-level material overrides remain supported.
 
+### validate_geometry_file
+
+`sm.usd.validate_geometry_file(path, level=2)` runs `SmBrep::AssertValid` (levels 0-2, unhealed) on each BrepArray prim and returns a `GeometryValidationResult` (`prim_path`, `ok`, `failures` (strings), `message`) per prim, with prims that share instanced geometry checked once. An invalid Brep is a result; `RuntimeError` is for a bad level, an unreadable file or no BrepArray. C++: `SmApiUsdValidateGeometryFile` in `SmApiUsd.h`.
+
 ### Healing and validating on an open stage (C++)
 
-`SmApiUsdHeal.h` has the three steps `heal_file` is built on: `SmApiUsdFindBrepArraySites` (defining specs and any problem), `SmApiUsdHealBrepArray` (heal one prim without changing the stage; thread-safe; best effort) and `SmApiUsdWriteHealedBrepArray` (write at the spec in the root layer, which must be the edit target). Heal each site with no problem once, then write the results one at a time.
+`SmApiUsdHeal.h` has the three steps `heal_file` is built on: `SmApiUsdFindBrepArraySites` (defining specs and any problem; declared in `SmApiUsdBrepArraySites.h`), `SmApiUsdHealBrepArray` (heal one prim without changing the stage; thread-safe; best effort) and `SmApiUsdWriteHealedBrepArray` (write at the spec in the root layer, which must be the edit target). Heal each site with no problem once, then write the results one at a time.
 
 `SmApiUsdGeometryValidate.h` has `SmApiUsdGeometryValidate`: import one BrepArray prim without healing and run `SmBrep::AssertValid` on each Brep without changing the stage, as `brep_geometry_validator` does. It returns each failed check; an invalid Brep is not an error. Thread-safe while the stage is not modified.
 

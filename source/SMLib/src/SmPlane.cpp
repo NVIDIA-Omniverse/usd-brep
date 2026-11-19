@@ -3604,6 +3604,7 @@ SmStatus SmPlane::ReadFromDB
   SmPlane *pPlane =   (rpNewSurface == NULL)
                     ? new (crContext) SmPlane()
                     : (SmPlane *)rpNewSurface ;
+  SmObjDelete sPlaneCleanup(rpNewSurface == NULL ? pPlane : NULL) ; // delete a new plane on an error return
 
   // file type
   SmFileType     eType   =  rDB.GetFileType();
@@ -3661,6 +3662,7 @@ SmStatus SmPlane::ReadFromDB
   SER(SmBSplineSurface::ReadFromDB(SmBSplineSurface_TYPE, rDB, crContext, pSurface, lDBVersionNumber)) ;
 
   // all done
+  sPlaneCleanup.Clear() ;
   rpNewSurface = pPlane ; 
   return SM_SUCCESS;
 

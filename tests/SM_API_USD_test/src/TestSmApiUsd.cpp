@@ -769,7 +769,7 @@ static SmStatus TestHealBrepArray()
 //*************************************************************************
 static SmStatus TestGeometryValidate()
 {
-    const std::string sDir = "../../TestFiles/brep_validator/";
+    const std::string sDir = "../../TestFiles/usd_validator_TestFiles/";
     const pxr::SdfPath sPath("/World/brepArray");
     SmApiUsdGeometryResult result;
 
@@ -1378,7 +1378,7 @@ SmStatus TestSmApiUsdTessellateFileLeavesInputLayer()
 {
     if (SmApiUsdEnsurePluginRegistered() != SM_SUCCESS)
         return SM_ERR;
-    const std::string sInput = "../../TestFiles/brep_validator/CubeBrepArray.usda";
+    const std::string sInput = "../../TestFiles/usd_validator_TestFiles/CubeBrepArray.usda";
     const std::string sOutput = kOutputDir + "tessellate_file_held_input.usda";
     pxr::UsdStageRefPtr heldStage = pxr::UsdStage::Open(sInput);
     if (!heldStage)

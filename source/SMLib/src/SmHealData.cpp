@@ -40,10 +40,11 @@ NOTES: To Debug One Target Face through the heal sequence: (same for Target Edge
   static constexpr ULONG lDebugEdgeIndx   = SM_UNDEF_ULONG ; // SM_UNDEF_ULONG = No EdgeIndx     DebugBlock entries, else EdgeIndx   = enter debugBlocks automatically for EdgeIndx cases
   static constexpr ULONG lDebugVertexIndx = SM_UNDEF_ULONG ; // SM_UNDEF_ULONG = No VertexIndx   DebugBlock entries, else VertexIndx = enter debugBlocks automatically for VertexIndx cases
 
+  // bool, not SmBoolean: clang warns on a constant int operand of ||.
  ULONG GWC_SET_NEXT_3_LINES_TO___FALSE___BEFORE_RELEASE ;
-  static constexpr SmBoolean bDebugAllFaceIndxCalls   = FALSE ;
-  static constexpr SmBoolean bDebugAllEdgeIndxCalls   = FALSE ;
-  static constexpr SmBoolean bDebugAllVertexIndxCalls = FALSE ;
+  static constexpr bool      bDebugAllFaceIndxCalls   = false ;
+  static constexpr bool      bDebugAllEdgeIndxCalls   = false ;
+  static constexpr bool      bDebugAllVertexIndxCalls = false ;
   
 /*******************************************************************/
 SmBoolean SmDebugThisFaceIndex(ULONG lFaceIndx, SmBoolean bDebugThisIndxCall)     { if(lFaceIndx   == lDebugFaceIndx   && (bDebugThisIndxCall || bDebugAllFaceIndxCalls))
@@ -251,7 +252,7 @@ SmBoolean SmHealData::operator==( const SmHealData &crOther )
   bRtn &= m_lRanRegion_TestClosure_Cnt == crOther.m_lRanRegion_TestClosure_Cnt ;
   bRtn &= m_lFixRegion_SplitRegion_Cnt == crOther.m_lFixRegion_SplitRegion_Cnt ;
   
-  // Step: SmHealData::Cache_FaceProps_Stage3()
+  // Steps: SmHealData::Cache_FaceProps_Stage3()/Stage4()
   bRtn &= m_sBadFaceProps_LoopProblems       == crOther.m_sBadFaceProps_LoopProblems ;
   // Step: SmHealData::Fix_BadLoops()
                                                                                            
@@ -506,6 +507,8 @@ void SmHealData::ReSet
   
   // Step: SmHealData::Cache_FaceProps_Stage3()
 
+  // Step: SmHealData::Cache_FaceProps_Stage4()
+
   // Step: SmHealData::Fix_BadLoops()
 
   // Step: SmHealData::Fix_SplitFaceAtSeams()
@@ -613,16 +616,17 @@ void SmHealData::SetupEmptyProbArrays()
 
     // Step: SmHealData::Cache_FaceProps_Stage3()
     m_sBadFaceProps_LoopProblems.      Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_bBadLoopProblems) ;
-    m_sBadFaceProps_OuterLoopOrder.    Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_bBadOuterLoopOrder) ;
-    m_sBadFaceProps_OrientLoop.        Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadOrient_LoopCnt) ;
-    m_sBadFaceProps_NoArea_Loop.       Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadNoArea_LoopCnt) ;
+    m_sBadFaceProps_Closed3dLoop.      Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadClosed3d_LoopCnt) ;
+    m_sBadFaceProps_ClosedPtrLoop.     Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadClosedPtr_LoopCnt) ;
 
-    m_sBadFaceProps_MultiOuterLoops.   Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lOuterLoopCnt) ;
-    m_sBadFaceProps_NestedOuterLoops.  Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadNested_LoopCnt) ;
-    m_sBadFaceProps_UnpairedNoAreaLoop.Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_bBadUnpairedNoArea_Loop) ;
-    m_sBadFaceProps_Closed3dLoop.      Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadClosed3d_LoopCnt) ;  
-    m_sBadFaceProps_ClosedPtrLoop.     Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadClosedPtr_LoopCnt) ; 
-    m_sBadFaceProps_MissingPole.       Setup(SM_HO_CACHE_FACEPROPS_3, &SmFaceProps::m_lBadMissingPoles) ;       
+    // Step: SmHealData::Cache_FaceProps_Stage4()
+    m_sBadFaceProps_OuterLoopOrder.    Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_bBadOuterLoopOrder) ;
+    m_sBadFaceProps_OrientLoop.        Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_lBadOrient_LoopCnt) ;
+    m_sBadFaceProps_NoArea_Loop.       Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_lBadNoArea_LoopCnt) ;
+    m_sBadFaceProps_MultiOuterLoops.   Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_lOuterLoopCnt) ;
+    m_sBadFaceProps_NestedOuterLoops.  Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_lBadNested_LoopCnt) ;
+    m_sBadFaceProps_UnpairedNoAreaLoop.Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_bBadUnpairedNoArea_Loop) ;
+    m_sBadFaceProps_MissingPole.       Setup(SM_HO_CACHE_FACEPROPS_4, &SmFaceProps::m_lBadMissingPoles) ;
 
     // Step: SmHealData::Fix_SplitFaceAtSeams()
     m_sRanFaceProps_SplitFaceAtSeam.   Setup(SM_HO_FIX_SPLITFACE_ATSEAMS, &SmFaceProps::m_eBeenThroughSplitFacesAtSeam) ;
@@ -710,11 +714,14 @@ void SmHealData::SetupEmptyProbArrays()
     // Step: SmHealData::Fix_SplitEdgesAtSeam()                                                                         
     m_sRanFaceProps_SplitEdgesAtSeam.  SetLabels(_T("Faces sent through Fix_SplitEdgesAtSeam "), _T("                   "), _T("")) ;
                                                                                                                         
+    // Step: SmHealData::Cache_FaceProps_Stage3()
     m_sBadFaceProps_LoopProblems.      SetLabels(_T("All Faces with any Loop Problems        "), _T("ProbLoop FaceCnt   "), sBuffBad) ;
+    m_sBadFaceProps_Closed3dLoop.      SetLabels(_T("FaceLoop Edge EndPts not closed in 3d   "), _T("Bad 3d UnclosedLoop Face Cnt     "), sBuffBad) ;
+    m_sBadFaceProps_ClosedPtrLoop.     SetLabels(_T("FaceLoop Edge EndPtrs not a closed loop "), _T("Bad ptr UnclosedLoop Face Cnt    "), sBuffBad) ;
 
     // Step: SmHealData::Fix_BadSheets()
 
-    // Step: SmHealData::Cache_FaceProps_Stage3()
+    // Step: SmHealData::Cache_FaceProps_Stage4()
     m_sBadFaceProps_OuterLoopOrder.    SetLabels(_T("OuterLoop not 1st on Face LoopList      "), _T("Bad OuterLoop Face cnt           "), sBuffBad) ;
     m_sBadFaceProps_OrientLoop.        SetLabels(_T("LoopOrient-outer/inner Loop conflict    "), _T("Bad OrientedLoop Face cnt        "), sBuffBad) ;
     m_sBadFaceProps_NoArea_Loop.       SetLabels(_T("Loop fails to enclose an area in UVSpace"), _T("Bad NoAreaLoop Face cnt          "), sBuffBad) ;
@@ -722,8 +729,6 @@ void SmHealData::SetupEmptyProbArrays()
     m_sBadFaceProps_NestedOuterLoops.  SetLabels(_T("Nested OuterLoops on Face               "), _T("Bad nested OuterLoop Face cnt    "), sBuffBad) ;
 
     m_sBadFaceProps_UnpairedNoAreaLoop.SetLabels(_T("odd NoAreaLoopCnt on Face: no AddSeamFix"), _T("Bad unpaired NoAreaLoop Face Cnt "), sBuffBad) ;
-    m_sBadFaceProps_Closed3dLoop.      SetLabels(_T("FaceLoop Edge EndPts not closed in 3d   "), _T("Bad 3d UnclosedLoop Face Cnt     "), sBuffBad) ;
-    m_sBadFaceProps_ClosedPtrLoop.     SetLabels(_T("FaceLoop Edge EndPtrs not a closed loop "), _T("Bad ptr UnclosedLoop Face Cnt    "), sBuffBad) ;
     m_sBadFaceProps_MissingPole.       SetLabels(_T("Face contains an unmarked srf pole      "), _T("Bad Missing Vert on Pole Face Cnt"), sBuffBad) ;
 
     // Step: SmHealData::Fix_BadLoops()
@@ -960,7 +965,7 @@ ULONG SmHealData::GetVertexProps_ForTgts
 //   ULONG          lOptLabel)      // in : Optional numeric label for Debug reports, SM_UNDEF_LONG to ignore, default:[SM_UNDEF_LONG]
 // {
 //   const SmFace * cpTgtFace = pTgtFaceProps->m_pFace ;
-//   pTgtFaceProps->ReSet() ; // resets all SM_PROPSTAGE_GAPS, SM_PROPSTAGE_2, and SM_PROPSTAGE_3 values
+//   pTgtFaceProps->ReSet() ; // resets all SM_PROPSTAGE_GAPS, SM_PROPSTAGE_2, SM_PROPSTAGE_3, and SM_PROPSTAGE_4 values
 // 
 //   // limit the eThruHealerOp to the current SmHealData::m_eDoneHealOp value
 //   if(eThruHealerOp > m_eDoneHealOp)
@@ -993,7 +998,7 @@ ULONG SmHealData::GetVertexProps_ForTgts
 //     }
 // 
 //   // 3rd Get Stage of FaceProps Values 
-//   if(eThruHealerOp >= SM_HO_CACHE_FACEPROPS_3)
+//   if(eThruHealerOp >= SM_HO_CACHE_FACEPROPS_4)
 //     { 
 //       // sets: m_sLoopProps
 //       //       m_lClosedLoopCnt       m_lOuterLoopCnt          
@@ -1001,7 +1006,7 @@ ULONG SmHealData::GetVertexProps_ForTgts
 //       //       m_lBadNoArea_LoopCnt   m_lBadNested_LoopCnt     
 //       //       m_lBadMissingPoles     m_bBadUnpairedNoArea_Loop
 //       //       m_lBadClosed3d_LoopCnt m_lBadClosedPtr_LoopCnt
-//       pTgtFaceProps->SetProps(SM_PROPSTAGE_3, cpTgtFace, lFaceIndx, m_eDoneHealOp) ; 
+//       pTgtFaceProps->SetProps(SM_PROPSTAGE_4, cpTgtFace, lFaceIndx, m_eDoneHealOp) ;
 //     }
 // 
 // } // end SmHealData::RefreshFaceProps
@@ -1532,8 +1537,6 @@ SmStatus SmHealData::HealBrep
                                              //                                                                                                                  <br>
                                              //      SM_HO_FIX_DEGEN_EDGES,                    // Ran All Healer Steps thru SmHealData::Fix_DegenEdges()         <br>
                                              //                                                                                                                  <br>
-                                             //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        <br>
-                                             //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          <br>
                                              //                                                                                                                  <br>
                                              //      SM_HO_CACHE_MISSED_EDGEXSECTS, /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_MissedEdgeXSects() <br>
                                              //      SM_HO_FIX_MISSED_EDGEXSECTS,   /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_MissedEdgeXSects()   <br>
@@ -1548,6 +1551,9 @@ SmStatus SmHealData::HealBrep
                                              //      SM_HO_FIX_BADSHEETS,                      // Ran All Healer Steps thru SmHealData::Fix_BadSheets()          <br>
                                              //                                                                                                                  <br>
                                              //      SM_HO_CACHE_FACEPROPS_3,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage3() <br>
+                                             //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        <br>
+                                             //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          <br>
+                                             //      SM_HO_CACHE_FACEPROPS_4,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage4() <br>
                                              //                                                                                                                  <br>
                                              //      SM_HO_FIX_SPLITFACE_ATSEAMS,              // Ran All Healer Steps thru SmHealData::Fix_SplitFaceAtSeams()   <br>
                                              //      SM_HO_FIX_BADLOOPS,                       // Ran All Healer Steps thru SmHealData::Fix_BadLoops()           <br>
@@ -1740,8 +1746,6 @@ SmStatus SmHealData::HealTgts
                                              //                                                                                                                  <br>
                                              //      SM_HO_FIX_DEGEN_EDGES,                    // Ran All Healer Steps thru SmHealData::Fix_DegenEdges()         <br>
                                              //                                                                                                                  <br>
-                                             //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        <br>
-                                             //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          <br>
                                              //                                                                                                                  <br>
                                              //      SM_HO_CACHE_MISSED_EDGEXSECTS, /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_MissedEdgeXSects() <br>
                                              //      SM_HO_FIX_MISSED_EDGEXSECTS,   /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_MissedEdgeXSects()   <br>
@@ -1756,6 +1760,9 @@ SmStatus SmHealData::HealTgts
                                              //      SM_HO_FIX_BADSHEETS,                      // Ran All Healer Steps thru SmHealData::Fix_BadSheets()          <br>
                                              //                                                                                                                  <br>
                                              //      SM_HO_CACHE_FACEPROPS_3,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage3() <br>
+                                             //      SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()        <br>
+                                             //      SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()          <br>
+                                             //      SM_HO_CACHE_FACEPROPS_4,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage4() <br>
                                              //                                                                                                                  <br>
                                              //      SM_HO_FIX_SPLITFACE_ATSEAMS,              // Ran All Healer Steps thru SmHealData::Fix_SplitFaceAtSeams()   <br>
                                              //      SM_HO_FIX_BADLOOPS,                       // Ran All Healer Steps thru SmHealData::Fix_BadLoops()           <br>
@@ -1825,6 +1832,7 @@ SmStatus SmHealData::HealTgts
   SmBoolean bCache_MissedEdgeXSects_FoundNewProbs = FALSE;
   SmBoolean bCache_FaceProps_Stage2_FoundNewProbs = FALSE;
   SmBoolean bCache_FaceProps_Stage3_FoundNewProbs = FALSE;
+  SmBoolean bCache_FaceProps_Stage4_FoundNewProbs = FALSE;
 
 #ifdef SM_DEBUG_CODE
 // ULONG GWC_CHANGE_NEXT_LINE_TO_FALSE_BEFORE_RELEASE_AND_TRUE_HEAL_DEBUG ; 
@@ -2035,37 +2043,6 @@ SM_HEALSTEP_1ARG(Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_HO_
         }
 #endif // SM_DEBUG_CODE
 
-  // TODO: NotYet Implemented
-  // Find/Mend CoinEdges - a precondition for Get EdgeProps             
-  SM_HEALSTEP_1ARG(Cache_CoinEdges, &bCache_CoinEdges_FoundNewProbs, SM_HO_CACHE_COIN_EDGES)
-#ifdef SM_DEBUG_CODE
-      if(bCache_CoinEdges_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_COIN_EDGES))
-        { 
-          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_COIN_EDGES, Cache_CoinEdges);
-          if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinEdges detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
-          if(bDebugMe)
-            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_CoinEdges\n"), m_lRecursionCount, SM_HO_CACHE_COIN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
-              SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
-              SM__DRAW_FACES_AND_SURFACES
-              sm_GraphicsLoop() ;
-            }
-          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_COIN_EDGES, Cache_CoinEdges);
-        }
-#endif // SM_DEBUG_CODE
-                                                                        
-  // TODO: NotYet Implemented
-  SM_HEALSTEP_0ARG(Fix_CoinEdges, SM_HO_FIX_COIN_EDGES)
-#ifdef SM_DEBUG_CODE
-      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_COIN_EDGES))
-        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_COIN_EDGES, Fix_CoinEdges);
-          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_CoinEdges\n"), m_lRecursionCount, SM_HO_FIX_COIN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
-          SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
-          SM__DRAW_FACES_AND_SURFACES
-          sm_GraphicsLoop() ;
-          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_COIN_EDGES, Fix_CoinEdges);
-        }
-#endif // SM_DEBUG_CODE
-
   // Cache MissedEdgeXSects
   SM_HEALSTEP_1ARG(Cache_MissedEdgeXSects, &bCache_MissedEdgeXSects_FoundNewProbs, SM_HO_CACHE_MISSED_EDGEXSECTS)
 #ifdef SM_DEBUG_CODE
@@ -2180,7 +2157,7 @@ SM_HEALSTEP_1ARG(Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_HO_
 
   // Fix Edges Crossing Seams 
   //   - Split Edges at SeamCrossingPoints creating new ChildEdges and Vertices
-  //   - a precondition for SmHealData::Cache_FaceProps_Stage3() 
+  //   - a precondition for SmHealData::Cache_FaceProps_Stage3()
   SM_HEALSTEP_1ARG(Fix_SplitEdgesAtSeam, sMarkLock, SM_HO_FIX_SPLITEDGE_ATSEAM)
 #ifdef SM_DEBUG_CODE
       if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_SPLITEDGE_ATSEAM))
@@ -2212,12 +2189,11 @@ SM_HEALSTEP_1ARG(Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_HO_
   //   database errors waiting to be fixed.  As a rule try to build any following heal functions 
   //   so they don't use UVTrimCurves.
 
-  // Build FaceProps after splitting SeamCrossing Edges
-  //   - Builds LoopProps and finds Loop problems
+  // Collect individual loop facts before classifying containment.
   SM_HEALSTEP_1ARG(Cache_FaceProps_Stage3, &bCache_FaceProps_Stage3_FoundNewProbs, SM_HO_CACHE_FACEPROPS_3)
 #ifdef SM_DEBUG_CODE
       if(bCache_FaceProps_Stage3_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_3))
-        { 
+        {
           SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_FACEPROPS_3, Cache_FaceProps_Stage3);
           if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_FaceProps_Stage3 detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
           if(bDebugMe)
@@ -2227,6 +2203,54 @@ SM_HEALSTEP_1ARG(Cache_CoinVertices, &bCache_CoincVertices_FoundNewProbs, SM_HO_
               sm_GraphicsLoop() ;
             }
           SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_FACEPROPS_3, Cache_FaceProps_Stage3);
+        }
+#endif // SM_DEBUG_CODE
+
+  // TODO: NotYet Implemented
+  // Coincident-edge repair runs after loop facts and before containment.
+  SM_HEALSTEP_1ARG(Cache_CoinEdges, &bCache_CoinEdges_FoundNewProbs, SM_HO_CACHE_COIN_EDGES)
+#ifdef SM_DEBUG_CODE
+      if(bCache_CoinEdges_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_COIN_EDGES))
+        {
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_COIN_EDGES, Cache_CoinEdges);
+          if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_CoinEdges detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
+          if(bDebugMe)
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_CoinEdges\n"), m_lRecursionCount, SM_HO_CACHE_COIN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
+              SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
+              SM__DRAW_FACES_AND_SURFACES
+              sm_GraphicsLoop() ;
+            }
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_COIN_EDGES, Cache_CoinEdges);
+        }
+#endif // SM_DEBUG_CODE
+
+  // TODO: NotYet Implemented
+  SM_HEALSTEP_0ARG(Fix_CoinEdges, SM_HO_FIX_COIN_EDGES)
+#ifdef SM_DEBUG_CODE
+      if(bDebugMe && (m_eDoneHealOp >= SM_HO_FIX_COIN_EDGES))
+        { SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_FIX_COIN_EDGES, Fix_CoinEdges);
+          SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Fix_CoinEdges\n"), m_lRecursionCount, SM_HO_FIX_COIN_EDGES) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
+          SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
+          SM__DRAW_FACES_AND_SURFACES
+          sm_GraphicsLoop() ;
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_FIX_COIN_EDGES, Fix_CoinEdges);
+        }
+#endif // SM_DEBUG_CODE
+
+  // Classify containment from the completed individual loop facts.
+  SM_HEALSTEP_1ARG(Cache_FaceProps_Stage4, &bCache_FaceProps_Stage4_FoundNewProbs, SM_HO_CACHE_FACEPROPS_4)
+#ifdef SM_DEBUG_CODE
+      if(bCache_FaceProps_Stage4_FoundNewProbs && (m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_4))
+        {
+          SM_HEALSTEP_BEG_STATE_DUMP(SM_HO_CACHE_FACEPROPS_4, Cache_FaceProps_Stage4);
+          if(bReportErrorFinds) { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] HealStep Cache_FaceProps_Stage4 detected database problems"), m_lRecursionCount) ; smos_WriteBuffer(sBuff,NULL,sBuff) ; }
+          if(bDebugMe)
+            { SM_SPRINTF(sBuff, _T("\n RecDepth:[%2ld] After Heal Step - %d = Cache_FaceProps_Stage4\n"), m_lRecursionCount, SM_HO_CACHE_FACEPROPS_4) ; smos_WriteBuffer(sBuff,NULL,sBuff) ;
+              SM__DUMP_BREP__DUMP_HEALDATA__DRAW_BREP
+              SM__DRAW_FACES_AND_SURFACES
+              sm_GraphicsLoop() ;
+            }
+          SM_HEALSTEP_END_STATE_DUMP(SM_HO_CACHE_FACEPROPS_4, Cache_FaceProps_Stage4);
         }
 #endif // SM_DEBUG_CODE
 
@@ -3311,9 +3335,14 @@ SmBoolean bDebugMe = FALSE ;
   if(lPairCount == 0)
     { return(SM_SUCCESS) ; }
 
-  // Iterate a stable snapshot: the per-merge UpdateTargetLists() below removes props from the live
-  // m_sProbArray, which would otherwise shrink it and invalidate the 2*index addressing.
-  SmTArray<SmVertexProps *> sProbArray = m_sBadVertexProps_CoinVertices.m_sProbArray ;
+  // Iterate a stable snapshot of the pairs' vertices: the per-merge UpdateTargetLists() below removes
+  // props from the live m_sProbArray, which would otherwise shrink it and invalidate the 2*index addressing.
+  // Snapshot vertices, not props: UpdateTargetLists() also replaces the props of every vertex a merge
+  // changes, the survivor included, so a props pointer kept across a merge is stale. It matched a live
+  // props only when the allocator happened to reuse its address, which made the merges depend on heap state.
+  SmTArray<SmVertex *> sPairVertices ;
+  for(ULONG ii=0; ii<2*lPairCount; ii++)
+    { sPairVertices.Add(m_sBadVertexProps_CoinVertices.m_sProbArray[ii]->m_pVertex) ; }
 
   // enable editing
   SmTemporaryChangeValue<SmBoolean> sSaveEditing(pBrep->m_bEditingEnabled, TRUE) ;
@@ -3324,32 +3353,32 @@ SmBoolean bDebugMe = FALSE ;
   // UpdateTargetLists call corrupts the hash table. Per-pair tracking avoids this.
   for(ULONG ii=0; ii<lPairCount; ii++)
     {
-      SmVertexProps * pSurvivorProps = sProbArray[2*ii] ;
-      SmVertexProps * pDeletedProps  = sProbArray[2*ii + 1] ;
+      SmVertex * pSurvivor = sPairVertices[2*ii] ;
+      SmVertex * pDeleted  = sPairVertices[2*ii + 1] ;
 
       // skip self-pairs (both sides merged to same survivor by earlier fixup)
-      if(pSurvivorProps == pDeletedProps)
+      if(pSurvivor == pDeleted)
         { continue ; }
 
-      // skip pairs where either props was already removed by a prior UpdateTargetLists call
-      { ULONG lIdx ;
-        if(   !m_sTgtVertexProps.FindElement(pSurvivorProps, lIdx)
-           || !m_sTgtVertexProps.FindElement(pDeletedProps,  lIdx))
-          { continue ; }
-      }
+      // skip pairs where either vertex is no longer in the brep (IsLiveTopologyMember never dereferences it).
+      // A merge frees only pDeleted, and the fixup at the end of each iteration redirects every later
+      // reference to it, so no snapshot entry can dangle (or alias a reused address) at this point.
+      if(   !pBrep->IsLiveTopologyMember(pSurvivor)
+         || !pBrep->IsLiveTopologyMember(pDeleted))
+        { continue ; }
 
 #ifdef SM_DEBUG_CODE
       if(bDebugMe)
         {
           TCHAR sBuff[SM_TBLOCK_SIZE] ;
           smos_sprintf(sBuff, _T("\nFix_CoinVertices: pair[%ld] survivor=0x%p deleted=0x%p"),
-              ii, (void*)pSurvivorProps->m_pVertex, (void*)pDeletedProps->m_pVertex) ;
+              ii, (void*)pSurvivor, (void*)pDeleted) ;
           smos_WriteBuffer(sBuff) ;
 
           smgfx_Erase(TRUE) ;
           smgfx_SetLook(2,3, 0,0,1) ; if(pBrep) pBrep->Draw(TRUE) ; sm_GraphicsLoop() ;
-          smgfx_SetLook(3,6, 1,0,0) ; pSurvivorProps->m_pVertex->Draw() ; sm_GraphicsLoop() ;
-          smgfx_SetLook(4,8, 0,0,1) ; pDeletedProps->m_pVertex->Draw() ; sm_GraphicsLoop() ;
+          smgfx_SetLook(3,6, 1,0,0) ; pSurvivor->Draw() ; sm_GraphicsLoop() ;
+          smgfx_SetLook(4,8, 0,0,1) ; pDeleted->Draw() ; sm_GraphicsLoop() ;
           sm_GraphicsLoop() ;
         }
 #endif // SM_DEBUG_CODE
@@ -3359,21 +3388,21 @@ SmBoolean bDebugMe = FALSE ;
 
       // merge the coincident vertices
       SmEdge * pDeletedEdge = NULL ;
-      SER(pBrep->CombineCoincidentVertices(pSurvivorProps->m_pVertex,  // in : vertex to survive
-                                           pDeletedProps->m_pVertex,   // in : vertex to delete
-                                           pDeletedEdge)) ;            // out: edge deleted by squeeze (if any)
+      SER(pBrep->CombineCoincidentVertices(pSurvivor,       // in : vertex to survive
+                                           pDeleted,        // in : vertex to delete
+                                           pDeletedEdge)) ; // out: edge deleted by squeeze (if any)
 
       // stop tracking and update healer state for this single merge
       sTopologyChanges.StopTracking() ;
       SER(UpdateTargetLists(sTopologyChanges, SM_HO_FIX_COIN_VERTICES)) ;
 
-      // fixup remaining pairs: replace all references to the deleted vertex's Props
-      // with the survivor's Props so subsequent pairs that involved the deleted vertex
+      // fixup remaining pairs: replace all references to the deleted vertex
+      // with the survivor so subsequent pairs that involved the deleted vertex
       // now target the survivor instead.
       for(ULONG jj=ii+1; jj<lPairCount; jj++)
         {
-          if(sProbArray[2*jj]     == pDeletedProps) { sProbArray[2*jj]     = pSurvivorProps ; }
-          if(sProbArray[2*jj + 1] == pDeletedProps) { sProbArray[2*jj + 1] = pSurvivorProps ; }
+          if(sPairVertices[2*jj]     == pDeleted) { sPairVertices[2*jj]     = pSurvivor ; }
+          if(sPairVertices[2*jj + 1] == pDeleted) { sPairVertices[2*jj + 1] = pSurvivor ; }
         }
 
     } // end iter every coincident vertex pair
@@ -4846,8 +4875,51 @@ SmBoolean bDebugMe = FALSE ;
 } // end SmHealData::Fix_BadSheets
 
 /*******************************************************************//**
+PURPOSE: Cache individual loop facts without requiring containment.
+
+NOTES: Every successful face reaches Stage 3 without a containment tree.
+       Cache_FaceProps_Stage4 then computes containment and orientation.
+***********************************************************************/
+SmStatus SmHealData::Cache_FaceProps_Stage3
+ (SmBrep        *pBrep,          // in : target brep
+  SmBoolean     *pbNewProbs,     // out: new preliminary loop problems were found
+  SmHealerOpType  eThisHealerOp) // in : current healer operation
+{
+  SM_REF1(pBrep);
+  *pbNewProbs = FALSE;
+  // Failed faces leave the target list; walk backwards so no target is skipped.
+  for(ULONG lFace=m_sTgtFaceProps.GetSize(); lFace>m_lOldFaceCnt; --lFace)
+    {
+      SmFaceProps *pProps = m_sTgtFaceProps[lFace-1];
+      if(!pProps->HasProps(SM_PROPSTAGE_3,pProps->m_pFace))
+        {
+          SmStatus sRtn = pProps->SetProps(SM_PROPSTAGE_3,pProps->m_pFace,pProps->m_lFaceIndx,eThisHealerOp,lFace-1);
+          if(sRtn != SM_SUCCESS)
+            {
+              SE_MSG(sRtn,_T("SmHealData::Cache_FaceProps_Stage3 - face property calculation failed; skipping dependent repairs for this face"));
+              if(pProps->m_eNotYetFaceType == SM_HNF_NO_PROBS)
+                { pProps->m_eNotYetFaceType = SM_HNF_PROPERTY_CALC_FAILED; }
+              MoveToNotYetProblems(pProps);
+              *pbNewProbs = TRUE;
+              continue;
+            }
+        }
+
+      // Register even if another consumer already completed the properties.
+      // Preserve the counts: the default Add behavior sets the linked value to TRUE.
+      if(pProps->m_lBadClosed3d_LoopCnt > 0)
+        { *pbNewProbs |= m_sBadFaceProps_Closed3dLoop.AddUnique(pProps,FALSE); }
+      if(pProps->m_lBadClosedPtr_LoopCnt > 0)
+        { *pbNewProbs |= m_sBadFaceProps_ClosedPtrLoop.AddUnique(pProps,FALSE); }
+      if(pProps->m_bBadLoopProblems == TRUE)
+        { *pbNewProbs |= m_sBadFaceProps_LoopProblems.AddUnique(pProps,FALSE); }
+    }
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
 PURPOSE: HealBrep helper function: 
-         Get FaceProps After Edges split at seams
+         Cache loop containment after individual loop property collection
 
 NOTES: Now that Edges that cross seams have been split at those seams
  its possible to classify the loops of the face.
@@ -4986,7 +5058,7 @@ NOTES: Now that Edges that cross seams have been split at those seams
 // manifold, adding the missing NoArea-Loop might require the creation and addition of another
 // Face.  We will leave this problem for a later time. (perhaps that time is now for you!)
 ***********************************************************************/
-SmStatus SmHealData::Cache_FaceProps_Stage3
+SmStatus SmHealData::Cache_FaceProps_Stage4
  (SmBrep         * pBrep,         // in : Tgt Brep being healed
   SmBoolean      * pbNewProbs,    // out: TRUE  = Found new problems while caching data
                                   //      FALSE = no problems found
@@ -5034,28 +5106,31 @@ SmBoolean bDebugMe = FALSE ;
          && pThisFaceProps->m_pFace->IsClosedSurfaceWithVertexLoops(pThisFaceProps))
         { continue; }
 
-      // when needed - compute FaceProps After Fix_SplitEdgesAtSeam() - SM_PROPSTAGE_3
-      if(FALSE == pThisFaceProps->HasProps(SM_PROPSTAGE_3, pThisFaceProps->m_pFace))          
+      // Compute containment from the completed individual loop facts.
+      if(FALSE == pThisFaceProps->HasProps(SM_PROPSTAGE_4, pThisFaceProps->m_pFace))
         { 
-          // AfterEdgeSplit SetProps 
+          // Containment SetProps
           SM_ASSERT_MSG(pThisFaceProps->m_lFaceIndx != SM_UNDEF_ULONG, _T("Face Indexing bug - needs review")) ;
-          SmStatus sRtn = pThisFaceProps->SetProps(SM_PROPSTAGE_3, pThisFaceProps->m_pFace, pThisFaceProps->m_lFaceIndx, m_eDoneHealOp, ii-1) ; 
+          SmStatus sRtn = pThisFaceProps->SetProps(SM_PROPSTAGE_4, pThisFaceProps->m_pFace, pThisFaceProps->m_lFaceIndx, m_eDoneHealOp, ii-1) ;
                   //  sets pThisFaceProps: m_sLoopProps
                   //                       m_lClosedLoopCnt      m_lOuterLoopCnt          
                   //                       m_bBadOuterLoopOrder  m_lBadOrient_LoopCnt     
                   //                       m_lBadNoArea_LoopCnt  m_lBadNested_LoopCnt     
                   //                       m_lBadMissingPoles    m_bBadUnpairedNoArea_Loop
 
-          // When Face has NotYet supported problems
-          if(sRtn == SM_ERR_NOTYET_HEAL_FACE)
+          // Failed containment leaves incomplete counters. Isolate this face
+          // before registering problems or attempting dependent repairs.
+          if(sRtn != SM_SUCCESS)
             {
-              // isolate the face from the heal sequence - move it to pHealData->m_sNotYetFaceProps
-              MoveToNotYetProblems(pThisFaceProps) ;  
-
-              // skip any further processing on this FaceProps
-              continue ;
-            } // end found a yet to be supported face problem check 
-        } // end need to SetProps_Stage3 check
+              if(sRtn != SM_ERR_NOTYET_HEAL_FACE)
+                { SE_MSG(sRtn,_T("SmHealData::Cache_FaceProps_Stage4 - face property calculation failed; skipping dependent repairs for this face")); }
+              if(pThisFaceProps->m_eNotYetFaceType == SM_HNF_NO_PROBS)
+                { pThisFaceProps->m_eNotYetFaceType = SM_HNF_PROPERTY_CALC_FAILED; }
+              MoveToNotYetProblems(pThisFaceProps);
+              *pbNewProbs = TRUE;
+              continue;
+            }
+        } // end need to SetProps_Stage4 check
 
 #ifdef SM_DEBUG_CODE
       if(bDebugMe)
@@ -5138,25 +5213,11 @@ SmBoolean bDebugMe = FALSE ;
           bHasLoopProb = TRUE ; 
         }
 
-      // BadClosed3d_Loop - EdgeEnd/EdgeEnd Gaps too big
-      if(pThisFaceProps->m_lBadClosed3d_LoopCnt > 0)
-        { 
-          m_sBadFaceProps_Closed3dLoop.Add(pThisFaceProps) ; 
-          bHasLoopProb = TRUE ; 
-        }
-
-      // BadClosedPtr_Loop - Edgeuse->CCW Linked Ptr list is not closed when all EdgeEnd/EdgeEnd gaps are within tol
-      if(pThisFaceProps->m_lBadClosedPtr_LoopCnt > 0)
-        { 
-          m_sBadFaceProps_ClosedPtrLoop.Add(pThisFaceProps) ; 
-          bHasLoopProb = TRUE ; 
-        }
-
-      // accumulate list of All FaceProps with Any LoopProblems  
-      if(bHasLoopProb)
-        {
-          m_sBadFaceProps_LoopProblems.Add(pThisFaceProps) ;
-        }
+      // Stage 3 may already have recorded this face for a closure discrepancy.
+      // Keep one union entry and retain the flag calculated from both stages.
+      if(pThisFaceProps->m_bBadLoopProblems == TRUE)
+        { m_sBadFaceProps_LoopProblems.AddUnique(pThisFaceProps,FALSE); }
+      *pbNewProbs |= bHasLoopProb;
 
 #ifdef SM_DEBUG_CODE
       if(bDebugMe)
@@ -5188,7 +5249,7 @@ SmBoolean bDebugMe = FALSE ;
   // all done
   return(SM_SUCCESS) ;
 
-} // end SmHealData::Cache_FaceProps_Stage3
+} // end SmHealData::Cache_FaceProps_Stage4
 
 // begin obsolete
 //  /*******************************************************************//**
@@ -7018,15 +7079,17 @@ void SmHealData::Dump
                                                        smos_sprintf(sBuff, _T("\n  step:[%2d] Ran SplitRegion       Count: [%4lu]"), SM_HO_FIX_BADSHEETS, m_lFixRegion_SplitRegion_Cnt ) ;
                                                      }  // end if(m_eDoneHealOp >= SM_HO_FIX_BADSHEETS  
                                                      
-  if(m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_3)       { lProbCnt += m_sBadFaceProps_LoopProblems      .Dump(m_eDoneHealOp) ;             
-                                                       lProbCnt += m_sBadFaceProps_OuterLoopOrder    .Dump(m_eDoneHealOp) ;           
+  if(m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_3)       { lProbCnt += m_sBadFaceProps_LoopProblems      .Dump(m_eDoneHealOp) ;
+                                                       lProbCnt += m_sBadFaceProps_Closed3dLoop      .Dump(m_eDoneHealOp) ;
+                                                       lProbCnt += m_sBadFaceProps_ClosedPtrLoop     .Dump(m_eDoneHealOp) ;
+                                                     }
+
+  if(m_eDoneHealOp >= SM_HO_CACHE_FACEPROPS_4)       { lProbCnt += m_sBadFaceProps_OuterLoopOrder    .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_OrientLoop        .Dump(m_eDoneHealOp) ;               
                                                        lProbCnt += m_sBadFaceProps_NoArea_Loop       .Dump(m_eDoneHealOp) ;              
                                                        lProbCnt += m_sBadFaceProps_MultiOuterLoops   .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_NestedOuterLoops  .Dump(m_eDoneHealOp) ;
                                                        lProbCnt += m_sBadFaceProps_UnpairedNoAreaLoop.Dump(m_eDoneHealOp) ;       
-                                                       lProbCnt += m_sBadFaceProps_Closed3dLoop      .Dump(m_eDoneHealOp) ;             
-                                                       lProbCnt += m_sBadFaceProps_ClosedPtrLoop     .Dump(m_eDoneHealOp) ;            
                                                        lProbCnt += m_sBadFaceProps_MissingPole       .Dump(m_eDoneHealOp) ;              
                                                      }  
 
@@ -7466,15 +7529,17 @@ void SmHealData::DumpArraysContaining
                                                 
               case SM_HO_FIX_BADSHEETS           : { } break ; // end case SM_HO_FIX_BADSHEETS  
                                              
-              case SM_HO_CACHE_FACEPROPS_3       : { SM_DUMP_AND_COUNT(m_sBadFaceProps_LoopProblems      , pTgtFaceProps) ;     
-                                                     SM_DUMP_AND_COUNT(m_sBadFaceProps_OuterLoopOrder    , pTgtFaceProps) ;   
+              case SM_HO_CACHE_FACEPROPS_3       : { SM_DUMP_AND_COUNT(m_sBadFaceProps_LoopProblems      , pTgtFaceProps) ;
+                                                     SM_DUMP_AND_COUNT(m_sBadFaceProps_Closed3dLoop      , pTgtFaceProps) ;
+                                                     SM_DUMP_AND_COUNT(m_sBadFaceProps_ClosedPtrLoop     , pTgtFaceProps) ;
+                                                   } break;
+
+              case SM_HO_CACHE_FACEPROPS_4       : { SM_DUMP_AND_COUNT(m_sBadFaceProps_OuterLoopOrder    , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_OrientLoop        , pTgtFaceProps) ;       
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_NoArea_Loop       , pTgtFaceProps) ;      
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_MultiOuterLoops   , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_NestedOuterLoops  , pTgtFaceProps) ;
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_UnpairedNoAreaLoop, pTgtFaceProps) ;
-                                                     SM_DUMP_AND_COUNT(m_sBadFaceProps_Closed3dLoop      , pTgtFaceProps) ;     
-                                                     SM_DUMP_AND_COUNT(m_sBadFaceProps_ClosedPtrLoop     , pTgtFaceProps) ;    
                                                      SM_DUMP_AND_COUNT(m_sBadFaceProps_MissingPole       , pTgtFaceProps) ;      
                                                    } break ; // end case SM_HO_FIX_BADLOOPS  
 

@@ -1536,6 +1536,7 @@ SmStatus SmBSplineCurve::CreateCanonical
     {  // If have weights make sure have right number of them
       if (cpOptWeights->GetSize() != crControlPointsList.GetSize()) SER(SM_ERR_INVALID_INPUT);
     }
+  if (crKnotMultiplicities.GetSize() < crKnots.GetSize()) SER(SM_ERR_INVALID_INPUT);
 
   // Make compatable knots array
   SmTArray<double> sNewKnots;
@@ -1548,6 +1549,8 @@ SmStatus SmBSplineCurve::CreateCanonical
           sNewKnots.Add(dKnot);
         }
     }
+  // NLIB reads one knot per control point plus lDegree+1 more
+  if (sNewKnots.GetSize() < crControlPointsList.GetSize() + lDegree + 1) SER(SM_ERR_INVALID_INPUT);
 
   // Make compatable weight array
   SmTArray<double> sTmpWeights;
@@ -5737,9 +5740,7 @@ SmStatus SmBSplineCurve::MatchWeights
 PURPOSE: Given a type of validity check to perform, determine if the
     curve passes.
 
-NOTES: This method violates predicate protocol by having side effects.
-       It calls N_CrvIsNotReversed asking to move Cpts to fix a
-       Cpts sequence reversal.
+NOTES: A reversed Cpts sequence is reported (SM_VC_REVERSE_DIRECTION), not fixed.
 ***********************************************************************/
 SmBoolean SmBSplineCurve::PassesValidityCheck
   (SmValidityCheckType eChecks,
@@ -5768,12 +5769,9 @@ SmBoolean bDebugMe = FALSE ;
   if (eChecks == SM_VC_ALL || eChecks == SM_VC_REVERSE_DIRECTION) 
     {
 
-      // GWC_NOTE: GWC_N_CrvIsNotReversed_HAS_SIDE_EFFECTS GWC_LINE ;
-      //           Making the last N_CrvIsNotReversed arg == true here violates the idea that we
-      //           are just checking validity since it may also modify the curve if a bad case is found.
-      //           However, on balance this is a preferred solution
+      // Report only: a const check must not modify the curve.
       gw_FLAG err = N_CrvIsNotReversed( ((SmBSplineCurve *)this)->GetOrCreateGwNurbPointer(), 
-                                        true) ; /* in : TRUE = Move CPts to fix a Cpts sequence reversal, FALSE=don't */
+                                        false) ; /* in : TRUE = Move CPts to fix a Cpts sequence reversal, FALSE=don't */
 
       if (err) 
         {
@@ -7642,6 +7640,7 @@ SmAssertReportLabel sAssertBSplineCurve_list[] =
  /* 11 */ {SM_AT_GEOMETRIC, _T("Bad SpeedPt"),   _T("2D BSplineCurve Warning: Interior 1st Deriv too slow, less than AvgSpeed/10000 (often an almost kink or almost singular point - never good practice)") },
  /* 12 */ {SM_AT_GEOMETRIC, _T("Bad SpeedPt"),   _T("3D BSplineCurve Warning: Interior 1st Deriv too slow, less than AvgSpeed/10000 (often an almost kink or almost singular point - never good practice)") },
 
+ // 13 and 14 are not checked: a small radius of curvature is valid geometry.
  /* 13 */ {SM_AT_GEOMETRIC, _T("Bad CurveCusp"),     _T("2D BSplineCurve Warning: Extremely small radius of curvature (often an almost kink point - sometimes what's desired)") },
  /* 14 */ {SM_AT_GEOMETRIC, _T("Bad CurveCusp"),     _T("3D BSplineCurve Warning: Extremely small radius of curvature (often an almost kink point - sometimes what's desired)") },
  /* 15 */ {SM_AT_GEOMETRIC, _T("Bad Repeated CPts"), _T("BSplineCurve has Internal Coincident ControlPoints (causes internal point singularity)") },
@@ -7659,7 +7658,6 @@ NOTES: Checks made:
  - kinks at multiple knots
  - zero first derivative at multiple knots
  - vanishing first derivatives anywhere
- - tiny radius of curvature anywhere
 
  Note: can't add an optional argument to this because it's virtual:
        would have to add it to every class's method.
@@ -7808,8 +7806,6 @@ static       ULONG lFoundItem ;
   SmBoolean bAnalytic = IsAnalytic();
 
   // for debug - data at failing tests
-  double dMinRadius         =  SM_BIG_DOUBLE ;
-  double dMinRadiusParam    = -SM_BIG_DOUBLE ;
   double dMin1stDerivParam  = -SM_BIG_DOUBLE ;
 #ifdef SM_DEBUG_CODE
   double dMinSinAngRadParam = -SM_BIG_DOUBLE ;
@@ -8013,90 +8009,6 @@ static       ULONG lFoundItem ;
           //      break ;
 
        } // end iter all min Deriv solutions
-
-//    // if this is a UVTrimCurve with a given pCrvOnSurf pointer
-      SmBSplineCurve *pCopyCurve = NULL ;
-      SmObjDelete sCopyClean(pCopyCurve) ; // Will be set only if a copy is made.
-//    if(   this->GetDim() == 2
-//       && pOptCrvOnSurf != NULL)
-//      {
-//        // copy and scale the UVTrimCurve so that it lives on a surface
-//        // mapping which is similar to arc-length parameterizations
-//
-//        // Surface UVDomain
-//        SmExtent2d sSurfUVDomain = pOptCrvOnSurf->GetNaturalUVDomain() ;
-//
-//        // MidCurve Evaluation
-//        SmPoint3d sMidCurvePointXYZ ;
-//        this->EvaluatePoint(GetNaturalInterval().Evaluate(.5), sMidCurvePointXYZ) ;
-//
-//        // Surface deriviatives at midCurve evaluation watch out for singularities
-//        SmPoint2d sMidCurvePointUV(sMidCurvePointXYZ.x, sMidCurvePointXYZ.y) ;
-//        SmSurfParamType eSingularDirection ;
-//        if(pOptCrvOnSurf->IsSingularity(sMidCurvePointUV, eSingularDirection))
-//          {
-//            sMidCurvePointUV = sSurfUVDomain.Evaluate(.5, .5) ;
-//          }
-//        SmPoint3d sSurfPoint, sSurfDu, sSurfDv ;
-//        pOptCrvOnSurf->Evaluate1stDerivatives(sMidCurvePointUV, TRUE, TRUE,
-//                                              sSurfPoint, sSurfDu, sSurfDv) ; 
-//
-//        // pick scale factors so that surface is near arclength parameterization
-//        // watch out for surface singularities
-//        double dScaleU = sSurfDu.Length() ;
-//        double dScaleV = sSurfDv.Length() ;
-//
-//        // Copy the UVTrimCurve and scale its control points
-//        pCopyCurve = new (this->GetContext()) SmBSplineCurve(*this) ;
-//        sCopyClean.SetObj( pCopyCurve );
-//        ULONG lControlPointCount = pCopyCurve->m_pNurb->pol->n + 1 ;
-//        CPOINT *pPw = pCopyCurve->m_pNurb->pol->Pw ;
-//        for(ULONG ii=0;ii<lControlPointCount;ii++)
-//          {
-//            pPw[ii].x *= dScaleU ;
-//            pPw[ii].y *= dScaleV ;
-//          } 
-//            
-//      } // end scaling of UVTrimCurves when given pOptCrvOnSurf
-
-      if ( pCopyCurve == NULL )
-        { pCopyCurve = (SmBSplineCurve*)this; }
-
-      // Another type of kink check: vanishing radius of curvature.
-      pCopyCurve->GlobalPropertyAnalysis( sDomain, SM_CP_MINIMIZE_RADIUS_OF_CURVATURE,
-                                          NULL, NULL, dMinSep, rSolutionArray );
-
-      if(dMinRadius < dTol)
-        {
-          // Note, the same comment as for MINIMIZE_FIRST_DERIVATIVE could
-          // apply here, but in this case the function value used is indeed
-          // the actual radius of curvature.
-
-          // save values for debugging convenience
-          dMinRadius      =   rSolutionArray.GetSize() > 0
-                            ? rSolutionArray[0].m_vStart.m_dSolutionValue 
-                            : SM_BIG_DOUBLE ;
-          dMinRadiusParam =   rSolutionArray.GetSize() > 0
-                            ? rSolutionArray[0].m_vStart.m_adParameters[0]
-                            : 0.0 ;
-
-          if(GetDim() == 2)
-            { 
-              /* 13 */
-              bRtn &= SM_ASSERT_VALUE_REPORT(13, SM_LEVEL_0, dMinRadius >= dTol, dTol, dMinRadius, _T("")) ;
-              SM_ASSERT_SET_OWNER_PARAM(SmPoint2d(dMinRadiusParam, 0.0)) ;
-              // SM_ASSERT_MSG( FALSE, _T("2D Curve Warning: Extremely small radius of curvature") );
-            }
-          if(GetDim() == 3)
-            { 
-              /* 14 */
-              bRtn &= SM_ASSERT_VALUE_REPORT(14, SM_LEVEL_0, dMinRadius >= dTol, dTol, dMinRadius, _T("")) ;
-              SM_ASSERT_SET_OWNER_PARAM(SmPoint2d(dMinRadiusParam, 0.0)) ;
-
-              // SM_ASSERT_MSG( FALSE, _T("3D Curve Warning: Extremely small radius of curvature") );
-            }
-          bRtn = FALSE;
-        }
     } // end not degnerate curve check
 
   /* 15 */ // Are Curve Internal ControlPoints Coincident
@@ -8129,8 +8041,7 @@ static       ULONG lFoundItem ;
                          : pFace    ? pFace->GetBrep()
                          : pEdgeuse ? pEdgeuse->GetBrep() 
                          : NULL ;
-      double dFailedParam = smos_4Min(smos_Fabs(dMinRadiusParam), 
-                                      smos_Fabs(dMin1stDerivParam), 
+      double dFailedParam = smos_3Min(smos_Fabs(dMin1stDerivParam), 
                                       smos_Fabs(dMinSinAngRadParam), 
                                       smos_Fabs(dMaxSinAngRadParam)) ;
       if(pEdge)    { pEdge->Dump() ; }

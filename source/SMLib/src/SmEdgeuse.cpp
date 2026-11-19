@@ -844,6 +844,136 @@ SmBoolean SmEdgeuse::IsConnectedTo
 } // end SmEdgeuse::IsConnectedTo
 
 /*******************************************************************//**
+PURPOSE: Find the periodic sides reached along an edgeuse's connected curves.
+
+NOTES: Follow both directions from the encounter through segmented seam runs.
+       Compare surface points in 3D so the seam neighborhood remains bounded
+       near poles. No UV trims, face properties, or loop classification are used.
+
+       Keep the two observations separate: a touch can use either occupied side,
+       while gap measurement must not choose between conflicting connections.
+       ON means no off-seam sample was found before the directional walk
+       returned to the starting edgeuse. The starting edge is sampled only from
+       the encounter toward the selected endpoint; the opposite-direction query
+       examines its remaining portion. Samples stop at 90% of each sampled span
+       toward the endpoint. ON does not establish whole-interval or whole-loop
+       coincidence.
+
+       UNKNOWN means its direction could not be established geometrically,
+       including temporarily incomplete neighbor links during topology insertion.
+       Evaluation failures return a failed status rather than an occupied side.
+
+       The classification caller can use stored edgeuse directions, including
+       closed adjoining edges. Early gap measurement instead matches endpoints
+       to the connected vertex. It leaves tied matches unresolved, rather than
+       using winding to select the face interior. Neither mode decides which
+       side of an entire seam loop bounds the face; that is the caller's decision.
+***********************************************************************/
+SmStatus SmEdgeuse::FindSeamSides
+ (double          dParameter,             // in : encounter parameter on this edge
+  SmSurfParamType eDirection,             // in : periodic parameter being crossed
+  double          dTolerance,             // in : 3D seam neighborhood
+  SmBoolean       bUseEdgeuseOrientation, // in : use stored directions, otherwise match connected endpoints
+  SmSeamSideType &reForwardSide,          // out: evidence toward the CCW edgeuse
+  SmSeamSideType &reBackwardSide)         // out: evidence toward the CW edgeuse
+ const
+{
+  reForwardSide  = SM_SEAM_SIDE_UNKNOWN;
+  reBackwardSide = SM_SEAM_SIDE_UNKNOWN;
+  AERN(eDirection == SM_SP_U || eDirection == SM_SP_V,SM_ERR_INVALID_INPUT);
+  AERN(IsLoopEdgeuse(),SM_ERR_INVALID_INPUT);
+  SmFace    *pFace    = GetFace();
+  SmSurface *pSurface = pFace ? pFace->GetSurface() : NULL;
+  NER(pSurface);
+  SmExtent2d   sDomain      = pSurface->GetNaturalUVDomain();
+  const ULONG  lSampleCount = 6;
+  const double adFractions[lSampleCount] = {1e-4,1e-3,1e-2,.1,.5,.9};
+  for(ULONG lDirection=0; lDirection<2; ++lDirection)
+    {
+      const SmEdgeuse *pCurrent = this;
+      SmSeamSideType  &reSide   = lDirection == 0 ? reForwardSide : reBackwardSide;
+      SmPoint2d       sUVGuess;
+      const SmPoint2d *pUVGuess = NULL;
+      SmTArray<const SmEdgeuse*> sVisited;
+      do
+        {
+          AERN(pCurrent->GetFace() == pFace,SM_ERR_INVALID_INPUT);
+          ULONG lVisited;
+          AERN(!sVisited.FindElement(pCurrent,lVisited),SM_ERR_INVALID_INPUT);
+          sVisited.Add(pCurrent);
+          SmEdge *pEdge = pCurrent->GetEdge();
+          NER(pEdge);
+          SmCurve *pCurve = pEdge->GetCurve();
+          NER(pCurve);
+          SmExtent1d sInterval = pEdge->GetInterval();
+          SmBoolean  bIncreasing = (pCurrent->GetOrientation() == SM_OT_SAME) == (lDirection == 0);
+          if(!bUseEdgeuseOrientation)
+            {
+              // On this edge choose the departing endpoint; on later edges
+              // choose the arriving endpoint. Curve direction is independent
+              // of the loop's stored orientation during early healing.
+              SmBoolean bUseEndVertex = (lDirection == 0) == (pCurrent == this);
+              const SmEdgeuse *pAtVertex = bUseEndVertex ? pCurrent->GetCCWEdgeuse() : pCurrent;
+              // Gap queries can run while topology insertion has not connected
+              // the neighboring occurrence yet. That supplies no side evidence.
+              SmVertexuse *pVertexuse = pAtVertex ? pAtVertex->GetVertexuse() : NULL;
+              SmVertex    *pVertex    = pVertexuse ? pVertexuse->GetVertex() : NULL;
+              if(!pVertex) { break; }
+              SmPoint3d sMin,sMax;
+              SER(pCurve->EvaluatePoint(sInterval.GetMin(),sMin));
+              SER(pCurve->EvaluatePoint(sInterval.GetMax(),sMax));
+              double dStartDist = sMin.DistanceBetween(pVertex->GetPoint());
+              double dEndDist = sMax.DistanceBetween(pVertex->GetPoint());
+              if(   smos_Fabs(dStartDist-dEndDist) <= SM_EFF_ZERO
+                 || smos_Min(dStartDist,dEndDist) > dTolerance+pVertex->GetTolerance())
+                { break; }
+              bIncreasing = pCurrent == this ? dEndDist < dStartDist : dStartDist < dEndDist;
+            }
+          double dStart = pCurrent == this ? dParameter
+                        : bIncreasing ? sInterval.GetMin() : sInterval.GetMax();
+          double dEnd = bIncreasing ? sInterval.GetMax() : sInterval.GetMin();
+          for(ULONG lSample=0; dStart != dEnd && lSample<lSampleCount; ++lSample)
+            {
+              SmPoint3d sPoint,sSeamPoint,sSurfacePoint;
+              SmPoint2d sUV;
+              SmBoolean bSuccess,bMultiple;
+              double    dGap;
+              SER(pCurve->EvaluatePoint(dStart+adFractions[lSample]*(dEnd-dStart),sPoint));
+              SER(pSurface->DropPoint
+                (sPoint,      // in : connected boundary sample
+                 sDomain,     // in : full surface domain
+                 pUVGuess,    // in : previous successful sample, if available
+                 bSuccess,    // out: projection succeeded
+                 sUV,         // out: projected sample
+                 dGap,        // out: distance to surface
+                 bMultiple)); // out: multiple projection locations
+              if(!bSuccess) { return SM_ERR; }
+              sUVGuess = sUV;
+              pUVGuess = &sUVGuess;
+              SmPoint2d sSeamUV = sUV;
+              if(eDirection == SM_SP_U) { sSeamUV.x = sDomain.GetUMin(); }
+              else                     { sSeamUV.y = sDomain.GetVMin(); }
+              SER(pSurface->EvaluatePoint(sSeamUV,sSeamPoint));
+              SER(pSurface->EvaluatePoint(sUV,sSurfacePoint));
+              if(sSurfacePoint.DistanceBetween(sSeamPoint) <= dTolerance) { continue; }
+              double dPosition = eDirection == SM_SP_U ? sUV.x : sUV.y;
+              double dMiddle   = eDirection == SM_SP_U ? sDomain.GetUInterval().GetMid()
+                                                      : sDomain.GetVInterval().GetMid();
+              reSide = dPosition < dMiddle ? SM_SEAM_SIDE_MIN : SM_SEAM_SIDE_MAX;
+              break;
+            }
+          if(reSide != SM_SEAM_SIDE_UNKNOWN) { break; }
+          pCurrent = lDirection == 0 ? pCurrent->GetCCWEdgeuse() : pCurrent->GetCWEdgeuse();
+          if(!pCurrent && !bUseEdgeuseOrientation) { break; }
+          NER(pCurrent);
+          if(pCurrent == this) { reSide = SM_SEAM_SIDE_ON; }
+        }
+      while(pCurrent != this);
+    }
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
 PURPOSE: Return FALSE when Edgeuse is on and tangent to a Surface boundary 
 and the edgeuse side bounding 'into' the face is pointing outside the SurfaceUVDomain.
 

@@ -160,6 +160,7 @@ the direct topology tests in `smTopoTest.cpp`. `healing` runs `smHealTest.cpp` a
 is included in the default run immediately after `topology`. Keep each standalone
 suite independent; do not rely on another suite to prepare its fixtures. See
 [prog_test organization](../../../tests/prog_test/README.md) for placement guidance.
+New tests for `source/SMLib/` changes go in `prog_test`, not `SM_API_test`.
 
 ## Troubleshooting
 

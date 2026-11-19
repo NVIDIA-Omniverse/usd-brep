@@ -185,13 +185,18 @@ void bind_booleans(BoundModule& m)
        py::arg("cookie_cutter") = false, py::arg("imprinting") = false,
        py::arg("post_process") = true, py::arg("imprint_and_classify") = false,
        py::arg("keep_other_brep") = false,
-       "Consumes: brep1 (always), brep2 (unless keep_other_brep); returns new Brep.\n"
+       "Mutates: brep1, returned as the same handle; consumes brep2 unless kept (see Args).\n"
        "\n"
        "Boolean combine two Breps with fine-grained behavior flags.\n"
        "\n"
        "Args:\n"
-       "    brep1: Primary body. Consumed unless the result is sheet-only.\n"
-       "    brep2: Tool body. Consumed unless ``keep_other_brep`` is ``True``.\n"
+       "    brep1: Primary body. Modified in place and returned as the result\n"
+       "        (the same handle), whatever the flags.\n"
+       "    brep2: Tool body. Deleted unless ``keep_other_brep`` is ``True``, or\n"
+       "        ``imprint_and_classify`` is ``True`` and ``imprinting`` is not.\n"
+       "        A kept ``brep2`` is imprinted with the intersection; with\n"
+       "        ``imprinting`` or ``imprint_and_classify`` it is also left in an\n"
+       "        internal edit-enabled state.\n"
        "    operation: ``BooleanOp.{UNION, DIFFERENCE, INTERSECTION, MERGE}``.\n"
        "        Keyword-only (along with all flags below).\n"
        "    cookie_cutter: If ``True``, only remove faces from ``brep1``\n"
@@ -264,7 +269,7 @@ void bind_booleans(BoundModule& m)
     }, py::arg("breps1"), py::arg("surfaces1"),
        py::arg("breps2"), py::arg("surfaces2"),
        py::kw_only(), py::arg("operation"),
-       "Consumes: breps1, surfaces1, breps2, surfaces2; returns new (breps, surfaces).\n"
+       "Pure: returns new (breps, surfaces); inputs unchanged (they are copied).\n"
        "\n"
        "Combine lists of Breps and planar surfaces in one boolean operation.\n"
        "\n"

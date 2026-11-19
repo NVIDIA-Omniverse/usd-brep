@@ -29198,6 +29198,39 @@ SmBoolean bDebugMe = FALSE ;
 
 } // end SmSurface:LocalSurfaceSurfaceIntersect - from XYZ Point Guess
 
+namespace
+{
+// Keep each endpoint's parameter, UV and distance from the same sample.
+struct SmCoincidenceSampleHit
+{
+  double dT;
+  SmPoint2d sUV;
+  double dDist;
+};
+
+/***********************************************************************
+PURPOSE --- Record one coincident sample and update the sampled interval's
+  endpoint records together.
+***********************************************************************/
+static void sm_RecordCoincidenceHit
+  (SmExtent1d & rSampledIvl,
+   SmCoincidenceSampleHit & rLowHit,
+   SmCoincidenceSampleHit & rHighHit,
+   double dT,
+   const SmPoint2d & crUV,
+   double dDist)
+{
+  SmCoincidenceSampleHit sHit = { dT, crUV, dDist };
+  if ( rSampledIvl.IsInit() )
+    { rLowHit = rHighHit = sHit; }
+  else if ( dT < rSampledIvl.GetMin() )
+    { rLowHit = sHit; }
+  else if ( dT > rSampledIvl.GetMax() )
+    { rHighHit = sHit; }
+  rSampledIvl.AddValue( dT );
+}
+} // namespace
+
 /*******************************************************************//**
 PURPOSE: Do a simple coincidence check between a surface and a curve.
   1. Finds complete curve/Surface coincidence interval or none at all
@@ -29268,6 +29301,10 @@ SmStatus SmSurface::SimpleCoincidenceChecker
 
   ULONG lNumHits = 0;
 
+  // Parameter, uv and distance of one coincident sample.  sLowHit and sHighHit are the
+  // samples at the two ends of sSampledIvl, so each is reported as a unit.
+  SmCoincidenceSampleHit sLowHit{}, sHighHit{};
+
 
   // First drop the Curve MidPoint to Surface.
   // Use a Global point solve, because we have no guess uv.
@@ -29305,7 +29342,8 @@ SmStatus SmSurface::SimpleCoincidenceChecker
 
   if ( bFound )
     {
-      sSampledIvl.AddValue( dMidParam );
+      sm_RecordCoincidenceHit( sSampledIvl, sLowHit, sHighHit,
+                               dMidParam, sMidUVPnt, sSolutions[0].m_vStart.m_dSolutionValue );
       lNumHits++;
     }
   else // Midpoint is farther away than tolerance, or not tangent.
@@ -29367,11 +29405,6 @@ SmBoolean bDebugMe = FALSE ;
   // So use it to initialize our locals.
   SmPoint2d sUVGuessStart( sSolutions[0].m_vStart[0], sSolutions[0].m_vStart[1] );
   SmPoint2d sUVGuessEnd  ( sUVGuessStart );
-  SmPoint2d sUV0( sUVGuessStart );  // Farthest-apart start and end uv's.
-  SmPoint2d sUV1( sUVGuessStart );
-  // Errors at start and end of coincident portion:
-  double dStDist = sSolutions[0].m_vStart.m_dSolutionValue;
-  double dEnDist = sSolutions[0].m_vStart.m_dSolutionValue;
 
   SmPoint3d sStPnt[2]; // sStPnt[0] = crCurve 3dPoint    for param = dStT
                        // sStPnt[1] = crCurve 3dTangent  for param = dStT
@@ -29384,7 +29417,6 @@ SmBoolean bDebugMe = FALSE ;
   ULONG lCount = lDeg + 5;
 
   SmBoolean bFoundStart  = FALSE, bFoundEnd  = FALSE;
-  SmBoolean bHaveStartUV = FALSE, bHaveEndUV = FALSE;
   SmBoolean bEndPtsOnly  = TRUE ;
 
   ULONG ii;
@@ -29426,9 +29458,9 @@ SmBoolean bDebugMe = FALSE ;
             { bEndPtsOnly = FALSE ; }
 
           // add mid point to interval known to be coincident
-          sSampledIvl.AddValue(dStT) ;
-          dStDist = sSol.m_vStart.m_dSolutionValue;
           sUVGuessStart.Set( sSol.m_vStart[0], sSol.m_vStart[1] );
+          sm_RecordCoincidenceHit( sSampledIvl, sLowHit, sHighHit,
+                                   dStT, sUVGuessStart, sSol.m_vStart.m_dSolutionValue );
 
           // Three coincident/tangent results is enough.
           if ( lNumHits++ >= 3  &&  bPartialCoincidenceOK )
@@ -29475,9 +29507,9 @@ SmBoolean bDebugMe = FALSE ;
             { bEndPtsOnly = FALSE ; }
 
           // add mid point to interval known to be coincident
-          sSampledIvl.AddValue(dEnT) ;
-          dEnDist = sSol.m_vStart.m_dSolutionValue ;
           sUVGuessEnd.Set( sSol.m_vStart[0], sSol.m_vStart[1] );
+          sm_RecordCoincidenceHit( sSampledIvl, sLowHit, sHighHit,
+                                   dEnT, sUVGuessEnd, sSol.m_vStart.m_dSolutionValue );
 
           if ( lNumHits++ >= 3  &&  bPartialCoincidenceOK )
             { break; }
@@ -29490,34 +29522,6 @@ SmBoolean bDebugMe = FALSE ;
             { return SM_SUCCESS; }
 
         } // end failed to drop current CurveEndPoint to Surface check
-
-
-      // Record the farthest-apart uv values.
-      if ( bFoundStart )
-        {
-          sUV0 = sUVGuessStart;
-          bHaveStartUV = TRUE;
-
-          // If we have no End uv yet, set it to this start uv.
-          // Otherwise these uv's might never get set.
-          if ( ! bHaveEndUV )
-            {
-              sUV1 = sUV0;
-              bHaveEndUV = TRUE;
-            }
-        }
-      if ( bFoundEnd )
-        {
-          sUV1 = sUVGuessEnd;
-          bHaveEndUV = TRUE;
-
-          // Again, don't let sUV0 be unset.
-          if ( ! bHaveStartUV )
-            {
-              sUV0 = sUV1;
-              bHaveStartUV = TRUE;
-            }
-        }
 
     } // end iter CurveSamplePoints from endPoint to midPoint looking for coincidence
 
@@ -29547,15 +29551,15 @@ SmBoolean bDebugMe = FALSE ;
   rSolution.m_lNumObjects             = 2 ;
   rSolution.m_apObjects[0]            = (SmObject *)&crCurve ;
   rSolution.m_apObjects[1]            = (SmObject *)this ;
-  rSolution.m_vStart.m_dSolutionValue = dStDist;
-  rSolution.m_vStart[0]               = sSampledIvl.GetMin();
-  rSolution.m_vStart[1]               = sUV0.x;
-  rSolution.m_vStart[2]               = sUV0.y;
+  rSolution.m_vStart.m_dSolutionValue = sLowHit.dDist;
+  rSolution.m_vStart[0]               = sLowHit.dT;
+  rSolution.m_vStart[1]               = sLowHit.sUV.x;
+  rSolution.m_vStart[2]               = sLowHit.sUV.y;
 
-  rSolution.m_vEnd.m_dSolutionValue   = dEnDist;
-  rSolution.m_vEnd[0]                 = sSampledIvl.GetMax();
-  rSolution.m_vEnd[1]                 = sUV1.x;
-  rSolution.m_vEnd[2]                 = sUV1.y;
+  rSolution.m_vEnd.m_dSolutionValue   = sHighHit.dDist;
+  rSolution.m_vEnd[0]                 = sHighHit.dT;
+  rSolution.m_vEnd[1]                 = sHighHit.sUV.x;
+  rSolution.m_vEnd[2]                 = sHighHit.sUV.y;
 
 #ifdef SM_DEBUG_CODE
   if (bDebugMe)

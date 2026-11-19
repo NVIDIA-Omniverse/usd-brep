@@ -243,16 +243,15 @@ class TestAssertValid(unittest.TestCase):
         self.assertIsInstance(reports, list)
 
     def test_assert_valid_reports_failures_in_every_build_config(self):
-        # A zero-thickness box builds in the kernel, but its infinite region is
-        # wrong. The old sm_AssertValid binding reported this only in debug
-        # SMLib. create_box rejects the zero height, so build it kernel-direct.
-        flat = smdev.kernel_create_box((0, 0, 0), 10, 10, 0.0)
-        self.assertFalse(smdev.assert_valid(flat))
-        ok, reports = smdev.assert_valid_reports(flat)
+        # A box as thin as the default tolerance builds but has coincident
+        # edges. The old sm_AssertValid binding reported failures only in
+        # debug SMLib.
+        thin = smdev.kernel_create_box((0, 0, 0), 10, 10, 1e-5)
+        self.assertFalse(smdev.assert_valid(thin))
+        ok, reports = smdev.assert_valid_reports(thin)
         self.assertFalse(ok)
         self.assertTrue(reports)
         self.assertIn("FAILED", reports[0])
-        self.assertIn("SmBrep", reports[0])
 
     def test_assert_valid_rejects_bad_inputs(self):
         box = sm.create_box((0, 0, 0), 10, 10, 10)

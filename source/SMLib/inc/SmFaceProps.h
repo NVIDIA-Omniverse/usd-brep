@@ -51,18 +51,19 @@ enum SmHealNotYetFaceType
                                        //    - saw this on a DegenFace that had Edge bndrys
                                        //   that were crossed, but those Edges had no
                                        //   Edgeuse connecting Edge to Face inside.
-                                       SM_HNF_NO_CLASSIFY_ODD_CROSSCNT,   // SmFace::ClassifyLoops() couldn't classify FaceLoops.
-                                                                          //   ClassifyCrv built to cross a TgtLoop 
-                                                                          //   found Odd number of Loop Bndrys to Cross on
-                                                                          //   a Face with a NonClosed Surface.  On a Closed Surface
-                                                                          //   an odd number of crossings is a NoArea_Loop (okay).
-                                                                          //   On an open Surface its an NotYet Supported problem.
-                                                                          //    - saw this on a DegenFace that had Coinc Edge bndrys
-                                                                          //      that were crossed an even number of times but then
-                                                                          //      merged into an odd count because the ClassifyCrv param
-                                                                          //      values of the two XSects were the same.
-                                                                          SM_HNF_NO_LOOP_TREE_ROOT           // SmFace::ClassifyLoops() couldn't build an SmLooptreeItem
-                                                                                                             //   for the Face.
+    SM_HNF_NO_CLASSIFY_ODD_CROSSCNT,   // SmFace::ClassifyLoops() couldn't classify FaceLoops.
+                                       //   ClassifyCrv built to cross a TgtLoop 
+                                       //   found Odd number of Loop Bndrys to Cross on
+                                       //   a Face with a NonClosed Surface.  On a Closed Surface
+                                       //   an odd number of crossings is a NoArea_Loop (okay).
+                                       //   On an open Surface its an NotYet Supported problem.
+                                       //    - saw this on a DegenFace that had Coinc Edge bndrys
+                                       //      that were crossed an even number of times but then
+                                       //      merged into an odd count because the ClassifyCrv param
+                                       //      values of the two XSects were the same.
+    SM_HNF_NO_LOOP_TREE_ROOT,          // SmFace::ClassifyLoops() couldn't build an SmLooptreeItem
+                                       //   for the Face.
+    SM_HNF_PROPERTY_CALC_FAILED       // Face property calculation failed; retain diagnostics and skip dependent repairs.
 }; // end enum SmHealNotYetFaceType
 
 /*******************************************************************//**
@@ -79,8 +80,10 @@ enum SmPropStageType
     SM_PROPSTAGE_GAPS,  // 2 = after  SmFaceProps::SetProps_Gaps()   call  (was SetProps_BeforeTolFix())    
     SM_PROPSTAGE_2a,    // 3 = during SmFaceProps::SetProps_Stage2() call   
     SM_PROPSTAGE_2,     // 4 = after  SmFaceProps::SetProps_Stage2() call  (was SetProps_BeforeEdgeSplit())
-    SM_PROPSTAGE_3a,    // 5 = during SmFaceProps::SetProps_Stage3() call  
-    SM_PROPSTAGE_3      // 6 = after  SmFaceProps::SetProps_Stage3() call  (Was SetProps_AfterEdgeSplit()) 
+    SM_PROPSTAGE_3a,    // 5 = during individual loop property collection
+    SM_PROPSTAGE_3,     // 6 = individual loop properties complete
+    SM_PROPSTAGE_4a,    // 7 = during SmFaceProps::SetProps_Stage4() call
+    SM_PROPSTAGE_4      // 8 = after  SmFaceProps::SetProps_Stage4() call  (Was SetProps_AfterEdgeSplit())
 }; // end SmPropStageType
 
 /*******************************************************************//**
@@ -90,10 +93,12 @@ NOTES: 1. Initial use: To pass information around the Heal Methods
           called by the HealTopologyFromData() method.
 
        2. Not all member values are set at the same time.  In the long
-          run values should be marked with ready bits.  But for
-          now the value assignments are simple and done in just 3 functions:
-            1. SmFaceProps::SetProps_Stage2
-            2. SmFaceProps::SetProps_Stage3
+          run values should be marked with ready bits.  For now,
+          the value assignments are divided among four completed stages:
+            1. SetProps_Gaps: gaps and tolerances
+            2. SetProps_Stage2: surface, poles, and seam classifications
+            3. SetProps_Stage3: individual loop facts
+            4. SetProps_Stage4: loop containment, orientation, and related problems
           The member values document where they get set.
 ***********************************************************************/
 class SM_EXPORT SmFaceProps : public SmObjProps
@@ -107,6 +112,8 @@ public:
                                                     //        4 = SM_PROPSTAGE_2     = after  SmFaceProps::SetProps_Stage2() call    
                                                     //        5 = SM_PROPSTAGE_3a    = during SmFaceProps::SetProps_Stage3() call
                                                     //        6 = SM_PROPSTAGE_3     = after  SmFaceProps::SetProps_Stage3() call
+                                                    //        7 = SM_PROPSTAGE_4a    = during SmFaceProps::SetProps_Stage4() call
+                                                    //        8 = SM_PROPSTAGE_4     = after  SmFaceProps::SetProps_Stage4() call
 
     // SetGroup:[constructor()] 
     const SmContext* m_cpContext = NULL;      // context for new object construction - not owned
@@ -254,22 +261,21 @@ public:
                                                              //         SM_TRY_NOFIX,    // obj run through Fix_SplitFaceAtSeams fix function - some Seam probs not fixed
                                                              //
 
-    // SetProps(SM_PROPSTAGE_3) from m_sLoopProps
-    SmLooptreeItem* m_pLooptreeRoot = NULL;           // set:[SmFace::ClassifyLoops()] Containment LoopTree Root (One LoopTreeItem per FaceLoop)
-    SmTArray<SmLoopProps>  m_sLoopProps;              // set:[SmFaceProps::SetProps_Stage2()]
-                                                      //     [SmLoopProps::SetProps()       ] 
-                                                      //     [SmFace::ClassifyLoops()       ] LoopProps for all LoopTree Nodes.  one LoopProps per LoopTree node.
-                                                      //    FaceLoopCnt == m_sLoopProps.GetSize()
+    // Stage 3: individual loop facts and closure discrepancies.
+    SmTArray<SmLoopProps> m_sLoopProps;                              // basic facts set by SmLoopProps::SetProps
+    ULONG                 m_lClosedLoopCnt        = SM_UNDEF_ULONG;  // number of closed loops eligible for classification
+    ULONG                 m_lBadClosed3d_LoopCnt  = SM_UNDEF_ULONG;  // link: SmHealData::m_sBadFaceProps_Closed3dLoop; closed pointers, open geometry
+    ULONG                 m_lBadClosedPtr_LoopCnt = SM_UNDEF_ULONG;  // link: SmHealData::m_sBadFaceProps_ClosedPtrLoop; closed geometry, open pointers
+    SmBooleanUL           m_bBadLoopProblems      = UNSURE;          // link: SmHealData::m_sBadFaceProps_LoopProblems
+                                                                     // union of Stage 3 findings and completed Stage 4 findings
+    // end SetProps(SM_PROPSTAGE_3) from m_sLoopProps
 
-    ULONG     m_lClosedLoopCnt = SM_UNDEF_ULONG;      // total number of Closed FaceLoops
-    ULONG     m_lOuterLoopCnt = SM_UNDEF_ULONG;       // link: SmHealData::m_sBadFaceProps_MultiOuterLoop
-                                                      // Number of outer loops: One is required, Greater than 1 is bad
-                                                      //    Loops with ContainmentType == SM_CMT_OUTERLOOP count as 1
-                                                      //    RootLevel Looptree Loops that are paired NoArea_Loops count as 1
-
-    SmBooleanUL   m_bBadLoopProblems = UNSURE;        // link: SmHealDataL::m_sBadFaceProps_LoopProblems - union of all FaceLoopProblems
-                                                      // TRUE  = Face has at least one kind of a loop problem
-                                                      // FALSE = Face has no loop problems
+    // Stage 4: containment tree, orientations, and aggregate loop problems.
+    SmLooptreeItem *m_pLooptreeRoot = NULL;               // owns tree nodes; nodes refer to m_sLoopProps. Containment LoopTree Root (One LoopTreeItem per FaceLoop).
+    ULONG           m_lOuterLoopCnt = SM_UNDEF_ULONG;     // link: SmHealData::m_sBadFaceProps_MultiOuterLoop
+                                                          // Number of outer loops: One is required, Greater than 1 is bad
+                                                          //    Loops with ContainmentType == SM_CMT_OUTERLOOP count as 1
+                                                          //    RootLevel Looptree Loops that are paired NoArea_Loops count as 1
 
     SmBooleanUL   m_bBadOuterLoopOrder = UNSURE;         // link: SmHealData::m_sBadFaceProps_OuterLoopOrder     // TRUE = 1st Loop on FaceLoopList is not an OuterLoop, FALSE = okay
     ULONG         m_lBadOrient_LoopCnt = SM_UNDEF_ULONG; // link: SmHealData::m_sBadFaceProps_OrientLoop         // total number of AreaLoops and PoleCross_NoArea_Loops with bad orientations
@@ -277,12 +283,10 @@ public:
     ULONG         m_lBadNested_LoopCnt = SM_UNDEF_ULONG; // link: SmHealData::m_sBadFaceProps_NestedOuterLoops   // total number of badly nested loops
     SmBooleanUL   m_bBadUnpairedNoArea_Loop = UNSURE;    // link: SmHealData::m_sBadFaceProps_UnpairedNoAreaLoop // TRUE = NoArea_Loops and PoleVertices do not come in matched pairs. FALSE = okay
 
-    ULONG         m_lBadClosed3d_LoopCnt = SM_UNDEF_ULONG;  // link: SmHealData::m_sBadFaceProps_Closed3dLoop   // total number of loops open in 3d space
-    ULONG         m_lBadClosedPtr_LoopCnt = SM_UNDEF_ULONG; // link: SmHealData::m_sBadFaceProps_ClosedPtrLoop  // total number of Loops where bClosedLoop3d != bClosedLoopPtrs (assumed supposed to be closed)
     ULONG         m_lBadMissingPoles = SM_UNDEF_ULONG;      // link: SmHealData::m_sBadFaceProps_MissingPole    // BadPoleFlag: SM_SS_NONE or an orof SM_SS_UMIN SM_SS_VMIN SM_SS_UMAX SM_SS_VMAX
                                                                                                                 //    Currently only for cones missing seams and not marking
                                                                                                                 //    the pole at the tip of the cone with a vertex
-    // end SetProps(SM_PROPSTAGE_3) from m_sLoopProps
+    // end SetProps(SM_PROPSTAGE_4) from m_sLoopProps
 
 public:
 
@@ -310,17 +314,63 @@ public:
     void ReSet(SmPropStageType eClearPropStage = SM_PROPSTAGE_0); // in : oneof: SM_PROPSTAGE_0    = clear constructor values     and
                                                                   //             SM_PROPSTAGE_GAPS = clear SetProps_Gaps() vals and
                                                                   //             SM_PROPSTAGE_2    = clear SetProps_Stage2() vals and
-                                                                  //             SM_PROPSTAGE_3    = clear SetProps_Stage3() vals
+                                                                  //             SM_PROPSTAGE_3    = clear SetProps_Stage3() vals and
+                                                                  //             SM_PROPSTAGE_4    = clear SetProps_Stage4() vals
                                                                   //             default:[SM_PROPSTAGE_0]
 
-    // Set Props thru given eSetPropStage by calling SetProps_Gaps(), SetProps_Stage2(), SetProps_Stage3() as needed 
-    SmStatus SetProps(SmPropStageType  eSetPropStage,
-        const SmFace* cpFace,
-        ULONG            lFaceIndx,
-        SmHealerOpType   eExeHealOp,
-        ULONG            lOptLabel = SM_UNDEF_ULONG);
+    // Set Props thru given eSetPropStage by calling SetProps_Gaps(), SetProps_Stage2(), SetProps_Stage3(), SetProps_Stage4() as needed
+    SmStatus SetProps
+     (SmPropStageType eSetPropStage,                                // in : latest property stage to calculate; includes incomplete preceding stages
+                                                                    //      SM_PROPSTAGE_GAPS = SetProps_Gaps()
+                                                                    //        (sets: m_pFace                 m_lFaceIndx
+                                                                    //               m_sZoneTol3d            m_sOrigZoneTol3d
+                                                                    //               m_bBadSmallZoneTol3d    m_bBadLargeZoneTol3d)
+                                                                    //      SM_PROPSTAGE_2 = SetProps_Stage2()
+                                                                    //        (sets: m_cpSurface             m_sNaturalUVDomain
+                                                                    //               m_eSheet               m_ePoles
+                                                                    //               m_bClosedU             m_bClosedV             m_bClosedSurf
+                                                                    //               m_eClosedValU          m_eClosedValV
+                                                                    //               m_lPoles               m_lApproxPoles         m_lNoVertexPoles
+                                                                    //               m_sPolePoints          m_sPoleNormals
+                                                                    //               m_bBadCrossedPole      m_pCrossedPoleEdge     m_dCrossedPoleParameter
+                                                                    //               m_lBadFlatCorners      m_sFlatCornerPoints
+                                                                    //               m_pCrvClassU           m_pCrvClassV
+                                                                    //               m_sRawTouchListU       m_sRawTouchListV
+                                                                    //               m_sDoneTouchListU      m_sDoneTouchListV
+                                                                    //               m_eBadMissingSeam      m_eBadCrossedSeam      m_eBadNearMissSeam
+                                                                    //               m_bBadMissingSeam      m_bBadCrossedSeam      m_bBadNearMissSeam)
+                                                                    //      SM_PROPSTAGE_3 = SetProps_Stage3()
+                                                                    //        (sets: m_sLoopProps with m_sLoopProps[ii].SetProps(pLoop, *this)
+                                                                    //                 SmLoopProps::m_cpLoop              m_tLoopuseType
+                                                                    //                            ::m_bVertexLoopOnPole
+                                                                    //                            ::m_lEdgeCnt            m_lEdgeuseCnt
+                                                                    //                            ::m_bClosed3d           m_bClosedPtrs
+                                                                    //                            ::m_bGoodClosed
+                                                                    //                            ::m_lSeamCrossingCntU   m_lSeamCrossingCntV
+                                                                    //                            ::m_lSeamWindingCntU    m_lSeamWindingCntV
+                                                                    //                            ::m_eWindingOrientU     m_eWindingOrientV
+                                                                    //                            ::m_bArea_Loop
+                                                                    //               m_lClosedLoopCnt
+                                                                    //               m_lBadClosed3d_LoopCnt  m_lBadClosedPtr_LoopCnt
+                                                                    //               m_bBadLoopProblems)
+                                                                    //        m_bDegen_Loop remains UNSURE; its calculation is not implemented.
+                                                                    //      SM_PROPSTAGE_4 = SetProps_Stage4()
+                                                                    //        (updates existing m_sLoopProps using SmFace::ClassifyLoops() results:
+                                                                    //                 SmLoopProps::m_eContainmentType    m_eLoopOrient
+                                                                    //                            ::m_eDesiredLoopOrient  m_bGoodOrient
+                                                                    //                            ::m_bArea_Loop
+                                                                    //         sets: m_pLooptreeRoot
+                                                                    //               m_lOuterLoopCnt          m_bBadOuterLoopOrder
+                                                                    //               m_lBadOrient_LoopCnt     m_lBadNoArea_LoopCnt
+                                                                    //               m_lBadNested_LoopCnt     m_bBadUnpairedNoArea_Loop
+                                                                    //               m_lBadMissingPoles       m_bBadLoopProblems)
+                                                                    //        Retains Stage 3 closure counts and combines both stages in m_bBadLoopProblems.
+      const SmFace   *cpFace,                                       // in : target face
+      ULONG           lFaceIndx,                                    // in : face index in SmHealData::m_sTgtFaces
+      SmHealerOpType  eExeHealOp,                                   // in : completed or currently executing healer operation
+      ULONG           lOptLabel = SM_UNDEF_ULONG);                  // in : optional diagnostic label; SM_UNDEF_ULONG to omit
 
-    // SetProps_Gaps to be run aftre Fix_CoinEdges() - (was SetProps_BeforeTolFix())   
+    // Gap and tolerance properties are the first face-property stage.
     SmStatus SetProps_Gaps(const SmFace * cpFace,                       // in : 
                            ULONG          lFaceIndx,                    // in : 
                            SmHealerOpType eExeHealOp,                   // NotUsed: in : 
@@ -345,28 +395,49 @@ public:
     //               m_sDoneTouchListU     m_sDoneTouchListV
     //               m_eBadMissingSeam     m_eBadCrossedSeam   m_eBadNearMissSeam)
 
-    // SetProps_Stage3 to be run after Fix_SplitEdgesAtSeam() - (was SetProps_AfterEdgeSplit()) 
-    SmStatus SetProps_Stage3(const SmFace * cpFace,                       // in : 
-                             ULONG          lFaceIndx,                    // in : 
-                             SmHealerOpType eExeHealOp,                   // NotUsed: in : 
-                             ULONG          lOptLabel = SM_UNDEF_ULONG) ; // in : 
-    //        (sets: m_sLoopProps //  with call m_sLoopProps[ii].SetProps(pLoop, *this) ; 
-    //                            //  that sets: SmLoopProps::m_cpLoop             m_bDegen_Loop  
-    //                            //                        ::m_lEdgeCnt           m_bArea_Loop        
-    //                            //                        ::m_lEdgeuseCnt        m_eContainmentType  
-    //                            //                        ::m_bClosed3d          m_eLoopOrient       
-    //                            //                        ::m_bClosedPtrs        m_eDesiredLoopOrient
-    //                            //                        ::m_lSeamCrossingCntU  m_lSeamCrossingCntV
-    //                            //                        ::m_lSeamWindingCntU   m_lSeamWindingCntV
-    //                            //                        ::m_eWindingOrientU    m_eWindingOrientV
-    //                            //                        ::m_sRawTouchListU     m_sRawTouchListV 
-    //                            //                        ::m_sDoneTouchListU    m_sDoneTouchListV
-    //                            //                        ::m_bGoodOrient        m_bGoodClosed       
-    //               m_lClosedLoopCnt       m_lOuterLoopCnt          
-    //               m_bBadOuterLoopOrder   m_lBadOrient_LoopCnt     
-    //               m_lBadNoArea_LoopCnt   m_lBadNested_LoopCnt     
-    //               m_lBadMissingPoles     m_bBadUnpairedNoArea_Loop
-    //               m_lBadClosed3d_LoopCnt m_lBadClosedPtr_LoopCnt)
+    //      SM_PROPSTAGE_3 = individual loop properties before containment classification
+    SmStatus SetProps_Stage3 (const SmFace  *cpFace,                       // in : target face
+                              ULONG          lFaceIndx,                    // in : index in the healer target list
+                              SmHealerOpType eExeHealOp,                   // in : completed or currently executing healer operation
+                              ULONG          lOptLabel = SM_UNDEF_ULONG);  // in : optional diagnostic label
+    //        (sets: m_sLoopProps with m_sLoopProps[ii].SetProps(pLoop, *this)
+    //                 SmLoopProps::m_cpLoop              m_tLoopuseType
+    //                            ::m_bVertexLoopOnPole
+    //                            ::m_lEdgeCnt            m_lEdgeuseCnt
+    //                            ::m_bClosed3d           m_bClosedPtrs
+    //                            ::m_bGoodClosed
+    //                            ::m_lSeamCrossingCntU   m_lSeamCrossingCntV
+    //                            ::m_lSeamWindingCntU    m_lSeamWindingCntV
+    //                            ::m_eWindingOrientU     m_eWindingOrientV
+    //                            ::m_bArea_Loop
+    //               m_lClosedLoopCnt
+    //               m_lBadClosed3d_LoopCnt m_lBadClosedPtr_LoopCnt
+    //               m_bBadLoopProblems)
+    //        Uses the Stage 2 seam-touch lists to calculate crossings,
+    //        winding, and area/no-area status independently for each loop.
+    //        m_lClosedLoopCnt counts loops eligible for containment classification.
+    //        Does not build containment or determine outer/inner loop roles.
+    //        m_bDegen_Loop remains UNSURE; its calculation is not implemented.
+
+    //      SM_PROPSTAGE_4 = loop containment, orientation, and aggregate problems
+    SmStatus SetProps_Stage4 (const SmFace  *cpFace,                       // in : target face
+                              ULONG          lFaceIndx,                    // in : index in the healer target list
+                              SmHealerOpType eExeHealOp,                   // in : completed or currently executing healer operation
+                              ULONG          lOptLabel = SM_UNDEF_ULONG);  // in : optional diagnostic label
+    //        (updates existing m_sLoopProps using SmFace::ClassifyLoops() results:
+    //                 SmLoopProps::m_eContainmentType    m_eLoopOrient
+    //                            ::m_eDesiredLoopOrient  m_bGoodOrient
+    //                            ::m_bArea_Loop
+    //         sets: m_pLooptreeRoot
+    //               m_lOuterLoopCnt          m_bBadOuterLoopOrder
+    //               m_lBadOrient_LoopCnt     m_lBadNoArea_LoopCnt
+    //               m_lBadNested_LoopCnt     m_bBadUnpairedNoArea_Loop
+    //               m_lBadMissingPoles       m_bBadLoopProblems)
+    //        Builds relationships among loops and determines their actual
+    //        and desired orientations. Checks the Stage 3 m_bArea_Loop value
+    //        against classification, then copies the classification result.
+    //        Retains Stage 3 closure counts and combines both stages in m_bBadLoopProblems.
+    //        Resetting Stage 4 preserves Stage 3; resetting Stage 3 clears both.
 
     // predicates
     SmBoolean IsPeriodicU()                         const { return(m_bClosedU && m_eClosedValU >= SM_CT_C0); }
@@ -376,6 +447,7 @@ public:
                        const SmFace* cpFace)     const { if (ePropStage == SM_PROPSTAGE_GAPS) { return HasProps_Stage1(cpFace); }
                                                          if (ePropStage == SM_PROPSTAGE_2) { return HasProps_Stage2(cpFace); }
                                                          if (ePropStage == SM_PROPSTAGE_3) { return HasProps_Stage3(cpFace); }
+                                                         if (ePropStage == SM_PROPSTAGE_4) { return HasProps_Stage4(cpFace); }
                                                          return m_pFace == cpFace;
                                                        }
     SmBoolean HasProps_Stage1(const SmFace* cpFace) const { SM_REF1(cpFace) ;
@@ -398,16 +470,28 @@ public:
                                                                           || (   (m_pFace != NULL) && (m_pFace == cpFace)
                                                                               && (m_sOrigZoneTol3d != SM_UNDEF_DOUBLE)
                                                                               && (m_cpSurface != NULL)
-                                                                              && (m_lBadOrient_LoopCnt != SM_UNDEF_ULONG)),
+                                                                              && (m_lClosedLoopCnt != SM_UNDEF_ULONG)
+                                                                              && (m_lBadClosed3d_LoopCnt != SM_UNDEF_ULONG)
+                                                                              && (m_lBadClosedPtr_LoopCnt != SM_UNDEF_ULONG)),
                                                                 _T("SmFaceProps: data vals not up to date with stored DataState3 - a bug"));
                                                             return(m_ePropStage >= SM_PROPSTAGE_3 && m_pFace == cpFace);
+                                                          }
+    SmBoolean HasProps_Stage4(const SmFace* cpFace) const { SM_REF1(cpFace) ;
+                                                            SM_ASSERT_MSG(   (m_ePropStage < SM_PROPSTAGE_4)
+                                                                          || (   (m_pFace != NULL) && (m_pFace == cpFace)
+                                                                              && (m_sOrigZoneTol3d != SM_UNDEF_DOUBLE)
+                                                                              && (m_cpSurface != NULL)
+                                                                              && (m_lBadOrient_LoopCnt != SM_UNDEF_ULONG)),
+                                                                _T("SmFaceProps: data vals not up to date with stored DataState4 - a bug"));
+                                                            return(m_ePropStage >= SM_PROPSTAGE_4 && m_pFace == cpFace);
                                                           }
 
     SmBoolean HasNotYetProblems()                   const { return(m_eNotYetFaceType != SM_HNF_NO_PROBS); }
 
-    SmBoolean HasProblems(ULONG lBitArray = 7)      const; ///< [in] : OrOf 1 = Post SetProps_Gaps() problems   <br>
+    SmBoolean HasProblems(ULONG lBitArray = 15)      const; ///< [in] : OrOf 1 = Post SetProps_Gaps() problems   <br>
                                                            ///<      :      2 = Post SetProps_Stage2() problems <br>
                                                            ///<      :      4 = Post SetProps_Stage3() problems <br>
+                                                           ///<      :      8 = Post SetProps_Stage4() problems <br>
                                                     
     // draw function
     SmDisplayList* Draw(SmBoolean bDrawAllCases = FALSE,                 ///< [in] : TRUE = output graphics for all Faces (with or without probs)                          <br>
@@ -441,6 +525,9 @@ public:
 
     void DumpProps_Stage3() const;
     void DumpProblems_Stage3() const;
+
+    void DumpProps_Stage4() const;
+    void DumpProblems_Stage4() const;
 
     // Common label methods and void Dump() const ;
     SM_COMMON(SmFaceProps, SmObjProps, SmFaceProps_TYPE) ;

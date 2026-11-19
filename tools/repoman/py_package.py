@@ -21,6 +21,7 @@ from typing import Callable, Dict, List
 import omni.repo.man
 from omni.repo.man.deps import get_uv
 
+from wheel_licenses import license_texts
 from wheel_version import wheel_version
 
 
@@ -144,21 +145,28 @@ def setup_repo_tool(parser: argparse.ArgumentParser, config: Dict) -> Callable:
         # The vendored OpenUSD runtime must travel with its full license texts;
         # THIRD_PARTY_NOTICES.md only summarizes them.
         usd_licenses = f"{usd_dir}/PACKAGE-LICENSES"
-        if not os.path.isdir(usd_licenses):
-            raise RuntimeError(f"OpenUSD package has no PACKAGE-LICENSES directory: {usd_licenses}")
-        shutil.copytree(usd_licenses, os.path.join(staging_dir, "PACKAGE-LICENSES"))
+        licenses_dir = os.path.join(staging_dir, "PACKAGE-LICENSES")
+        os.makedirs(licenses_dir)
+        for name in license_texts(libs, build_dir):
+            if not os.path.isfile(os.path.join(usd_licenses, name)):
+                raise RuntimeError(f"OpenUSD package has no license text {name} in {usd_licenses}")
+            shutil.copy2(os.path.join(usd_licenses, name), licenses_dir)
 
         source_dir = omni.repo.man.resolve_tokens("$root/source/SmPyLib")
-        shutil.copy2(f"{source_dir}/python/usd_brep/__init__.py", package_dir)
+        for module_source in glob.glob(f"{source_dir}/python/usd_brep/*.py"):
+            shutil.copy2(module_source, package_dir)
         for stub in glob.glob(f"{source_dir}/stubs/usd_brep/*"):
             shutil.copy2(stub, package_dir)
 
         # The BrepArray schema rules, as a separate top-level package: importing it must not
         # import usd_brep, which would load the vendored OpenUSD into the validator's process.
-        validator_dir = os.path.join(staging_dir, "brep_validator")
+        validator_dir = os.path.join(staging_dir, "brep_usdschema_validator")
         os.makedirs(validator_dir)
-        for source in glob.glob(omni.repo.man.resolve_tokens("$root/tools/brep_validator/*.py")):
+        for source in glob.glob(omni.repo.man.resolve_tokens("$root/tools/brep_usdschema_validator/*.py")):
             shutil.copy2(source, validator_dir)
+        shutil.copy2(
+            omni.repo.man.resolve_tokens("$root/tools/pyproject/brep_usdschema_validator.md"), os.path.join(validator_dir, "README.md")
+        )
 
         if not omni.repo.man.is_windows():
             _patch_elf_binaries([os.path.join(package_dir, os.path.basename(p)) for p in [module] + libs])

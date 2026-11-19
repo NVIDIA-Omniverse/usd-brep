@@ -231,7 +231,7 @@ bool UsdBrepData::AddAppliedSchema(const pxr::SdfPrimSpecHandle& rPrimSpecHandle
     // declare _HasItem()
     auto _HasItem = [](const pxr::TfTokenVector& rItems, const pxr::TfToken& rItem)
     {
-        return (std::find(rItems.begin(), rItems.end(), rItem) != rItems.end());
+        return std::find(rItems.begin(), rItems.end(), rItem) != rItems.end();
     };
 
     // get listOp() ptr

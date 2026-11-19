@@ -185,7 +185,8 @@ def tessellate(parts, **overrides):
     # Library defaults unless overridden, e.g. chord_height_tolerance=...
     for p in parts:
         pb = sm.tessellate(p["brep"], **overrides)
-        p["mesh"] = pb.to_mesh_arrays()
+        # Face-varying normals keep CAD edges sharp; averaged vertex normals blend across them.
+        p["mesh"] = pb.to_mesh_arrays(face_varying_normals=True)
 
 # 4. Write a single mesh-only USDA
 def write_usda(parts, out_path, root="/Asset"):
@@ -216,9 +217,9 @@ def write_usda(parts, out_path, root="/Asset"):
         m.CreateFaceVertexIndicesAttr(Vt.IntArray(indices))
 
         normals = mesh.get("normals")
-        if normals and len(normals) == len(pts):
+        if normals and len(normals) == len(indices):
             m.CreateNormalsAttr(Vt.Vec3fArray([Gf.Vec3f(*n) for n in normals]))
-            m.SetNormalsInterpolation(UsdGeom.Tokens.vertex)
+            m.SetNormalsInterpolation(UsdGeom.Tokens.faceVarying)
 
         m.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
 

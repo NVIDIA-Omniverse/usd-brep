@@ -58,7 +58,7 @@ Read [references/validation-and-drift.md](references/validation-and-drift.md), t
 1. Confirm the layer opens and identify every authored `BrepArray` prim, including inactive or otherwise non-default prims when relevant.
 2. Confirm the OmniSolid plugin is registered and the intended applied API schemas are recognized. Treat "no BrepArray prims found" as inconclusive, never as a pass.
 3. Inspect raw `Sdf` property specs when authored types or authorship matter; composed `UsdAttribute` views can inherit schema types and hide a bad raw declaration.
-4. Run `tools/brep_validator_cli/validate_usd.sh <asset>` from the repository root when its built dependencies are available.
+4. Run `tools/brep_usdschema_validator_cli/validate_usd.sh <asset>` from the repository root when its built dependencies are available.
 5. Reclassify every validator issue against the authoritative schema: schema violation, derived-invariant violation, policy finding, contradiction, or underspecified.
 6. Manually cover explicit schema clauses not exercised by the validator.
 7. Report the exact scope checked. Do not claim full compliance from parsing, schema recognition, a zero-exit validator run, or round-trip success alone.
@@ -84,7 +84,7 @@ python3 .agents/skills/usd-brep-schema/scripts/compare_schema_layers.py \
 
 For validator drift:
 
-1. Start at `BrepArrayRequirements` and the corresponding `_validate_*` implementation in `tools/brep_validator/brep_validator.py`.
+1. Start at `BrepArrayRequirements` and the corresponding `_validate_*` implementation in `tools/brep_usdschema_validator/brep_usdschema_validator.py`.
 2. Cite the authoritative schema clause that supports the check.
 3. If multiple clauses imply the check, write the derivation.
 4. If no clause supports it, label it policy rather than compliance.
@@ -128,8 +128,8 @@ Choose the owning layer before editing:
 | Kernel-to-USD conversion | `source/BREP_SM_USD/` |
 | Staged authoring | `source/BREP_STAGING/` |
 | Schema-level iterators/evaluation/topology | `source/USD_BREP_UTILS/` |
-| Compliance validator | `tools/brep_validator/` |
-| Validator fixtures/tests | `TestFiles/brep_validator/`, `tools/brep_validator_test/` |
+| Compliance validator | `tools/brep_usdschema_validator/` |
+| Validator fixtures/tests | `TestFiles/usd_validator_TestFiles/`, `tools/brep_usdschema_validator_test/` |
 
 For each behavior change:
 

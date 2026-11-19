@@ -11,6 +11,10 @@
 
 #include "StdAfx.h"
 #include <SmTypes.h>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <vector>
 #include <smTopoTest.h>
 #include <smFaceTest.h>
 #include <smTestBrep.h>
@@ -28,11 +32,24 @@
 #include <SmOffsetSurface.h>
 #include <SmSurfOfExtrusion.h>
 #include <SmPrimitiveCreation.h>
+#include <SmBrepData.h>
+#include <algorithm>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <vector>
 #include <SmCylinder.h>
+#include <SmSphere.h>
 #include <SmProtoTopology.h>
 #include <SmLine.h>
 #include <SmTrackTopologyChanges.h>
 #include <NL_Geometry.h>
+#include <algorithm>
+#include <chrono>
+#include <climits>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 #define SM_NEW_READER 1
 
@@ -44,6 +61,33 @@ public:
       SmTopology * pOldOwner = pEdgeuse->m_pSorLU ;
       pEdgeuse->m_pSorLU = pOwner ;
       return pOldOwner ;
+    }
+
+  // Exercise partial topology without adding a mutation API to the kernel.
+  static SmStatus CheckUnlinkedSeamEvidence
+   (SmEdgeuse *pEdgeuse) // in : connected seam occurrence to temporarily unlink
+    {
+      for(ULONG lMissing=0; lMissing<2; ++lMissing)
+        {
+          SmEdgeuse *pCCW = pEdgeuse->m_pCCW;
+          SmEdgeuse *pCW  = pEdgeuse->m_pCW;
+          if(lMissing == 0) { pEdgeuse->m_pCCW = NULL; }
+          if(lMissing == 1) { pEdgeuse->m_pCW  = NULL; }
+          SmSeamSideType eForward,eBackward;
+          SmStatus       sStatus = pEdgeuse->FindSeamSides
+            (pEdgeuse->GetEdge()->GetInterval().GetMid(), // in : encounter parameter on this edge
+             SM_SP_U,                                    // in : periodic parameter being crossed
+             1e-7,                                       // in : 3D seam neighborhood
+             FALSE,                                      // in : match connected endpoints
+             eForward,                                   // out: evidence toward the CCW edgeuse
+             eBackward);                                 // out: evidence toward the CW edgeuse
+          pEdgeuse->m_pCCW = pCCW;
+          pEdgeuse->m_pCW  = pCW;
+          SER(sStatus);
+          if(lMissing == 0 && eForward  != SM_SEAM_SIDE_UNKNOWN) { return SM_ERR; }
+          if(lMissing != 0 && eBackward != SM_SEAM_SIDE_UNKNOWN) { return SM_ERR; }
+        }
+      return SM_SUCCESS;
     }
 } ;
 
@@ -59,6 +103,351 @@ static SmBoolean sm_HasAssertReport(const SmAssertArray & crAsserts, ULONG lList
         { return TRUE ; }
     }
   return FALSE ;
+}
+
+static SmBoolean sm_StartsWith(const TCHAR * pText, const TCHAR * pPrefix)
+{
+  for( ; *pPrefix != 0; ++pText, ++pPrefix)
+    { if(*pText != *pPrefix) { return FALSE ; } }
+  return TRUE ;
+}
+
+/*******************************************************************//**
+PURPOSE: Check physical loop closure and the gap/tolerance pair it reports.
+***********************************************************************/
+static SmStatus my_test_loop_closure_excess()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_loop_closure_excess"));
+  // Binary fractions keep the at-tolerance boundary exact. The last case has
+  // its largest gap at edgeuse 0 but its largest excess over tolerance at 2.
+  const SmZoneTol3d asZoneTols[4] = {0.25,0.25,0.03125,0.03125};
+  const double     aadGaps[4][4] = {{0.,0.,0.,0.}, {0.25,0.,0.,0.},
+                                  {0.5,0.,0.,0.}, {0.75,0.,0.5,0.}};
+  for(ULONG lCase=0; lCase<4; ++lCase)
+    {
+      SmContext           sContext;
+      SmBrep             *pBrep = new(sContext) SmBrep();
+      SmObjDelete         sCleanup(pBrep);
+      SmPrimitiveCreation sPrimitive(pBrep->GetInfiniteRegion());
+      SER(sPrimitive.CreateBox(16.,16.,16.,SmAxis2Placement()));
+      SmTArray<SmFace*> sFaces;
+      SmTArray<SmLoop*> sLoops;
+      pBrep->GetFaces(sFaces);
+      sFaces[0]->GetLoops(sLoops);
+      SmLoopuse           *pLoopuse = sLoops[0]->GetLoopuse();
+      SmTArray<SmEdgeuse*>  sEdgeuses;
+      pLoopuse->GetEdgeuses(sEdgeuses);
+      AERN(sEdgeuses.GetSize() == 4,SM_ERR);
+      AERN(pLoopuse->IsClosed3d() && pLoopuse->IsClosedPtrs(),SM_ERR);
+
+      // Keep the shared vertices and loop links intact, while displacing the
+      // defining curve's traversal endpoint to create a known physical gap.
+      pBrep->Notify(SM_NO_PRE_EDIT,pBrep,NULL,NULL);
+      for(ULONG lEdgeuse=0; lEdgeuse<4; ++lEdgeuse)
+        {
+          SmEdgeuse      *pEdgeuse = sEdgeuses[lEdgeuse];
+          SmEdge         *pEdge    = pEdgeuse->GetEdge();
+          SmPoint3d       sStart   = pEdgeuse->GetVertexuse()->GetVertex()->GetPoint();
+          SmPoint3d       sEnd     = sEdgeuses[(lEdgeuse+1)%4]->GetVertexuse()->GetVertex()->GetPoint();
+          SmBSplineCurve *pCurve   = NULL;
+          sEnd += SmVector3d(0.,0.,aadGaps[lCase][lEdgeuse]);
+          SmBoolean bSame = pEdgeuse->GetOrientation() == SM_OT_SAME;
+          SER(SmBSplineCurve::CreateLineSegment
+            (sContext,                 // in : context for new curve
+             3,                        // in : curve dimension
+             bSame ? sStart : sEnd,     // in : start in curve parameter order
+             bSame ? sEnd : sStart,     // in : end in curve parameter order
+             pCurve));                 // out: replacement defining curve
+          SER(pEdge->Replace3DCurve(pCurve));
+          pEdge->SetTolerance(asZoneTols[lEdgeuse],FALSE,FALSE);
+        }
+      AERN(pLoopuse->IsClosedPtrs(),SM_ERR);
+
+      for(ULONG lAll=0; lAll<2; ++lAll)
+        {
+          SmBoolean    bCheckAll = lAll != 0;
+          SmEdgeuse   *pGapEdgeuse = NULL;
+          double       dGap = -1.;
+          SmXSectTol3d sGapTol = 1.;
+          SmBoolean    bClosed = pLoopuse->IsClosed3d
+            (bCheckAll,    // in : scan every gap or stop at the first excessive gap
+             &pGapEdgeuse, // out: first edgeuse of the reported gap
+             &dGap,        // out: reported gap distance
+             &sGapTol);    // out: intersection tolerance for that same gap
+          ULONG        lExpected = lCase == 3 && bCheckAll ? 2 : 0;
+          double       dExpectedGap = aadGaps[lCase][lExpected];
+          SmXSectTol3d sExpectedTol = lCase == 0 ? SmXSectTol3d(0.) :
+            SmTol::GetXSectTol3d(sEdgeuses[lExpected],sEdgeuses[(lExpected+1)%4]);
+          AERN(bClosed == (lCase != 3),SM_ERR);
+          AERN(pGapEdgeuse == (lCase == 0 ? NULL : sEdgeuses[lExpected]),SM_ERR);
+          AERN(smos_Fabs(dGap-dExpectedGap) < 1e-12,SM_ERR);
+          AERN(smos_Fabs(sGapTol-sExpectedTol) < 1e-12,SM_ERR);
+          AERN(sLoops[0]->IsClosed3d(bCheckAll) == bClosed,SM_ERR);
+        }
+
+      // Exercise the validator consumer at its normal registration level.
+      SmAssertArray sAsserts;
+      SmBoolean     bValid = pLoopuse->AssertValid(&sAsserts,SM_LEVEL_2,SM_NO_WALK);
+      AERN(bValid == (lCase != 3),SM_ERR);
+      AERN(sm_HasAssertReport(sAsserts,SM_LIST_0,5,pLoopuse) == (lCase == 3),SM_ERR);
+      AERN(sAsserts.GetSize() == (lCase == 3 ? 1u : 0u),SM_ERR);
+
+      if(lCase == 3)
+        {
+          // AssertValid formats the message in a local buffer, so the report must keep its own copy.
+          const SmAssertReport *pReport = NULL;
+          for(ULONG lReport=0; lReport<sAsserts.GetSize(); ++lReport)
+            { if(sAsserts[lReport] != NULL && sAsserts[lReport]->GetTestIndex() == 5) { pReport = sAsserts[lReport]; } }
+          AERN(pReport != NULL,SM_ERR);
+          AERN(sm_StartsWith(pReport->m_pMessage,_T("SmLoopuse::AssertValid - found loop with out of tol")),SM_ERR);
+
+          // Overwriting the caller's buffer must not change the report, nor a copy or assignment of it.
+          TCHAR sBuff[32];
+          SM_STRCPY(sBuff,_T("original message"));
+          SmAssertReport sReport
+            (pLoopuse,                    // in : reporting object
+             5,                           // in : test index
+             pLoopuse->GetClassType(),    // in : reporting class
+             pLoopuse,                    // in : owner
+             pLoopuse->GetClassType(),    // in : owner type
+             pLoopuse->GetClassString(),  // in : owner type string
+             NULL,                        // in : no other object
+             0,                           // in : other type
+             _T("NULL"),                  // in : other type string
+             SM_UNDEF_DOUBLE,             // in : no tolerance
+             SM_UNDEF_DOUBLE,             // in : no value
+             SM_LIST_0,                   // in : label list
+             sBuff                        // in : message in the caller's buffer
+#ifdef SM_DEBUG_CODE
+            ,FILE_NAME,LINE_NUMBER
+#endif
+            );
+          SM_STRCPY(sBuff,_T("overwritten!!!!!!"));
+          AERN(SM_STRCMP(sReport.m_pMessage,_T("original message")) == 0,SM_ERR);
+          SmAssertReport sCopy(sReport);
+          AERN(SM_STRCMP(sCopy.m_pMessage,_T("original message")) == 0,SM_ERR);
+          AERN(sCopy.m_pMessage != sReport.m_pMessage,SM_ERR);
+          SmAssertReport sAssigned(*pReport);
+          sAssigned = sReport;
+          AERN(SM_STRCMP(sAssigned.m_pMessage,_T("original message")) == 0,SM_ERR);
+          AERN(sAssigned.m_pMessage != sReport.m_pMessage,SM_ERR);
+        }
+    }
+  return SM_SUCCESS;
+}
+
+// A Brep file holding a table count too big to allocate, or cut short, is rejected.
+static SmStatus my_test_read_brep_rejects_bad_data()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_brep_rejects_bad_data"));
+
+  // Keep expected reader diagnostics out of the files; restore logging before checking the status.
+  class ScopedDisableFileOutput
+  {
+  public:
+    ScopedDisableFileOutput()
+      : m_bOutputLong(smGet_OutputLong()),
+        m_bOutputThin(smGet_OutputThin()),
+        m_bOutputDebugLog(smGet_OutputDebugLog())
+      {
+        smSet_OutputLong(FALSE);
+        smSet_OutputThin(FALSE);
+        smSet_OutputDebugLog(FALSE);
+      }
+
+    ~ScopedDisableFileOutput()
+      {
+        smSet_OutputLong(m_bOutputLong);
+        smSet_OutputThin(m_bOutputThin);
+        smSet_OutputDebugLog(m_bOutputDebugLog);
+      }
+
+  private:
+    SmBoolean m_bOutputLong;
+    SmBoolean m_bOutputThin;
+    SmBoolean m_bOutputDebugLog;
+  };
+
+  SmContext sContext;
+  SmBrep * pBox = new(sContext) SmBrep();
+  SmObjDelete sBoxCleanup(pBox);
+  SmPrimitiveCreation sPrimitive(pBox->GetInfiniteRegion());
+  SER(sPrimitive.CreateBox(10.0, 10.0, 10.0, SmAxis2Placement()));
+  SER(pBox->WriteToFile(_T("OutputFiles/read_check_box.smb")));
+
+  std::vector<std::string> sLines;
+  {
+    std::ifstream sIn("OutputFiles/read_check_box.smb");
+    for (std::string sLine; std::getline(sIn, sLine); ) { sLines.push_back(sLine); }
+  }
+
+  // every table count line, e.g. "2 Shells In Brep"
+  ULONG lNumCounts = 0;
+  for (size_t lRow = 0; lRow < sLines.size(); lRow++)
+    {
+      const std::string & rLine = sLines[lRow];
+      if (rLine.size() < 8 || rLine.compare(rLine.size() - 8, 8, " In Brep") != 0) { continue; }
+      lNumCounts++;
+      {
+        std::ofstream sOut("OutputFiles/read_check_bad_count.smb");
+        for (size_t ii = 0; ii < sLines.size(); ii++)
+          { sOut << (ii == lRow ? "200000000" + rLine.substr(rLine.find(' ')) : sLines[ii]) << '\n'; }
+      }
+
+      SmBrep      *pRead = new(sContext) SmBrep();
+      SmObjDelete  sReadCleanup(pRead);
+      SmStatus     sReadStatus;
+      {
+        ScopedDisableFileOutput sQuietRead;
+        sReadStatus = pRead->ReadFromFile(sContext, _T("OutputFiles/read_check_bad_count.smb"));
+      }
+      AERN(sReadStatus == SM_ERR_INVALID_INPUT, SM_ERR);
+    }
+  AERN(lNumCounts == 13, SM_ERR);
+
+  // the file cut short: binary at every byte, ASCII at every line start (a number cut short still reads as a number)
+  SER(pBox->WriteToFile(_T("OutputFiles/read_check_box_binary.smb"), SM_BINARY));
+  const char * aFiles[2] = {"OutputFiles/read_check_box.smb", "OutputFiles/read_check_box_binary.smb"};
+  const SmFileType aTypes[2] = {SM_ASCII, SM_BINARY};
+  for (int ii = 0; ii < 2; ii++)
+    {
+      std::string sBytes;
+      {
+        std::ifstream sIn(aFiles[ii], std::ios::binary);
+        sBytes.assign(std::istreambuf_iterator<char>(sIn), std::istreambuf_iterator<char>());
+      }
+      AERN(sBytes.size() > 1000, SM_ERR);
+      for (size_t lCut = 0; lCut < sBytes.size(); lCut++)
+        {
+          if (aTypes[ii] == SM_ASCII && lCut > 0 && sBytes[lCut - 1] != '\n') { continue; }
+          {
+            std::ofstream sOut("OutputFiles/truncated.smb", std::ios::binary);
+            sOut.write(sBytes.data(), (std::streamsize)lCut);
+          }
+          SmBrep      *pRead = new(sContext) SmBrep();
+          SmObjDelete  sReadCleanup(pRead);
+          SmStatus     sReadStatus;
+          {
+            ScopedDisableFileOutput sQuietRead;
+            sReadStatus = pRead->ReadFromFile(sContext, _T("OutputFiles/truncated.smb"), aTypes[ii]);
+          }
+          AERN(sReadStatus == SM_ERR_INVALID_INPUT, SM_ERR);
+        }
+    }
+  return SM_SUCCESS;
+}
+
+// A binary Brep file holding a value too big for a ULONG is rejected where ULONG is 32 bits (Windows).
+static SmStatus my_test_read_brep_rejects_value_too_big()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_brep_rejects_value_too_big"));
+
+  SmContext sContext;
+  SmBrep * pBox = new(sContext) SmBrep();
+  SmObjDelete sBoxCleanup(pBox);
+  SmPrimitiveCreation sPrimitive(pBox->GetInfiniteRegion());
+  SER(sPrimitive.CreateBox(10.0, 10.0, 10.0, SmAxis2Placement()));
+  SmTArray<SmFace*> sFaces;
+  pBox->GetFaces(sFaces);
+  sFaces[0]->SetUserIndex2(0x5EED5EED);
+  SER(pBox->WriteToFile(_T("OutputFiles/read_check_big_value.smb"), SM_BINARY));
+
+  // the file stores the user index in 8 little-endian bytes; set bit 32. User index 2 is the last value
+  // SmTopologyData::ReadFromDB reads, so a reader that ignores its failure stays in step and reads the file.
+  std::string sBytes;
+  {
+    std::ifstream sIn("OutputFiles/read_check_big_value.smb", std::ios::binary);
+    sBytes.assign(std::istreambuf_iterator<char>(sIn), std::istreambuf_iterator<char>());
+  }
+  const std::string sIndex("\xED\x5E\xED\x5E\0\0\0\0", 8);
+  const size_t lPos = sBytes.find(sIndex);
+  AERN(lPos != std::string::npos && sBytes.find(sIndex, lPos + 1) == std::string::npos, SM_ERR);
+  sBytes[lPos + 4] = 1;
+  {
+    std::ofstream sOut("OutputFiles/read_check_big_value.smb", std::ios::binary);
+    sOut.write(sBytes.data(), (std::streamsize)sBytes.size());
+  }
+
+  SmBrep * pRead = new(sContext) SmBrep();
+  SmObjDelete sReadCleanup(pRead);
+  const SmStatus eRead = pRead->ReadFromFile(sContext, _T("OutputFiles/read_check_big_value.smb"), SM_BINARY);
+  if constexpr (sizeof(ULONG) == 4)
+    {
+      AERN(eRead == SM_ERR_INVALID_INPUT, SM_ERR);
+    }
+  else
+    {
+      // the value fits, so the file reads with it
+      SER(eRead);
+      SmTArray<SmFace*> sReadFaces;
+      pRead->GetFaces(sReadFaces);
+      ULONG lFound = 0;
+      for (ULONG ii = 0; ii < sReadFaces.GetSize(); ii++)
+        {
+          if ((unsigned long long)sReadFaces[ii]->GetUserIndex2() == 0x15EED5EEDull) { lFound++; }
+        }
+      AERN(lFound == 1, SM_ERR);
+    }
+  return SM_SUCCESS;
+}
+
+// A part file holding a count or attribute index too big to allocate is rejected.
+static SmStatus my_test_read_part_rejects_oversized_counts()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_part_rejects_oversized_counts"));
+
+  SmContext sContext;
+  SmBrep * pBox = new(sContext) SmBrep();
+  SmObjDelete sBoxCleanup(pBox);
+  SmPrimitiveCreation sPrimitive(pBox->GetInfiniteRegion());
+  SER(sPrimitive.CreateBox(10.0, 10.0, 10.0, SmAxis2Placement()));
+  SmTArray<SmCurve*> sNoCurves;
+  SmTArray<SmSurface*> sNoSurfaces;
+  SmTArray<long> sNoTrees;
+  SmTArray<SmBrep*> sBoxes;
+  sBoxes.Add(pBox);
+  SER(SmBrepData::WritePartToFile(_T("OutputFiles/oversized_count_box.smp"), sNoCurves, sNoSurfaces, sNoTrees, sBoxes, SM_ASCII, TRUE));
+
+  std::vector<std::string> sLines;
+  {
+    std::ifstream sIn("OutputFiles/oversized_count_box.smp");
+    for (std::string sLine; std::getline(sIn, sLine); ) { sLines.push_back(sLine); }
+  }
+
+  // each replacement for a line: the tree node and Brep counts, and every attribute count line
+  const std::string sAttrs = "            ";
+  std::vector<std::pair<size_t, std::string>> sEdits;
+  for (size_t lRow = 0; lRow < sLines.size(); lRow++)
+    {
+      const std::string & rLine = sLines[lRow];
+      if (rLine.find(" Boolean Tree Nodes") != std::string::npos) { sEdits.push_back({lRow, "//   (3) 200000000 Boolean Tree Nodes"}); }
+      if (rLine.find(" Breps") != std::string::npos)              { sEdits.push_back({lRow, "//   (4) 200000000 Breps"}); }
+      if (rLine == sAttrs + "0 ")
+        {
+          sEdits.push_back({lRow, sAttrs + "200000000 "});
+          sEdits.push_back({lRow, sAttrs + "1 200000000 "});
+          sEdits.push_back({lRow, sAttrs + "1 " + std::to_string((ULONG)-1) + " "}); // index + 1 wraps to 0
+          sEdits.push_back({lRow, sAttrs + "2 0 200000000 "}); // a placeholder exists for index 0 when 200000000 fails
+        }
+    }
+
+  for (const auto & rEdit : sEdits)
+    {
+      {
+        std::ofstream sOut("OutputFiles/oversized_count.smp");
+        for (size_t ii = 0; ii < sLines.size(); ii++) { sOut << (ii == rEdit.first ? rEdit.second : sLines[ii]) << '\n'; }
+      }
+      SmTArray<SmCurve*> sCurves;
+      SmTArray<SmSurface*> sSurfaces;
+      SmTArray<long> sTrees;
+      SmTArray<SmBrep*> sBreps;
+      SmObjsDelete<SmCurve*> sCurveCleanup(&sCurves);
+      SmObjsDelete<SmSurface*> sSurfaceCleanup(&sSurfaces);
+      SmObjsDelete<SmBrep*> sBrepCleanup(&sBreps);
+      AERN(SmBrepData::ReadPartFromFile(sContext, _T("OutputFiles/oversized_count.smp"), sCurves, sSurfaces, sTrees, sBreps) == SM_ERR_INVALID_INPUT, SM_ERR);
+    }
+  AERN(sEdits.size() > 20, SM_ERR);
+  return SM_SUCCESS;
 }
 
 static SmStatus my_test_validate_required_pointers()
@@ -162,6 +551,138 @@ static SmStatus my_test_validate_required_pointers()
 
   delete pBrep ;
   return eRtn ;
+}
+
+// Keep the records alive past SmBrepData's destructor so missing cleanup is
+// observable without a leak checker. Only the outer record storage is borrowed;
+// each populated attribute-index array owns its allocation.
+static SmStatus my_test_brep_data_attribute_cleanup()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_brep_data_attribute_cleanup"));
+  const ULONG lCounts[] = {0, 1, 3};
+  for(int iBorrowGeometry=0; iBorrowGeometry<2; ++iBorrowGeometry)
+    for(ULONG lCount : lCounts)
+      {
+        SmEdgeData sEdges[3];
+        SmLoopData sLoops[3];
+        SmEUData sEdgeuses[3];
+        {
+          SmBrepData sData;
+          sData.m_bIsGeomBorrowed = iBorrowGeometry ? TRUE : FALSE;
+          sData.m_vEdges.SetArray(3, sEdges, lCount);
+          sData.m_vLoops.SetArray(3, sLoops, lCount);
+          sData.m_vEdgeuses.SetArray(3, sEdgeuses, lCount);
+          for(ULONG ii=0; ii<lCount; ++ii)
+            {
+              // Leave the middle record empty, as in partially read data.
+              if(ii == 1) { continue; }
+              SmTArray<ULONG> * apAttributes[] = {
+                &sEdges[ii].m_sAttributes,
+                &sLoops[ii].m_sAttributes,
+                &sLoops[ii].m_sLUUpperAttributes,
+                &sLoops[ii].m_sLULowerAttributes,
+                &sEdgeuses[ii].m_sAttributes,
+                &sEdgeuses[ii].m_sMateAttributes
+              };
+              for(SmTArray<ULONG> * pAttributes : apAttributes)
+                {
+                  AERN(pAttributes->SetSize(ii+1) != SM_BIG_ULONG, SM_ERR);
+                  pAttributes->SetAll(ii);
+                }
+            }
+        } // destroy SmBrepData before the borrowed records
+
+        for(ULONG ii=0; ii<3; ++ii)
+          {
+            SmTArray<ULONG> * apAttributes[] = {
+              &sEdges[ii].m_sAttributes,
+              &sLoops[ii].m_sAttributes,
+              &sLoops[ii].m_sLUUpperAttributes,
+              &sLoops[ii].m_sLULowerAttributes,
+              &sEdgeuses[ii].m_sAttributes,
+              &sEdgeuses[ii].m_sMateAttributes
+            };
+            for(SmTArray<ULONG> * pAttributes : apAttributes)
+              {
+                AERN_MSG(pAttributes->GetSize() == 0 && pAttributes->GetDataArray() == NULL,
+                         SM_ERR, _T("SmBrepData left a nested attribute-index array allocated"));
+              }
+          }
+      }
+  return SM_SUCCESS;
+}
+
+// A part file holding an attribute value count too big to allocate is rejected, in ASCII and binary, and so is
+// one whose attribute total differs from the attributes its Breps use.
+static SmStatus my_test_read_part_rejects_bad_attribute_counts()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_part_rejects_bad_attribute_counts"));
+
+  std::vector<std::string> sLines;
+  {
+    std::ifstream sIn("../../TestFiles/pt_TestFiles/ss_2adj_planes.smp");
+    for (std::string sLine; std::getline(sIn, sLine); ) { sLines.push_back(sLine); }
+  }
+  size_t lAttributeRow = std::find(sLines.begin(), sLines.end(), "Attribute #2") - sLines.begin() + 1; // "100 0 0 3 0"
+  size_t lTotalRow = std::find(sLines.begin(), sLines.end(), "6 // Total number of attributes") - sLines.begin();
+  AERN(lAttributeRow < sLines.size() && sLines[lAttributeRow] == "100 0 0 3 0" && lTotalRow < sLines.size(), SM_ERR);
+
+  // the ASCII file as is, with the attribute's long count set too big, and with the attribute total set to 4
+  for (int iCase = 0; iCase < 3; iCase++)
+    {
+      {
+        std::ofstream sOut("OutputFiles/bad_attribute.smp");
+        for (size_t ii = 0; ii < sLines.size(); ii++)
+          { sOut << (ii == lAttributeRow && iCase == 1 ? "100 0 300000000 3 0"
+                     : ii == lTotalRow && iCase == 2     ? "4 // Total number of attributes"
+                                                         : sLines[ii]) << '\n'; }
+      }
+      SmContext sContext;
+      SmTArray<SmCurve*> s3DCurves;
+      SmTArray<SmSurface*> sSurfaces;
+      SmTArray<long> sBooleanTrees;
+      SmTArray<SmBrep*> sBreps;
+      SmObjsDelete<SmBrep*> sCleanB(&sBreps);
+      SmObjsDelete<SmCurve*> sCleanC(&s3DCurves);
+      SmObjsDelete<SmSurface*> sCleanS(&sSurfaces);
+      SmStatus sStatus = SmBrepData::ReadPartFromFile(sContext, _T("OutputFiles/bad_attribute.smp"),
+                                                      s3DCurves, sSurfaces, sBooleanTrees, sBreps, SM_ASCII);
+      AERN(sStatus == (iCase == 0 ? SM_SUCCESS : SM_ERR_INVALID_INPUT), SM_ERR);
+
+      // write the unchanged part as binary for the binary case below
+      if (iCase == 0)
+        {
+          SER(SmBrepData::WritePartToFile("OutputFiles/bad_attribute_binary.smp", s3DCurves, sSurfaces, sBooleanTrees,
+                                          sBreps, SM_BINARY, TRUE));
+        }
+    }
+
+  // the binary file, with the same attribute's long count (the third of its five 8-byte longs) set too big
+  std::string sBytes;
+  {
+    std::ifstream sIn("OutputFiles/bad_attribute_binary.smp", std::ios::binary);
+    sBytes.assign(std::istreambuf_iterator<char>(sIn), std::istreambuf_iterator<char>());
+  }
+  const long long sRecord[5] = { 100, 0, 0, 3, 0 };
+  size_t lAt = sBytes.find(std::string(reinterpret_cast<const char *>(sRecord), sizeof(sRecord)));
+  AERN(lAt != std::string::npos, SM_ERR);
+  const long long llTooBig = 300000000;
+  sBytes.replace(lAt + 2 * sizeof(long long), sizeof(llTooBig), reinterpret_cast<const char *>(&llTooBig), sizeof(llTooBig));
+  {
+    std::ofstream sOut("OutputFiles/bad_attribute_binary.smp", std::ios::binary);
+    sOut.write(sBytes.data(), (std::streamsize)sBytes.size());
+  }
+  SmContext sContext;
+  SmTArray<SmCurve*> s3DCurves;
+  SmTArray<SmSurface*> sSurfaces;
+  SmTArray<long> sBooleanTrees;
+  SmTArray<SmBrep*> sBreps;
+  SmObjsDelete<SmBrep*> sCleanB(&sBreps);
+  SmObjsDelete<SmCurve*> sCleanC(&s3DCurves);
+  SmObjsDelete<SmSurface*> sCleanS(&sSurfaces);
+  AERN(SmBrepData::ReadPartFromFile(sContext, _T("OutputFiles/bad_attribute_binary.smp"), s3DCurves, sSurfaces,
+                                    sBooleanTrees, sBreps, SM_BINARY) == SM_ERR_INVALID_INPUT, SM_ERR);
+  return SM_SUCCESS;
 }
 
 static SmStatus my_test_stale_edgeuse_owner()
@@ -557,6 +1078,49 @@ if ( bDoFast ) {
     return SM_SUCCESS;
 
 } // end my_test_tsurf_cyl_creation_fast
+
+class SmCrvOnSurfTestAccess : public SmCrvOnSurf
+{
+public:
+  static ULONG GetOwnerFlag(const SmCrvOnSurf *cpCurve)
+    { return cpCurve->*(&SmCrvOnSurfTestAccess::m_lOwnerFlag); }
+};
+
+// The fast path's edge curves borrow the face surface (owner flag 1). A Brep
+// copy must give each copied curve its own owned surface, so it neither leaks
+// it nor points at the original's surface once the original is deleted.
+static SmStatus my_test_copy_crvonsurf_edges()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_copy_crvonsurf_edges"));
+  SmContext sContext;
+  SmBrep   *pBrep = NULL;
+  SER(my_test_tsurf_cyl_creation_fast(sContext,pBrep,TRUE));
+  SmObjDelete sCleanup(pBrep);
+  SmTArray<SmFace*> sFaces;
+  pBrep->GetFaces(sFaces);
+  const SmSurface *pOrigSurface = sFaces[0]->GetSurface();
+
+  SmBrep     *pCopy = new(sContext) SmBrep(*pBrep);
+  SmObjDelete sCleanupCopy(pCopy);
+  SmTArray<SmEdge*> sEdges;
+  pCopy->GetEdges(sEdges);
+  if(sEdges.GetSize() == 0) { return SM_ERR; }
+  for(ULONG ii=0; ii<sEdges.GetSize(); ++ii)
+    {
+      const SmCurve *pCurve = sEdges[ii]->GetCurve();
+      if(   !pCurve->IsKindOf(SmCrvOnSurf_TYPE)
+         || ((const SmCrvOnSurf*)pCurve)->GetBaseSurface() == pOrigSurface
+         || SmCrvOnSurfTestAccess::GetOwnerFlag((const SmCrvOnSurf*)pCurve) != 2) { return SM_ERR; }
+    }
+
+  sCleanup.DeleteObj();
+  for(ULONG ii=0; ii<sEdges.GetSize(); ++ii)
+    {
+      SmPoint3d sPoint;
+      SER(sEdges[ii]->GetCurve()->EvaluatePoint(sEdges[ii]->GetInterval().GetMid(),sPoint));
+    }
+  return SM_SUCCESS;
+}
 
 /***********************************************************************
 PURPOSE ---
@@ -3543,6 +4107,324 @@ static SmStatus my_test_torus_seam_insertion_with_vertex_loops()
   return SM_SUCCESS;
 }
 
+static SmStatus my_test_unlinked_seam_evidence()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_unlinked_seam_evidence"));
+  SmContext   sContext;
+  SmBrep     *pBrep = new(sContext) SmBrep();
+  SmObjDelete sCleanup(pBrep);
+  SmSphere   *pSphere = NULL;
+  SmFace     *pFace   = NULL;
+  SER(SmSphere::CreateCanonical(sContext,SmAxis2Placement(),1.,pSphere));
+  SER(pBrep->CreateFaceFromSurface(pSphere,pSphere->GetNaturalUVDomain(),pFace));
+  SmTArray<SmLoop*> sLoops;
+  pFace->GetLoops(sLoops);
+  SmTArray<SmEdgeuse*> sUses;
+  sLoops[0]->GetEdgeuses(sUses);
+  NER(sUses[0]);
+  SER(SmBrepValidationTestAccess::CheckUnlinkedSeamEvidence(sUses[0]));
+  return SM_SUCCESS;
+}
+
+/*******************************************************************//**
+PURPOSE: An ASCII Brep file with an over-long header or object-type label
+  must fail to read rather than overrun the reader's fixed buffers.
+***********************************************************************/
+static SmStatus my_test_read_long_token()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_long_token"));
+  namespace fs = std::filesystem;
+  const fs::path sPath = fs::temp_directory_path() /
+    ("sm_read_long_token_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".smb");
+  SmContext sContext;
+  {
+    SmBrep *pBox = new(sContext) SmBrep();
+    SmObjDelete sCleanup(pBox);
+    SmPrimitiveCreation sPrimitive(pBox->GetInfiniteRegion());
+    SER(sPrimitive.CreateBox(1.0, 1.0, 1.0, SmAxis2Placement()));
+    SER(pBox->WriteToFile(sPath.string<TCHAR>().c_str()));
+  }
+  std::string sText;
+  {
+    std::ifstream sIn(sPath, std::ios::binary);
+    sText.assign(std::istreambuf_iterator<char>(sIn), std::istreambuf_iterator<char>());
+  }
+
+  // Unchanged file reads; each label lengthened to 2000 characters must not.
+  SmStatus eRtn = SM_SUCCESS;
+  for(const char *cpLabel : {"", "Version", "Healer", "Object"})
+    {
+      std::string sBad = sText;
+      if(*cpLabel)
+        {
+          size_t lPos = sBad.find(cpLabel);
+          if(lPos == std::string::npos)
+            {
+              eRtn = SM_ERR;
+              break;
+            }
+          sBad.replace(lPos, strlen(cpLabel), cpLabel[0] + std::string(1999, 'x'));
+        }
+      std::ofstream(sPath, std::ios::binary) << sBad;
+      SmBrep *pRead = new(sContext) SmBrep();
+      SmObjDelete sCleanup(pRead);
+      SmStatus eRead = pRead->ReadFromFile(sContext, sPath.string<TCHAR>().c_str());
+      if(eRead != (*cpLabel ? SM_ERR_INVALID_INPUT : SM_SUCCESS))
+        {
+          eRtn = SM_ERR;
+          break;
+        }
+    }
+  std::error_code sErrCode;
+  fs::remove(sPath, sErrCode);
+  return eRtn;
+}
+
+// A Brep file holding an out-of-range index, an unknown edgeuse type or a link to an unbuilt entity is rejected.
+static SmStatus my_test_read_brep_rejects_bad_indices()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_read_brep_rejects_bad_indices"));
+
+  // section, record index, column, replacement value, whether to mark the Brep not manifold
+  struct BadValue { const char * cpSection; size_t lRecord; size_t lColumn; std::string sValue; bool bNonManifold = false; };
+  const BadValue sBadValues[] =
+    {
+      { "//Region Data",  0, 5, "1000"  },  // first shell
+      { "//Shell Data",   0, 7, "1000"  },  // start faceuse
+      { "//Faceuse Data", 0, 4, "1000"  },  // face
+      { "//Faceuse Data", 5, 4, "0"     },  // face already used by a faceuse of the same orientation
+      { "//Faceuse Data", 0, 5, "12"    },  // orientation of a faceuse not yet used
+      { "//Face Data",    0, 5, "1000"  },  // surface
+      { "//Face Data",    0, 6, "1000"  },  // outer loop
+      { "//Loop Data",    0, 6, "1000"  },  // start edgeuse
+      { "//Edgeuse Data", 0, 7, "1000"  },  // edgeuse type
+      { "//Edgeuse Data", 3, 7, "1"     },  // vertex edgeuse in an edge loop
+      { "//Edgeuse Data", 0, 7, "2"     },  // wire edgeuse first in an edge loop
+      { "//Edgeuse Data", 0, 8, "1000"  },  // edge
+      { "//Edgeuse Data", 0, 9, "1000"  },  // loop
+      { "//Edgeuse Data", 0, 11, "1000" },  // UV curve
+      { "//Edge Data",    0, 5, "1000"  },  // curve
+      { "//Edge Data",    0, 6, "1000"  },  // start vertex
+      { "//Edge Data",    0, 7, "1000"  },  // end vertex
+      { "//Edge Data",    0, 8, "-1000" },  // primary edgeuse, negative for the mate
+      { "//Edgeuse Data", 0, 12, "-1000000000", true },           // radial next edgeuse, negative for the mate
+      { "//Edgeuse Data", 0, 13, std::to_string(LONG_MIN), true },  // radial mate next edgeuse
+    };
+
+  SmContext sContext;
+  SmBrep * pBox = new(sContext) SmBrep();
+  SmObjDelete sBoxCleanup(pBox);
+  SmPrimitiveCreation sPrimitive(pBox->GetInfiniteRegion());
+  SER(sPrimitive.CreateBox(10.0, 10.0, 10.0, SmAxis2Placement()));
+  SER(pBox->WriteToFile(_T("OutputFiles/bad_index_box.smb")));
+
+  std::vector<std::string> sLines;
+  {
+    std::ifstream sIn("OutputFiles/bad_index_box.smb");
+    for (std::string sLine; std::getline(sIn, sLine); )
+      {
+        sLines.push_back(sLine);
+      }
+  }
+
+  for (const BadValue & rBad : sBadValues)
+    {
+      // record's first line after the section's count and comment lines; a record can span two lines
+      size_t lRow = std::find(sLines.begin(), sLines.end(), rBad.cpSection) - sLines.begin() + 1;
+      while (lRow < sLines.size() && (   sLines[lRow].rfind("//", 0) == 0
+                                      || sLines[lRow].find(" In Brep") != std::string::npos
+                                      || sLines[lRow].find(" - ") != std::string::npos))
+        { lRow++; }
+      while (   lRow < sLines.size() && sLines[lRow].rfind("//", 0) != 0
+             && sLines[lRow].substr(0, sLines[lRow].find(' ')) != std::to_string(rBad.lRecord))
+        {
+          lRow++;
+        }
+      AERN(lRow < sLines.size() && sLines[lRow].rfind("//", 0) != 0, SM_ERR);
+
+      std::istringstream sRowIn(sLines[lRow]);
+      std::vector<std::string> sValues;
+      for (std::string sValue; sRowIn >> sValue; )
+        {
+          sValues.push_back(sValue);
+        }
+      AERN(rBad.lColumn < sValues.size(), SM_ERR);
+      sValues[rBad.lColumn] = rBad.sValue;
+
+      {
+        std::ofstream sOut("OutputFiles/bad_index.smb");
+        for (size_t ii = 0; ii < sLines.size(); ii++)
+          {
+            if (ii == lRow)
+              {
+                for (const std::string & rValue : sValues)
+                  {
+                    sOut << rValue << ' ';
+                  }
+                sOut << '\n';
+              }
+            else if (rBad.bNonManifold && sLines[ii].find(" - is Manifold") == 1)
+              {
+                // the radial edgeuse links are read only for a Brep that is not manifold
+                sOut << '0' << sLines[ii].substr(1) << '\n';
+              }
+            else
+              {
+                sOut << sLines[ii] << '\n';
+              }
+          }
+      }
+
+      SmBrep * pRead = new(sContext) SmBrep();
+      SmObjDelete sReadCleanup(pRead);
+      AERN(pRead->ReadFromFile(sContext, _T("OutputFiles/bad_index.smb")) == SM_ERR_INVALID_INPUT, SM_ERR);
+    }
+  return SM_SUCCESS;
+}
+
+// A transformed torus keeps positive tolerances. A torus has a single vertex, so the model size cannot come
+// from the vertices alone.
+static SmStatus my_test_transform_torus_tolerance()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_transform_torus_tolerance"));
+
+  // a reflection, a quarter turn about z and a uniform scale by 2
+  const double aMirror[4][4]  = { {-1,0,0,0}, {0,1,0,0}, {0,0,1,0}, {0,0,0,1} };
+  const double aQuarter[4][4] = { {0,1,0,0}, {-1,0,0,0}, {0,0,1,0}, {0,0,0,1} };
+  const double aScale[4][4]   = { {2,0,0,0}, {0,2,0,0}, {0,0,2,0}, {0,0,0,1} };
+  const double (*aMatrices[3])[4] = { aMirror, aQuarter, aScale };
+
+  for (int ii = 0; ii < 3; ii++)
+    {
+      SmContext sContext;
+      SmAxis2Placement sRefFrame;
+      SER(sRefFrame.SetCanonical(SmPoint3d(0,0,0), SmVector3d(1,0,0), SmVector3d(0,1,0)));
+      SmBrep * pTorus = new(sContext) SmBrep();
+      SmObjDelete sTorusCleanup(pTorus);
+      SER(SmPrimitiveCreation(pTorus->GetInfiniteRegion()).CreateTorus(10.0, 3.0, 0.0, 360.0, sRefFrame));
+      const double dBrepTol = pTorus->GetTolerance();
+      AERN(dBrepTol > 0.0, SM_ERR);
+
+      SER(pTorus->Transform(aMatrices[ii], TRUE));
+
+      // every tolerance is positive; a transform that does not scale leaves the Brep tolerance as it was
+      AERN(pTorus->GetTolerance() > 0.0, SM_ERR);
+      if (ii < 2)
+        { AERN(smos_Fabs(pTorus->GetTolerance() - dBrepTol) <= 1.0e-9 * dBrepTol, SM_ERR); }
+      SmTArray<SmVertex*> sVertices;
+      pTorus->GetVertices(sVertices);
+      for (ULONG jj = 0; jj < sVertices.GetSize(); jj++)
+        { AERN(sVertices[jj]->GetTolerance() > 0.0, SM_ERR); }
+      SmTArray<SmEdge*> sEdges;
+      pTorus->GetEdges(sEdges);
+      for (ULONG jj = 0; jj < sEdges.GetSize(); jj++)
+        { AERN(sEdges[jj]->GetTolerance() > 0.0, SM_ERR); }
+      SmTArray<SmFace*> sFaces;
+      pTorus->GetFaces(sFaces);
+      for (ULONG jj = 0; jj < sFaces.GetSize(); jj++)
+        { AERN(sFaces[jj]->GetTolerance() > 0.0, SM_ERR); }
+    }
+
+  // a flat cylinder: its two vertices are only as far apart as it is high, far less than its width,
+  // so the model size must come from the whole body
+  {
+    SmContext sContext;
+    SmAxis2Placement sRefFrame;
+    SER(sRefFrame.SetCanonical(SmPoint3d(0,0,0), SmVector3d(1,0,0), SmVector3d(0,1,0)));
+    SmBrep * pDisc = new(sContext) SmBrep();
+    SmObjDelete sDiscCleanup(pDisc);
+    SER(SmPrimitiveCreation(pDisc->GetInfiniteRegion()).CreateCylinder(1.0e-6, 100.0, sRefFrame));
+    const double dBrepTol = pDisc->GetTolerance();
+    SER(pDisc->Transform(aQuarter, TRUE));
+    AERN(smos_Fabs(pDisc->GetTolerance() - dBrepTol) <= 1.0e-9 * dBrepTol, SM_ERR);
+    SER(pDisc->Transform(aScale, TRUE));
+    AERN(pDisc->GetTolerance() > 0.0, SM_ERR);
+    AERN(pDisc->AssertValid(), SM_ERR);
+  }
+
+  // a reflection (-1,1,1) and a half turn (-1,-1,1), each given as a matrix and as the signed scale vector
+  // SmApiScale passes: the Brep tolerance and distinct local tolerances stay exactly as they were
+  const SmVector3d aUnitScales[2] = { SmVector3d(-1,1,1), SmVector3d(-1,-1,1) };
+  for (int ii = 0; ii < 4; ii++)
+    {
+      const SmVector3d & rScale = aUnitScales[ii / 2];
+      SmContext sContext;
+      SmAxis2Placement sRefFrame;
+      SER(sRefFrame.SetCanonical(SmPoint3d(0,0,0), SmVector3d(1,0,0), SmVector3d(0,1,0)));
+      SmBrep * pTorus = new(sContext) SmBrep();
+      SmObjDelete sTorusCleanup(pTorus);
+      SER(SmPrimitiveCreation(pTorus->GetInfiniteRegion()).CreateTorus(10.0, 3.0, 0.0, 360.0, sRefFrame));
+      SmTArray<SmVertex*> sVertices;
+      SmTArray<SmEdge*> sEdges;
+      SmTArray<SmFace*> sFaces;
+      pTorus->GetVertices(sVertices);
+      pTorus->GetEdges(sEdges);
+      pTorus->GetFaces(sFaces);
+      for (ULONG jj = 0; jj < sVertices.GetSize(); jj++)
+        { sVertices[jj]->SetTolerance(8.0e-4, FALSE, FALSE); }
+      for (ULONG jj = 0; jj < sEdges.GetSize(); jj++)
+        { sEdges[jj]->SetTolerance(6.0e-4, FALSE, FALSE); }
+      for (ULONG jj = 0; jj < sFaces.GetSize(); jj++)
+        { sFaces[jj]->SetTolerance(4.0e-4, FALSE, FALSE); }
+      const double dBrepTol = pTorus->GetTolerance();
+
+      if (ii % 2 == 0)
+        {
+          const double aMatrix[4][4] = { {rScale.x,0,0,0}, {0,rScale.y,0,0}, {0,0,rScale.z,0}, {0,0,0,1} };
+          SER(pTorus->Transform(aMatrix, TRUE));
+        }
+      else
+        { SER(pTorus->Transform(SmAxis2Placement(), &rScale, TRUE)); }
+
+      AERN(pTorus->GetTolerance() == dBrepTol, SM_ERR);
+      pTorus->GetVertices(sVertices);
+      pTorus->GetEdges(sEdges);
+      pTorus->GetFaces(sFaces);
+      for (ULONG jj = 0; jj < sVertices.GetSize(); jj++)
+        { AERN(sVertices[jj]->GetTolerance() == 8.0e-4, SM_ERR); }
+      for (ULONG jj = 0; jj < sEdges.GetSize(); jj++)
+        { AERN(sEdges[jj]->GetTolerance() == 6.0e-4, SM_ERR); }
+      for (ULONG jj = 0; jj < sFaces.GetSize(); jj++)
+        { AERN(sFaces[jj]->GetTolerance() == 4.0e-4, SM_ERR); }
+    }
+
+  return SM_SUCCESS;
+}
+
+// An attribute that counts its RemoveUser() calls
+static ULONG s_lRemoveUserCalls = 0;
+class SmCountingAttribute : public SmAttribute
+{
+public:
+  SmCountingAttribute() : SmAttribute(SM_AI_USER_1, SM_AB_REFERENCE) { }
+  virtual void RemoveUser(SmAObject * pUser, SmBoolean bDoNotDelete = FALSE)
+    {
+      s_lRemoveUserCalls++;
+      SmAttribute::RemoveUser(pUser, bDoNotDelete);
+    }
+};
+
+// Deleting the two faces that own an attribute calls its RemoveUser() for both, the last one too (GitHub #45)
+static SmStatus my_test_deleted_owner_calls_remove_user()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_deleted_owner_calls_remove_user"));
+
+  SmContext sContext;
+  {
+    SmBrep * pBox = new(sContext) SmBrep();
+    SmObjDelete sBoxCleanup(pBox);
+    SER(SmPrimitiveCreation(pBox->GetInfiniteRegion()).CreateBox(1.0, 1.0, 1.0, SmAxis2Placement()));
+    SmTArray<SmFace*> sFaces;
+    pBox->GetFaces(sFaces);
+    SmCountingAttribute * pAttr = new(sContext) SmCountingAttribute();
+    sFaces[0]->AddAttribute(pAttr);
+    sFaces[1]->AddAttribute(pAttr);
+    s_lRemoveUserCalls = 0;
+  } // deleting the box deletes both owners
+  AERN(s_lRemoveUserCalls == 2, SM_ERR);
+  return SM_SUCCESS;
+}
+
 SmStatus my_test_topology()
 {
   // Run every independent test and retain the first failure in either build mode.
@@ -3557,13 +4439,21 @@ SmStatus my_test_topology()
   MYPRINTF(_T("********** Entered: my_test_topology"));
 
   PT_RUN(sResult, my_test_faces());
+  PT_RUN(sResult, my_test_unlinked_seam_evidence());
+  PT_RUN(sResult, my_test_read_long_token());
   PT_RUN(sResult, my_test_torus_seam_insertion_with_vertex_loops());
 
   PT_RUN(sResult, my_test_delete_face_wire_shell_transition());
   PT_RUN(sResult, my_test_separating_closed_edges());
 
   PT_RUN(sResult, my_test_stale_edgeuse_owner());
+  PT_RUN(sResult, my_test_brep_data_attribute_cleanup());
+  PT_RUN(sResult, my_test_read_part_rejects_bad_attribute_counts());
+  PT_RUN(sResult, my_test_loop_closure_excess());
   PT_RUN(sResult, my_test_validate_required_pointers());
+  PT_RUN(sResult, my_test_read_brep_rejects_bad_data());
+  PT_RUN(sResult, my_test_read_brep_rejects_value_too_big());
+  PT_RUN(sResult, my_test_read_part_rejects_oversized_counts());
   PT_RUN(sResult, my_test_squeeze_edge_tracks_removal());
   PT_RUN(sResult, my_test_tracks_changed_objects());
   PT_RUN(sResult, my_test_tracks_nested_geometry_and_resets());
@@ -3575,6 +4465,10 @@ SmStatus my_test_topology()
   PT_RUN(sResult, my_test_edge_geometry_repairs());
   PT_RUN(sResult, my_test_reversed_line_join());
   PT_RUN(sResult, my_test_coaxial_merge_orientation());
+  PT_RUN(sResult, my_test_copy_crvonsurf_edges());
+  PT_RUN(sResult, my_test_read_brep_rejects_bad_indices());
+  PT_RUN(sResult, my_test_transform_torus_tolerance());
+  PT_RUN(sResult, my_test_deleted_owner_calls_remove_user());
 
   // Test Shell vertex creation
   SER(pBrep->MakeShellVertex(pBrep->GetInfiniteRegion(),SmPoint3d(0,0,0),pNewShell,pNewVertex));

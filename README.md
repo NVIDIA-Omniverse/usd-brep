@@ -23,7 +23,7 @@ Libraries and tools that work on BReps stored in USD files:
   [problem statement](proposals/cad_geometry/README.md).
 - **[Import/export](source/SM_API_USD/inc/SmApiUsd.h):** reads `BrepArray` prims into
   SMLib BReps and writes SMLib BReps back to USD.
-- **[USD Validator](tools/brep_validator/README.md):** checks that the BReps in a USD file comply with the BRep
+- **[USD Validator](tools/brep_usdschema_validator/README.md):** checks that the BReps in a USD file comply with the BRep
   schema.
 - **[Healer](source/SM_API_USD/inc/SmApiUsdHeal.h):** heals the BReps across a whole USD scene, preserving layers,
   references, instancing, transforms and materials.

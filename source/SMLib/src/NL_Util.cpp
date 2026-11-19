@@ -788,7 +788,7 @@ NL_VOID N_EndNurbs(NL_STACKS* S)
      NL_STO_ERR when pool failed to allocate.
  
    ***********************************************************************/
-void *N_Malloc( NL_INTEGER size)              /* in : desired memory size in bytes   */
+void *N_Malloc( size_t size)                  /* in : desired memory size in bytes   */
 {
     NL_PRIVATE NL_STRING rname = _T("N_Malloc");
 
@@ -836,8 +836,8 @@ void *N_Malloc( NL_INTEGER size)              /* in : desired memory size in byt
      NL_STO_ERR when pool failed to allocate.
  
    ***********************************************************************/
-void *N_Calloc( NL_INTEGER num,           /*  in : num of memory blocks to allocate */
-                NL_INTEGER size)          /*  in : size of each block in bytes */
+void *N_Calloc( size_t num,               /*  in : num of memory blocks to allocate */
+                size_t size)              /*  in : size of each block in bytes */
 {
     NL_PRIVATE NL_STRING rname = _T("N_Calloc");
 
@@ -886,7 +886,7 @@ void *N_Calloc( NL_INTEGER num,           /*  in : num of memory blocks to alloc
  
    ***********************************************************************/
 void *N_Realloc( void *MemPtr,                  /*  in : pointer to existing block */
-                 NL_INTEGER size )              /*  in : desired new size for existing block */
+                 size_t size )                  /*  in : desired new size for existing block */
 {
     NL_PRIVATE NL_STRING rname = _T("N_Realloc");
 
@@ -971,7 +971,7 @@ void N_Free( void *MemPtr ) /*  in : pointer to memory block to be freed */
 void N_MemSet
   (void *ptr,              /* in : pointer to memory block to be set */
    NL_INTEGER val,         /* in : set value                         */
-   NL_INTEGER sizeInBytes) /* in : size in bytes of memory block     */
+   size_t sizeInBytes)     /* in : size in bytes of memory block     */
 {
     /*  use memset */
     memset( ptr, val, sizeInBytes );
@@ -4416,7 +4416,7 @@ NL_VOID N_FileOffset( FILE *fptr, NL_INTEGER bytes )
 
     for ( i = 0; i < bytes; i++ )
     {
-        fgetc( fptr );
+        (void)fgetc( fptr );
     }
 } /* end N_FileOffset */
 

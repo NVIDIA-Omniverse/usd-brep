@@ -83,6 +83,7 @@ SmTopologyIntersector::SmTopologyIntersector
    m_bIgnoreTangency(FALSE),
    m_bDoGluing(FALSE),
    m_bDoingFillets(FALSE),
+   m_dCaptureDistance(0.0),
    m_bTopologyDeleted(FALSE),
    m_crContext(crContext),
    m_pBrep(NULL),
@@ -117,6 +118,7 @@ SmTopologyIntersector::SmTopologyIntersector
    m_bIgnoreTangency(FALSE),
    m_bDoGluing(FALSE),
    m_bDoingFillets(FALSE),
+   m_dCaptureDistance(0.0),
    m_bTopologyDeleted(FALSE),
    m_crContext(crContext),
    m_pBrep(pBrep),
@@ -1076,6 +1078,24 @@ void SmTopologyIntersector::GetCommonVertices
 } // end SmTopologyIntersector::GetCommonVertices
 
 /*******************************************************************//**
+PURPOSE: Distance within which intersection points and curves are
+   collected into the same ProtoVertex or ProtoEdge.
+
+NOTES: Simply using entities' tolerances will miss intersections that
+   could possibly go into the same ProtoVertex.  We collect candidates
+   into the same PVs, and let Resolve() figure it out, making either one
+   or more SmVertices out of each PV.  The distance is m_dCaptureDistance
+   when that is set, else 0.01, or 2000 times the tolerance when that is
+   larger. [B669]
+***********************************************************************/
+double SmTopologyIntersector::GetCaptureDistance() const
+{
+  if (m_dCaptureDistance > 0.0)
+    { return m_dCaptureDistance; }
+  return smos_Max(0.01, 2000.0 * GetThisApproxTol3d());
+}
+
+/*******************************************************************//**
 PURPOSE: Insert intersection geometry into the Breps making relationships
     between topology that represents common intersection geometry.
 
@@ -1143,22 +1163,7 @@ SmBoolean bDebugFaceCount = FALSE;
                       });
 
 #endif
-  // Capture Distance: simply using entities' tolerances will miss intersections
-  // that could possibly go into the same ProtoVertex.  We should collect candidates
-  // into the same PVs, and let Resolve() figure it out, making either one or more
-  // SmVerttices out of each PV.
-  // This is a concept in progress.  We currently check the tolerance value in
-  // the TopologyIntersector, which ultimately comes from the tolerance in the Breps. [B669]
-  // We might want to look at Bounding Box sizes, or min Edge length, or such.
-  // But currently this works well.
-  double dCaptureDistance = 0.01;
-
-  // Make sure it's not smaller than our tolerance value.
-  double dTopoIntTol = this->GetThisApproxTol3d();
-  if ( dCaptureDistance < dTopoIntTol * 2000 )
-    { dCaptureDistance = dTopoIntTol * 2000; }
-
-  m_pProtoTopoMgr = new( m_pBrep ) SmProtoTopologyManager( m_pBrep, m_pOther, this, dCaptureDistance );
+  m_pProtoTopoMgr = new( m_pBrep ) SmProtoTopologyManager( m_pBrep, m_pOther, this, GetCaptureDistance() );
   // Did this to avoid a warning message in a test, but can't, because it gets installed
   // in new entities, but then m_crContext is deleted before the new entities are.
   //m_pProtoTopoMgr->SetContext( &m_crContext );

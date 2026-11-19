@@ -7927,7 +7927,7 @@ void SmFilletSolver::RecordFilletError
       if ( pThisGeom->GetFilletSurface()     != NULL ) { apFilSurfs.AddUnique( pThisGeom->GetFilletSurface() ); }
       if ( pThisGeom->GetCenterLineCurve()   != NULL ) { apFilCurvs.AddUnique( pThisGeom->GetCenterLineCurve() ); }
       if ( pThisGeom->GetRail(0)->GetCurve() != NULL ) { apFilEdges.AddUnique( pThisGeom->GetRail(0) ); }
-      if ( pThisGeom->GetRail(1)->GetCurve() != NULL ) { apFilEdges.AddUnique( pThisGeom->GetRail(0) ); }
+      if ( pThisGeom->GetRail(1)->GetCurve() != NULL ) { apFilEdges.AddUnique( pThisGeom->GetRail(1) ); }
     }
 
   // Just look at one TsectPnt position for now

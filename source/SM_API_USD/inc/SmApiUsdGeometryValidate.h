@@ -14,10 +14,13 @@
 #include <SmMessages.h>
 
 #include "UsdBrepHeaders.h" // pxr headers with warning suppression (BREP_USD_DATA)
+#include <pxr/usd/sdf/path.h>
 #include <pxr/usd/usd/prim.h>
+#include <pxr/usd/usd/stage.h>
 
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 /// One failed check.
@@ -51,6 +54,19 @@ SM_API_USD_EXPORT SmStatus SmApiUsdGeometryValidate
     const pxr::UsdPrim                      & crBrepArray,
     int                                       iLevel,
     SmApiUsdGeometryResult                  & rResult
+);
+
+/// Find the prims that SmApiUsdGeometryValidate should check: the prims UsdStage::Traverse visits (active, defined,
+/// not abstract) that have the BrepArray type or a brep:regionCount attribute, including those inside instance
+/// prototypes. The prims of a prototype are listed once, under a stable path made from the smallest authored instance
+/// path. Sorted by path.
+/// @param pVisited if not null, receives the number of prims visited
+/// @return SM_SUCCESS; SM_ERR_NULL_POINTER for a null stage
+SM_API_USD_EXPORT SmStatus SmApiUsdFindGeometryPrims
+(
+    const pxr::UsdStagePtr                                & crStage,
+    std::vector<std::pair<pxr::SdfPath, pxr::UsdPrim>>    & rPrims,
+    std::size_t                                           * pVisited = nullptr
 );
 
 #endif // _SM_API_USD_GEOMETRY_VALIDATE_H_

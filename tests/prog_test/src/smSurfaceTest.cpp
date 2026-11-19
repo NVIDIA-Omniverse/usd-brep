@@ -2093,6 +2093,53 @@ PT_EXPORT SmStatus my_test_bspline_surface_component_ctor()
     return SM_SUCCESS;
 }
 
+// CreateSphereFromArcs compared each arc's centre with itself, so it filled three arcs with
+// different centres with a sphere.
+PT_EXPORT SmStatus my_test_sphere_from_arcs()
+{
+    SmContext sContext;
+    const double dR = 10.0;
+    const SmPoint3d sO(0, 0, 0), sX(dR, 0, 0), sY(0, dR, 0), sZ(0, 0, dR), sC(0.5 * dR, 0.5 * sqrt(3.0) * dR, 0);
+    // Arc ii runs from aEnds[ii] to aEnds[ii+1] about aCenters[ii].
+    const struct { SmPoint3d aCenters[3]; SmPoint3d aEnds[3]; SmBoolean bSphere; } aCases[] = {
+        {{sO, sO, sO}, {sX, sY, sZ}, TRUE},   // an octant of a sphere
+        {{sC, sO, sX}, {sO, sX, sC}, FALSE},  // a Reuleaux triangle: same radius, different centres
+    };
+    for (const auto & rCase : aCases)
+    {
+        SmTArray<SmBSplineCurve*> sArcs;
+        SmObjDelete sArcCleanup[3];
+        for (ULONG ii = 0; ii < 3; ++ii)
+        {
+            SmBSplineCurve* pArc = NULL;
+            SER(SmBSplineCurve::CreateArcFromPoints(sContext, 3, rCase.aCenters[ii], rCase.aEnds[ii], rCase.aEnds[(ii + 1) % 3],
+                                                    SM_CO_QUADRATIC, pArc));
+            sArcCleanup[ii].SetObj(pArc);
+            sArcs.Add(pArc);
+        }
+        SmTArray<SmCurve*> sCCWArcs;
+        SmTArray<SmOrientType> sOrients;
+        SmBSplineSurface* pSphere = NULL;
+        const SmStatus eStat = SmBSplineSurface::CreateSphereFromArcs(sContext, sArcs, 1.0e-3, sCCWArcs, sOrients, pSphere);
+        SmObjDelete sSphereCleanup(pSphere);
+        if ((eStat == SM_SUCCESS) != (rCase.bSphere == TRUE) || (pSphere != NULL) != (rCase.bSphere == TRUE))
+        {
+            return SM_ERR;
+        }
+        // The sphere lies on the arcs' sphere.
+        if (pSphere != NULL)
+        {
+            SmPoint3d sMid;
+            SER(pSphere->EvaluatePoint(pSphere->GetNaturalUVDomain().Evaluate(0.5, 0.5), sMid));
+            if (fabs(sMid.DistanceBetween(sO) - dR) > 1.0e-3)
+            {
+                return SM_ERR;
+            }
+        }
+    }
+    return SM_SUCCESS;
+}
+
 PT_EXPORT SmStatus my_test_drop_curve()
 {
   SER(my_test_drop_curve_near_seam());
@@ -4042,6 +4089,90 @@ static SmStatus my_test_poles_without_optional_outputs()
   return SM_SUCCESS;
 }
 
+static SmStatus my_coincidence_endpoint_fail(const TCHAR * sWhat, ULONG eKind, ULONG lPartial)
+{
+  TCHAR sBuff[SM_TBLOCK_SIZE];
+  SM_SPRINTF(sBuff,_T("my_test_simple_coincidence_endpoints: %s (kind %lu, partial %lu)\n"),sWhat,eKind,lPartial);
+  smos_WriteBuffer(sBuff);
+  return SM_ERR;
+}
+
+/***********************************************************************
+PURPOSE --- SimpleCoincidenceChecker must return, for each end of the
+  coincident range, a curve parameter, UV and distance taken from the same
+  sampled point.  Polyline curves over the plane z=0 give exact distances (|z|).
+  eKind: 0 = whole curve on the plane, 1 = only the start side on the plane
+  (curve midpoint is off the plane), 2 = only the end side on the plane.
+***********************************************************************/
+static SmStatus my_test_simple_coincidence_endpoints()
+{
+  MYPRINTF(_T("\n********** Entered: my_test_simple_coincidence_endpoints"));
+  const double dTol = 1e-5;
+  SmContext sContext;
+
+  SmAxis2Placement sPos;
+  sPos.SetCanonical(SmPoint3d(0,0,0),SmVector3d(1,0,0),SmVector3d(0,1,0));
+  SmPlane * pPlane = NULL;
+  SER(SmPlane::CreateCanonical(sContext,sPos,pPlane));
+  SmObjDelete sCleanupPlane(pPlane);
+  SmExtent2d sDomain(SmPoint2d(-10,-10),SmPoint2d(10,10));
+
+  for(ULONG eKind=0; eKind<3; ++eKind)
+    {
+      for(ULONG lPartial=0; lPartial<2; ++lPartial)
+        {
+          // Three-point polyline; the middle point sits at the second knot.
+          SmTArray<SmPoint3d> sPoints;
+          SmTArray<double>    sKnots;
+          if(eKind == 0)
+            {
+              sPoints.Add(SmPoint3d(0,0,0)); sPoints.Add(SmPoint3d(1,0,0)); sPoints.Add(SmPoint3d(3,0,0));
+              sKnots.Add(0); sKnots.Add(1.2); sKnots.Add(4);
+            }
+          else if(eKind == 1)
+            {
+              sPoints.Add(SmPoint3d(0,0,0)); sPoints.Add(SmPoint3d(1,0,0)); sPoints.Add(SmPoint3d(2,0,1));
+              sKnots.Add(0); sKnots.Add(1.2); sKnots.Add(4);
+            }
+          else
+            {
+              sPoints.Add(SmPoint3d(2,0,1)); sPoints.Add(SmPoint3d(1,0,0)); sPoints.Add(SmPoint3d(0,0,0));
+              sKnots.Add(0); sKnots.Add(2.8); sKnots.Add(4);
+            }
+          SmTArray<ULONG> sMults;
+          sMults.Add(2); sMults.Add(1); sMults.Add(2);
+          SmBSplineCurve * pCurve = NULL;
+          SER(SmBSplineCurve::CreateCanonical(sContext,3,1,sPoints,SM_CF_POLYLINE_FORM,sMults,sKnots,
+                                              SM_KT_UNSPECIFIED,NULL,NULL,pCurve));
+          SmObjDelete sCleanupCurve(pCurve);
+
+          SmBoolean  bFound = FALSE;
+          SmSolution sSol;
+          SER(pPlane->SimpleCoincidenceChecker(sDomain,*pCurve,pCurve->GetNaturalInterval(),dTol,bFound,sSol,lPartial != 0));
+
+          // A partly coincident curve is only reported when partial coincidence is allowed.
+          if(bFound != (eKind == 0 || lPartial != 0))
+            { return my_coincidence_endpoint_fail(_T("coincidence found/not found"),eKind,lPartial); }
+          if(!bFound)
+            { continue; }
+
+          for(const SmSolutionEnd * pEnd : { &sSol.m_vStart, &sSol.m_vEnd })
+            {
+              SmPoint3d sCrvPt, sSrfPt;
+              SER(pCurve->EvaluatePoint((*pEnd)[0],sCrvPt));
+              SER(pPlane->EvaluatePoint(SmPoint2d((*pEnd)[1],(*pEnd)[2]),sSrfPt));
+              // parameter and UV describe the same sample
+              if(sCrvPt.DistanceBetween(sSrfPt) > dTol)
+                { return my_coincidence_endpoint_fail(_T("parameter and UV are different samples"),eKind,lPartial); }
+              // the distance is the one measured at that parameter
+              if(smos_Fabs(pEnd->m_dSolutionValue - smos_Fabs(sCrvPt.z)) > 1e-9)
+                { return my_coincidence_endpoint_fail(_T("distance is not the one at the parameter"),eKind,lPartial); }
+            }
+        }
+    }
+  return SM_SUCCESS;
+}
+
 /***********************************************************************
 PURPOSE ---
 
@@ -4051,6 +4182,7 @@ PT_EXPORT SmStatus my_test_surf_methods(void)
 {
     SmStatus sResult = SM_SUCCESS;
     PT_RUN(sResult, my_test_poles_without_optional_outputs());
+    PT_RUN(sResult, my_test_simple_coincidence_endpoints());
     SmContext sContext;
 
     {
@@ -5538,6 +5670,16 @@ PT_EXPORT SmStatus my_test_analytic_surfaces(void)
       SmPoint2d sUVMax = SmPoint2d(360.0,1.0);
       SmExtent2d sAnalDomain(sUVMin,sUVMax);
       SER(my_test_analytic_surface(pSurface,sAnalDomain));
+    }
+
+  if (TRUE)
+    { //A reversed U interval used to hang in the elliptical arc angle loop; it returns and succeeds
+      SmAxis2Placement sPos;
+      SER(sPos.SetCanonical(SmPoint3d(0.0,0.0,0.0),SmVector3d(1.0,0.0,0.0),SmVector3d(0.0,1.0,0.0)));
+      SmCone * pNewCone = NULL;
+      SER(SmCone::CreateCanonical(sContext,sPos,1.0,2.0,3.0,pNewCone));
+      SmObjDelete sSU(pNewCone);
+      SER(pNewCone->AdjustSTEPUVDomain(SmExtent2d(90.0,0.0,10.0,1.0)));
     }
 
   if (TRUE)

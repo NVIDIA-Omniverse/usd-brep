@@ -12,7 +12,7 @@ The exporter (`usd_to_occt`) is the step under test. Re-importing its output and
 resulting BrepArray catches exporter bugs that produce a malformed or unparseable `.brep`, or a
 `.brep` whose geometry/topology no longer round-trips. Concretely each emitted `B.usda` is:
 
-  * schema-validated with the same `BrepValidator` the importer suite uses (zero failed checks), and
+  * schema-validated with the same `BrepUsdSchemaValidator` the importer suite uses (zero failed checks), and
   * checked against `A.usda` for exact region/shell/faceuse topology preservation, and
   * (committed corpus only) run through a SMLib `AssertValid` round-trip via
     ``usd_test_app --assert-valid``, in a subprocess so a crash fails the test rather than the
@@ -31,7 +31,7 @@ Two suites keep shareable and unshareable data isolated, mirroring the importer 
     distribution samples) kept in the git-ignored ``TestFiles/occt_breps_external`` directory (or
     wherever ``OCCT_BREP_EXTERNAL_DIR`` points). Skips when no such files are present.
 
-The USD-runtime bootstrap and the `BrepValidator` are reused from the `brep_validator_test`
+The USD-runtime bootstrap and the `BrepUsdSchemaValidator` are reused from the `brep_usdschema_validator_test`
 harness (its ``utils.base_test_case``).
 """
 
@@ -45,14 +45,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# Reuse the brep_validator test harness: it bootstraps the USD runtime, installs
-# usd-validation-nvidia, and exposes BrepValidatorBaseTestCase (with _collect_issues).
+# Reuse the brep_usdschema_validator test harness: it bootstraps the USD runtime, installs
+# usd-validation-nvidia, and exposes BrepUsdSchemaValidatorBaseTestCase (with _collect_issues).
 _THIS_DIR = Path(__file__).resolve().parent
-_VALIDATOR_TEST_DIR = _THIS_DIR.parent / "brep_validator_test"
+_VALIDATOR_TEST_DIR = _THIS_DIR.parent / "brep_usdschema_validator_test"
 if str(_VALIDATOR_TEST_DIR) not in sys.path:
     sys.path.insert(0, str(_VALIDATOR_TEST_DIR))
 
-from utils.base_test_case import REPO_ROOT, BrepValidatorBaseTestCase  # noqa: E402
+from utils.base_test_case import REPO_ROOT, BrepUsdSchemaValidatorBaseTestCase  # noqa: E402
 from pxr import Usd  # noqa: E402
 
 
@@ -143,7 +143,7 @@ def _usd_test_app_path() -> Path:
     return _built_binary("usd_test_app", "USD_TEST_APP")
 
 
-class _UsdToOcctRoundTripMixin(BrepValidatorBaseTestCase):
+class _UsdToOcctRoundTripMixin(BrepUsdSchemaValidatorBaseTestCase):
     """Shared import->export->re-import + validate machinery; suites supply the input directory."""
 
     inputs_dir: Path = None
@@ -203,13 +203,13 @@ class _UsdToOcctRoundTripMixin(BrepValidatorBaseTestCase):
         return out_path
 
     def _validate_schema(self, out_path: Path, src: Path):
-        """USD-level validation: run BrepValidator on the re-imported BrepArray."""
+        """USD-level validation: run BrepUsdSchemaValidator on the re-imported BrepArray."""
         issues = self._collect_issues(out_path)
         if issues:
             detail = "; ".join(
                 f"{getattr(getattr(i, 'requirement', None), 'code', '?')}: {getattr(i, 'message', i)}" for i in issues
             )
-            self.fail(f"BrepValidator reported {len(issues)} failed check(s) for {src.name}: {detail}")
+            self.fail(f"BrepUsdSchemaValidator reported {len(issues)} failed check(s) for {src.name}: {detail}")
 
     def _assert_valid(self, out_path: Path, src: Path):
         """SMLib-level validation: re-import the BrepArray to an SmBrep and run AssertValid."""

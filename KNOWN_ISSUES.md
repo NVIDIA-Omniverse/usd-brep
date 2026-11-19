@@ -31,11 +31,15 @@ Known bugs in USD BRep. Fixed bugs are listed in [CHANGELOG.md](CHANGELOG.md).
 
 Near a surface pole, for example the apex of a cone, dropping a curve onto a surface can miss a seam that the curve starts on or runs along within tolerance, and so classify the curve's boundary incorrectly.
 
-### `shell_brep` can return a result that is not a solid
+### `shell_brep` and `offset_brep` fail on some solids
 
-Shelling `TestFiles/pt_TestFiles/Shell/problemShell4.smb` outward by 5.08 with face 2 open returns three faces that do not form a solid. The debug `ShellBrep` test for this file expects a placeholder face count of `9999`. With `extended_offset=False`, shelling a 50 x 50 x 30 box whose top edges are filleted, with its top face open and an inset of 2, returns 83 faces that do not form a solid.
+These fail with `SM_ERR`, because the result would not be a solid:
 
-**Workaround:** for the filleted box, use the default `extended_offset=True`.
+- Shelling `TestFiles/pt_TestFiles/Shell/problemShell4.smb` outward by 5.08 with face 2 open. The debug `ShellBrep` test, which calls the kernel directly, still expects a placeholder face count of `9999`.
+- Shelling a 50 x 50 x 30 box with filleted top edges, its top face open and an inset of 2, with `extended_offset=False`.
+- With `extended_offset=True`, a shell or offset of the union of two perpendicular cylinders in [GitHub #36][gh-36], inward or outward. It fails when the first cylinder's seam ends on its top face beside the other cylinder; turning that cylinder so its seam ends under the other avoids it.
+
+**Workaround:** for the box and the cylinders, use the other `extended_offset` setting.
 
 ### `stitch_brep_with_face` crashes
 
@@ -75,7 +79,7 @@ For some chord heights, `tessellate()` on a sphere builds long, thin triangle fa
 
 Reading a BrepArray whose topology counts or indices disagree with its array sizes can read out of bounds and crash the process. Such files fail BrepArray validation.
 
-**Workaround:** validate files before importing them, for example with `brep_validator_cli/validate_usd.sh --brep-only` or `nvidia_usd_validate`.
+**Workaround:** validate files before importing them, for example with `brep_usdschema_validator_cli/validate_usd.sh --brep-only` or `nvidia_usd_validate`.
 
 ### BrepArrays with UV trim curves from other exporters
 
@@ -89,9 +93,9 @@ When a BrepArray contains an edge that no edgeuse refers to (BA.582), the BrepAr
 
 ### The validator scripts in the release package expect a source checkout
 
-`brep_validator_cli/validate_usd.sh` and `brep_validator_cli/validate_directory.sh` look for a source build (`_build/` and `tools/packman/`). Run from the release package, `validate_usd.sh` exits with code 127, and `validate_directory.sh` exits with code 1 and no output.
+`brep_usdschema_validator_cli/validate_usd.sh` and `brep_usdschema_validator_cli/validate_directory.sh` look for a source build (`_build/` and `tools/packman/`). Run from the release package, `validate_usd.sh` exits with code 127, and `validate_directory.sh` exits with code 1 and no output.
 
-**Workaround:** run `python brep_validator_cli/validate_usd.py <file>` with a Python 3.12 that can import `pxr` and `usd_validation_nvidia`, or install `usd-brep[validation]` and run `nvidia_usd_validate`.
+**Workaround:** run `python brep_usdschema_validator_cli/validate_usd.py <file>` with a Python 3.12 that can import `pxr` and `usd_validation_nvidia`, or install `usd-brep[validation]` and run `nvidia_usd_validate`.
 
 ### On Windows, `usd_brep` and PyPI `usd-core` cannot share a process
 
@@ -125,3 +129,4 @@ The output re-imports into USD BRep, but in OCCT:
 [gh-7]: https://github.com/NVIDIA-Omniverse/usd-brep/issues/7
 [gh-15]: https://github.com/NVIDIA-Omniverse/usd-brep/issues/15
 [gh-20]: https://github.com/NVIDIA-Omniverse/usd-brep/issues/20
+[gh-36]: https://github.com/NVIDIA-Omniverse/usd-brep/issues/36

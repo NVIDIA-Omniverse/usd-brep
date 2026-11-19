@@ -23,19 +23,22 @@ APIs, tools, and documented dependencies, without outside tools or derivative wo
 
 ## Getting Started
 
-Install the prerequisites listed in `README.md`, then build and test from the
-repository root:
+Install the prerequisites listed in [BUILDING.md](BUILDING.md), then build and
+test from the repository root. `prebuild` stages the omniSolid schema plugin the
+USD tests need at runtime; `repo build` alone does not create it.
 
 ```bash
+./prebuild.sh
 ./repo.sh build
-./repo.sh test
+./tests.sh linux-x86_64
 ```
 
-On Windows, use the equivalent batch wrapper:
+On Windows, use the equivalent batch wrappers:
 
 ```bat
+prebuild.bat
 repo.bat build
-repo.bat test
+tests.bat
 ```
 
 The repo tooling fetches USD, Python, Premake, and other build dependencies via
@@ -53,7 +56,7 @@ For code changes, run the relevant focused tests first, then run the full suite
 when the change affects shared behavior:
 
 ```bash
-./repo.sh test
+./tests.sh linux-x86_64
 ```
 
 If you change Python bindings, include tests under `source/SmPyLib/tests/`.

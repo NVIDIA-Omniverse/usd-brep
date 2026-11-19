@@ -12,7 +12,7 @@ Use `./repo.sh` on Linux and macOS, `./repo.bat` on Windows.
 - **Windows:** Visual Studio and the Windows SDK; see [Windows toolchain](#windows-toolchain).
 - **macOS:** Apple Silicon, with limits; see [macOS local development](#macos-local-development).
 
-On Linux and Windows, all other build dependencies (OpenUSD, Python 3.12, pybind11, premake and the `repo_*` tools) are downloaded by Packman when you build. On macOS some are not; see [macOS local development](#macos-local-development).
+On Linux and Windows, all other build dependencies (OpenUSD, Python 3.12, pybind11, premake and the `repo_*` tools) are downloaded by Packman when you build, so the first build needs network access and `curl` or `wget`. Running the tests additionally downloads `usd-validation-nvidia` from PyPI. On macOS some are not; see [macOS local development](#macos-local-development).
 
 ## Build it
 
@@ -63,7 +63,9 @@ print(_smlib_dev.assert_valid(brep))  # True when every check passes
 ```
 
 Failures are written to `stderr`; `_smlib_dev.assert_valid_reports` returns them
-instead. Set `PYTHONPATH` to `_build/<platform>/release` to import both modules.
+instead. Import both modules with the build's bundled Python (under
+`_build/target-deps/python`) and `PYTHONPATH` set to `_build/<platform>/release`;
+the system Python will not load extensions built for Python 3.12.
 
 ## Format it
 
@@ -81,7 +83,7 @@ This needs a release build. See the [hdUsdBrep README](source/HYDRA_USD_BREP/REA
 
 ## Run the Python GUI
 
-The GUI runs through [uv](https://docs.astral.sh/uv/), which installs its Python dependencies from `uv.lock`.
+The GUI runs through [uv](https://docs.astral.sh/uv/), which installs its Python dependencies from `uv.lock`. Install `uv` yourself first; Packman does not provide it.
 
 ```bash
 # Debug binaries by default (kernel Dump() echoes to the terminal).
@@ -124,3 +126,20 @@ export SMLIB_USD_ROOT=~/opt/usd-25.11-py312
 ```
 
 Set `PYTHONPATH="$PWD/_build/macos-universal/release"` to import Python extensions. Packman OpenUSD/Python packages are not available on macOS. The macOS premake package (`premake@5.0.0-beta1+nv1-macos-universal`, `deps/host-deps.packman.xml`) is not on the public Packman server either; supply it through a user-level Packman configuration. Avoid `./repo.sh build -x`; delete `_build`, `_compiler`, and `_repo` to clean.
+
+## Android (kernel only)
+
+Cross-compiles the kernel (SMLib, SM_API) and its C++ tests for Android arm64 (`android-aarch64`) with the [Android NDK](https://developer.android.com/ndk/downloads). There is no USD, OCCT or Python support. `./prebuild.sh` fetches premake; the NDK compiler is given to `make`, here for API level 29:
+
+```bash
+./prebuild.sh
+_build/host-deps/premake/premake5 --file=premake5.lua gmake2 --os=android \
+    --platform-host=linux-x86_64 --scripts=_repo/deps/repo_build/lua
+NDK_BIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
+make -C _compiler/gmake2-android config=release_aarch64 -j$(nproc) \
+    CC=$NDK_BIN/aarch64-linux-android29-clang CXX=$NDK_BIN/aarch64-linux-android29-clang++
+```
+
+The libraries and test apps are in `_build/android-aarch64/release`. `tools/scripts/android_run_tests.sh [release|debug]` copies them, the NDK's `libc++_shared.so` and `TestFiles` to a device or emulator connected to `adb`, and runs `prog_test_app`, `SM_API_test_app` and `sms_bugz_app`.
+
+Without an arm64 device, use the Android emulator with an x86_64 Google APIs system image for Android 11 or later (for example `system-images;android-34;google_apis;x86_64`). These images run arm64 executables through ARM translation; arm64 system images do not run on an x86-64 host. With KVM, create an AVD for the image and start it, for example `emulator -avd <name> -no-window -no-audio -accel on`. The tests run several times slower than on the host.

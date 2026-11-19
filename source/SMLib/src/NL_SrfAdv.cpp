@@ -14431,7 +14431,8 @@ NL_FLAG N_CreateSkinSrfBoundaryContinuity( NL_CURVE ** cur, NL_INDEX lNumSects_1
                 curM[++l] = &curB;
         }
 
-        error = N_CrvsMakeCompatibleKnotTol( curM, l, 0, SI );
+        /* Interpolating skins use the standard knot parameter tolerance to preserve the profiles. */
+        error = N_CrvsMakeCompatibleKnotTol( curM, l, ( ES <= 0.0 ) ? SM_EFF_ZERO_PARAM : 0.0, SI );
 
         if( error EQ NL_YES )
             NL_OUT;

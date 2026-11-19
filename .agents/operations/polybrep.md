@@ -43,6 +43,13 @@ Points and polygon indices preserve the original mesh connectivity. Normals are
 averaged per vertex by default. Pass `face_varying_normals=True` to either method
 for one source-face normal per polygon corner, in polygon order without the
 counts in `faces`. Use USD `faceVarying` interpolation with this output.
+
+Points are shared between the BRep faces that meet at them, so an averaged
+vertex normal blends across a sharp edge: at a box corner it points diagonally,
+between the three faces. Averaged normals suit smooth surfaces only. To render
+a CAD model with sharp edges, use `face_varying_normals=True`. To check a
+triangle's orientation, compare its winding with `face_normals`, not with the
+vertex normals.
 Missing or degenerate normals fall back to the vertex average, then `(0, 0, 1)`.
 
 `to_mesh_arrays()` returns Python lists for compatibility. `to_numpy_arrays()`

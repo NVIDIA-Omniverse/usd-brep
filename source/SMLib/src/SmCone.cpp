@@ -5306,6 +5306,44 @@ static SmBoolean sm_IsConePointInTrimDomain
 } // end sm_IsConePointInTrimDomain
 
 /*******************************************************************//**
+PURPOSE: Test whether two crossings of a cone trim circle with an
+            ellipse's plane are one touch point split by rounding.
+
+NOTES: A trim circle at a face v limit touches the ellipse where the
+       ellipse reaches that limit, e.g. at the top of a mitre cut.
+       Rounding then gives two crossings a few dTol apart instead of
+       one. The height of the ellipse along the cone axis is a sinusoid
+       of its STEP angle, so the middle of the shorter arc between the
+       crossings is the point of that arc furthest from the circle's
+       plane. When it is within dTol, the ellipse doesn't leave the
+       trim domain there.
+***********************************************************************/
+static SmBoolean sm_IsEllipseTouchingTrimCircle
+  (const SmEllipse   & crFullEllipse,   // in : full ellipse on the cone
+   const SmPoint3d   & crPoint0,        // in : first circle/ellipse plane crossing
+   const SmPoint3d   & crPoint1,        // in : second circle/ellipse plane crossing
+   const SmPoint3d   & crCircleCenter,  // in : center of the trim circle
+   const SmVector3d  & crConeAxis,      // in : unit cone axis, normal to the circle's plane
+   double              dTol)            // in : 3d tolerance
+{
+  double dAng0, dAng1 ;
+  crFullEllipse.STEPInversion(crPoint0, dAng0) ;
+  crFullEllipse.STEPInversion(crPoint1, dAng1) ;
+
+  // middle of the shorter arc between the two crossings (both angles are in [0, 360])
+  double dSpan = dAng1 - dAng0 ;
+  if (dSpan <    0.0) { dSpan += 360.0 ; }
+  if (dSpan >= 360.0) { dSpan -= 360.0 ; }
+  double dMidAng = (dSpan <= 180.0) ? dAng0 + 0.5 * dSpan
+                                    : dAng1 + 0.5 * (360.0 - dSpan) ;
+  SmPoint3d sMidPoint ;
+  crFullEllipse.EvaluateSTEPPoint(dMidAng, sMidPoint) ;
+
+  return (smos_Fabs((sMidPoint - crCircleCenter).Dot(crConeAxis)) <= dTol) ? TRUE : FALSE ;
+
+} // end sm_IsEllipseTouchingTrimCircle
+
+/*******************************************************************//**
 PURPOSE: Find the set of intervals on an ellipse known to be
             on the cone's surface that are inside given cone's 
             trim boundaries.
@@ -5450,6 +5488,17 @@ static ULONG lDebugCount = 0 ;
       if ( sTsectPoints[2].DistanceBetween( sTsectPoints[3] ) < dTol )
         { lNumTsect2 = 1; }
   }
+
+  // A trim circle at a face v limit can touch the ellipse where the ellipse reaches
+  // that limit. Crossings that rounding split from one touch point are a tangent too.
+  if (   lNumTsect1 == 2
+      && sm_IsEllipseTouchingTrimCircle(sFullEllipse, sTsectPoints[0], sTsectPoints[1],
+                                        sCenterTop, sConeAxis, dTol) )
+    { lNumTsect1 = 1; }
+  if (   lNumTsect2 == 2
+      && sm_IsEllipseTouchingTrimCircle(sFullEllipse, sTsectPoints[2], sTsectPoints[3],
+                                        rCenterBot, sConeAxis, dTol) )
+    { lNumTsect2 = 1; }
 
   // circle/Plane xSect lNumTSect == 0 is a miss - nothing to do
   //                    lNumTSect == 1 is a tangent point - not put on in/out point list

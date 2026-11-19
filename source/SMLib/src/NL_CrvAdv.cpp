@@ -947,6 +947,10 @@ NL_FLAG ST_curxcdr( NL_CURVE *curP, NL_REAL dist, NL_FLAG flg, NL_FLAG end, NL_F
             }
         }
 
+        /* a knot of multiplicity p+1 needs no insertion, like one of p */
+        if( mult GT p )
+            mult = p;
+
         /* let mq = number of knots in extended curve */
         mq = m + 2 * p - mult;
     }    /* end if (cont EQ NL_CMAX) branch */
@@ -3709,6 +3713,10 @@ NL_FLAG ST_curxcrr (   /* eff: extend curve interval range */
                 else
                     break;
         }
+
+        /* a knot of multiplicity p+1 needs no insertion, like one of p */
+        if( mult GT p )
+            mult = p;
 
         /* mq = */
         mq = m + 2 * p - mult;

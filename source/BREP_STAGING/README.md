@@ -24,7 +24,7 @@ This package must not include source-specific (CAD importer) headers or types. S
 ## Validation
 
 Gate adapter conformance on the **unhealed** path. Run
-[schema checks](../../tools/brep_validator_cli/README.md), then
+[schema checks](../../tools/brep_usdschema_validator_cli/README.md), then
 [geometry validation](../../tools/brep_geometry_validator/README.md)
 with `--level 2`, then
 [smtess_usd](../../tools/smtess_usd/src/smtess_usd_main.cpp) **without** `--heal`,

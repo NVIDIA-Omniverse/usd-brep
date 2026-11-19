@@ -40,9 +40,11 @@ struct SmApiUsdTessellatedBrep
     pxr::VtArray<pxr::GfVec3f>     m_sPoints;
     pxr::VtIntArray                m_sFaceVertexCounts;
     pxr::VtIntArray                m_sFaceVertexIndices;
-    pxr::VtArray<pxr::GfVec3f>     m_sNormals;
-    pxr::VtIntArray                m_sNormalsIndices;
-    pxr::TfToken                   m_sNormalsInterpolation;
+    pxr::VtArray<pxr::GfVec3f>     m_sNormals;                      ///< one per point per BRep face at it, not one per point
+    pxr::VtIntArray                m_sNormalsIndices;               ///< one per face corner, in m_sFaceVertexIndices order:
+                                                                    ///< corner k's normal is m_sNormals[m_sNormalsIndices[k]]
+    pxr::TfToken                   m_sNormalsInterpolation;         ///< faceVarying; the normal arrays are empty if normals
+                                                                    ///< could not be computed
     pxr::TfToken                   m_sSubdivisionScheme;
     pxr::VtArray<pxr::VtIntArray>  m_sSubsetIndices;
     pxr::VtArray<pxr::SdfPath>     m_sSubsetMaterialPaths;

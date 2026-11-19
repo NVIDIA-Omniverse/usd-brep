@@ -77,6 +77,10 @@ namespace SMU_BrepConvert
     // leaves labels that are read here for normals and material lookup.
     // That is the extraction contract and is separate from deletion, which
     // TessellatedMeshPtr handles.
+    // Normals are faceVarying: rNormals has one normal per point per BRep face at it, and
+    // rNormalsIndices one index into rNormals per entry of rFaceVertexIndices, so a point on
+    // a sharp edge keeps each face's own normal. Both are empty if the normals could not be
+    // computed. Do not index rNormals by point.
     // rMaterialPaths pairs with rSubsetIndices; an unbound subset gives an empty path.
     // An empty mesh yields empty arrays and an empty extent, and still returns SM_SUCCESS.
     // Not thread-safe on a single mesh.

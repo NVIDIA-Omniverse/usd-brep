@@ -295,7 +295,8 @@ SmAssertReport::SmAssertReport
   m_lTestIndex      (lTestIndex),
   m_eAssertType     (SM_AT_UNKNOWN),
   m_pName           (_T("")),
-  m_pMessage        ((pOptMessage && *pOptMessage) ? pOptMessage : _T("")),
+  m_pMessage        (_T("")),
+  m_pOwnedMessage   (NULL),
   m_pMessageForFile (_T("")),
   // m_pHealName       (_T("")),
   // m_pHealMessage    (_T("")),
@@ -318,7 +319,9 @@ SmAssertReport::SmAssertReport
 
   m_eAssertType     = pLabelList[lTestIndex].m_eAssertType ;
   m_pName           = pLabelList[lTestIndex].m_pName ;
-  m_pMessage        = (pOptMessage && *pOptMessage) ? pOptMessage : pLabelList[lTestIndex].m_pMessage ;
+  // A caller's message is often a local buffer that is gone once AssertValid returns, so keep a copy.
+  m_pMessage        = pLabelList[lTestIndex].m_pMessage ;
+  if(pOptMessage && *pOptMessage) { StoreMessage(pOptMessage) ; }
   m_pMessageForFile = pLabelList[lTestIndex].m_pMessageForFile ;
   // m_pHealName    = pLabelList[lTestIndex].m_pHealName ;
   // m_pHealMessage = NULL ;
@@ -478,6 +481,7 @@ SmAssertReport::SmAssertReport(const SmAssertReport & crOriginal)
    // something for strings
    m_pName           (crOriginal.m_pName           ),
    m_pMessage        (crOriginal.m_pMessage        ),
+   m_pOwnedMessage   (NULL),
    m_pMessageForFile (crOriginal.m_pMessageForFile ),
    //  m_pHealName       (crOriginal.m_pHealName       ),
    //  m_pHealMessage    (crOriginal.m_pHealMessage    ),
@@ -496,7 +500,9 @@ SmAssertReport::SmAssertReport(const SmAssertReport & crOriginal)
    m_sOwnerParam     (crOriginal.m_sOwnerParam     ),
    m_sOtherParam     (crOriginal.m_sOtherParam     ),
    m_dDist3d         (crOriginal.m_dDist3d         )
- { } // end SmAssertReport Copy Constructor
+ {
+   if(crOriginal.m_pOwnedMessage) { StoreMessage(crOriginal.m_pOwnedMessage) ; }
+ } // end SmAssertReport Copy Constructor
 
 /*******************************************************************//**
 PURPOSE: SmAssertReport Assignment operator
@@ -514,6 +520,9 @@ SmAssertReport & SmAssertReport::operator=
    m_eAssertType      = crOther.m_eAssertType;
    m_pName            = crOther.m_pName;
    m_pMessage         = crOther.m_pMessage;
+   delete [] m_pOwnedMessage ;
+   m_pOwnedMessage    = NULL ;
+   if(crOther.m_pOwnedMessage) { StoreMessage(crOther.m_pOwnedMessage) ; }
    m_pMessageForFile  = crOther.m_pMessageForFile;
 #ifdef SM_DEBUG_CODE
    m_file_name        = crOther.m_file_name ;
@@ -562,6 +571,33 @@ PURPOSE: a static Delete method for freeing SmAssertReports
 
 NOTES:
 ***********************************************************************/
+/*******************************************************************//**
+PURPOSE: SmAssertReport destructor
+
+NOTES: Frees the message copy here, in the module that allocated it.
+***********************************************************************/
+SmAssertReport::~SmAssertReport()
+{
+  delete [] m_pOwnedMessage ;
+  m_pOwner = m_pOther = NULL ;
+}
+
+/*******************************************************************//**
+PURPOSE: Keep a private copy of a report message
+
+NOTES: The copy is made before the old one is freed, so the argument may
+       be this report's own message.
+***********************************************************************/
+void SmAssertReport::StoreMessage(const TCHAR * pMessage)
+{
+  size_t lLength  = SM_STRLEN(pMessage) ;
+  TCHAR *pCopy    = new TCHAR[lLength+1] ;
+  memcpy(pCopy, pMessage, (lLength+1)*sizeof(TCHAR)) ;
+  delete [] m_pOwnedMessage ;
+  m_pOwnedMessage = pCopy ;
+  m_pMessage      = pCopy ;
+}
+
 void SmAssertReport::Delete( SmAssertReport *pReport )
   { delete pReport; }
 

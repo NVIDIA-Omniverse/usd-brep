@@ -3520,8 +3520,6 @@ SmStatus SmTrimmingTools::MirrorCurve
     for (ii = 0; ii < lNumPts; ii++)
     {
         control_points [ii][coord] = high - (control_points [ii][coord] - low);
-        if (ii < weights.GetSize ())
-            control_points [ii] = control_points [ii] / weights [ii];
     }
 
     SER (curve->SetCanonical (dimension, degree,

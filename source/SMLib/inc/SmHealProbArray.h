@@ -75,7 +75,8 @@ NOTES: In the future this can be extended to target specific checks and
 ***********************************************************************/
 enum SmHealerOpType
 {
-  // these enum values must be in the order in which the healer runs these operations
+  // Values must follow operation completion order in SmHealData::HealTgts.
+  // Stop-stage and recursive target-refresh checks compare these values.
   SM_HO_NONE = 0,                           //  No Healer Steps run
                                  
   SM_HO_FIX_BACKPOINTERS,                   // Ran All Healer Steps thru SmHealData::Fix_BackPointers
@@ -93,8 +94,6 @@ enum SmHealerOpType
                                                
   SM_HO_FIX_DEGEN_EDGES,                    // Ran All Healer Steps thru SmHealData::Fix_DegenEdges()
                                              
-  SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()
-  SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()
                                                
   SM_HO_CACHE_MISSED_EDGEXSECTS, /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_MissedEdgeXSects()
   SM_HO_FIX_MISSED_EDGEXSECTS,   /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_MissedEdgeXSects()
@@ -109,6 +108,9 @@ enum SmHealerOpType
   SM_HO_FIX_BADSHEETS,                      // Ran All Healer Steps thru SmHealData::Fix_BadSheets()
                                                
   SM_HO_CACHE_FACEPROPS_3,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage3()
+  SM_HO_CACHE_COIN_EDGES,        /* TODO */ // Ran All Healer Steps thru SmHealData::Cache_CoinEdges()
+  SM_HO_FIX_COIN_EDGES,          /* TODO */ // Ran All Healer Steps thru SmHealData::Fix_CoinEdges()
+  SM_HO_CACHE_FACEPROPS_4,                  // Ran All Healer Steps thru SmHealData::Cache_FaceProps_Stage4()
                                                
   SM_HO_FIX_SPLITFACE_ATSEAMS,              // Ran All Healer Steps thru SmHealData::Fix_SplitFaceAtSeams()
   SM_HO_FIX_BADLOOPS,                       // Ran All Healer Steps thru SmHealData::Fix_BadLoops()
@@ -135,8 +137,6 @@ enum SmHealerOpType
                                                                                            \
   : (HealerOp == SM_HO_FIX_DEGEN_EDGES        ) ? _T("SmHealData::Fix_DegenEdges()")       \
                                                                                            \
-  : (HealerOp == SM_HO_CACHE_COIN_EDGES       ) ?  _T("/* TODO */ SmHealData::Cache_CoinEdges()")  \
-  : (HealerOp == SM_HO_FIX_COIN_EDGES         ) ?  _T("/* TODO */ SmHealData::Fix_CoinEdges()")    \
                                                                                                    \
   : (HealerOp == SM_HO_CACHE_MISSED_EDGEXSECTS) ?  _T("/* TODO */ SmHealData::Cache_MissedEdgeXSects()") \
   : (HealerOp == SM_HO_FIX_MISSED_EDGEXSECTS  ) ?  _T("/* TODO */ SmHealData::Fix_MissedEdgeXSects()")   \
@@ -151,6 +151,9 @@ enum SmHealerOpType
   : (HealerOp == SM_HO_FIX_BADSHEETS          ) ?  _T("SmHealData::Fix_BadSheets()")          \
                                                                                               \
   : (HealerOp == SM_HO_CACHE_FACEPROPS_3      ) ?  _T("SmHealData::Cache_FaceProps_Stage3()") \
+  : (HealerOp == SM_HO_CACHE_COIN_EDGES       ) ?  _T("/* TODO */ SmHealData::Cache_CoinEdges()")  \
+  : (HealerOp == SM_HO_FIX_COIN_EDGES         ) ?  _T("/* TODO */ SmHealData::Fix_CoinEdges()")    \
+  : (HealerOp == SM_HO_CACHE_FACEPROPS_4      ) ?  _T("SmHealData::Cache_FaceProps_Stage4()") \
                                                                                               \
   : (HealerOp == SM_HO_FIX_SPLITFACE_ATSEAMS  ) ?  _T("SmHealData::Fix_SplitFaceAtSeams()")   \
   : (HealerOp == SM_HO_FIX_BADLOOPS           ) ?  _T("SmHealData::Fix_BadLoops()")           \

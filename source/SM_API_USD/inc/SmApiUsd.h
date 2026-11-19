@@ -64,6 +64,15 @@ struct SmApiUsdBrepArrayHealResult
     std::string     m_sMessage;              ///< why it failed
 };
 
+/// One result per BrepArray prim from SmApiUsdValidateGeometryFile. Valid when both m_sFailures
+/// and m_sMessage are empty. An empty prim path reports a problem with the file as a whole.
+struct SmApiUsdGeometryPrimResult
+{
+    std::string                         m_sPrimPath;
+    std::vector<std::string>            m_sFailures;  ///< one per failed check: "name: Brep, object and what was found"
+    std::string                         m_sMessage;   ///< why the Breps could not be imported
+};
+
 // ---------------------------------------------------------------------------
 //  Plugin management
 // ---------------------------------------------------------------------------
@@ -313,10 +322,12 @@ SM_API_USD_EXPORT SmStatus SmApiUsdAppendMeshes
 // ---------------------------------------------------------------------------
 
 /// Tessellate every BrepArray prim in a USD file and write a copy of the stage with a
-/// UsdGeomMesh per Brep under the default prim (or /Output), named tess_\<prim\>_\<brep\>
+/// UsdGeomMesh per Brep under the default prim (or /World), named tess_\<prim\>_\<brep\>
 /// (_\<n\> added if taken). Each mesh gets its Brep's world transform, visibility and purpose
 /// (default time) and material. Relative asset paths are rewritten if the output is in another
 /// directory. The input layer is not modified, even if the caller has it open.
+/// An unusable parent is reported as a mesh failure; an alternate root is never selected.
+/// The input's defaultPrim metadata is preserved, including when it is absent.
 ///
 /// Prims are tessellated in parallel, each through SmApiUsdTessellateBrepArray. Breps
 /// fail independently: a failed Brep is reported and skipped, and a partial mesh is
@@ -370,6 +381,17 @@ SM_API_USD_EXPORT SmStatus SmApiUsdHealFile
     const char                                      * pOutputFile,
     int                                               iThreadCount,
     std::vector<SmApiUsdBrepArrayHealResult>        & rResults
+);
+
+/// Run SmBrep::AssertValid, at iLevel 0 (fastest) to 2 (every check), on each BrepArray prim of a file,
+/// as SmApiUsdGeometryValidate does. Prims that share instanced geometry are checked once, under the first of them.
+/// @return SM_SUCCESS, with a result per prim whether or not its Breps are valid; SM_ERR_INVALID_INPUT
+///         for a level outside 0-2 or a file with no BrepArray; SM_ERR when the file cannot be opened
+SM_API_USD_EXPORT SmStatus SmApiUsdValidateGeometryFile
+(
+    const char                                      * pInputFile,
+    int                                               iLevel,
+    std::vector<SmApiUsdGeometryPrimResult>         & rResults
 );
 
 #endif // _SM_API_USD_H_

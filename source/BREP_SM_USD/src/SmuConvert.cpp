@@ -4163,9 +4163,10 @@ SmBoolean bDebugMe = FALSE;
         // Edges - // build m_vEdges = [FaceEdges, WireEdges]
         // ??? gwc::todo - what about attributes and materials for Edges and WireEdges
         
-        // Set ReferenceArray sizes to max number of possible Edges and Vertices (i.e., twice the number of Edges and WireEdges)
+        // Set ReferenceArray sizes: one Edge per Edge and WireEdge.
+        // One flag per m_vVertices entry, indexed by edge vertex indices.
         prSmBrepData_ii->m_vEdges.SetSize      (     (rSpans.m_lEdgeCount + rSpans.m_lWireEdgeCount)) ;
-        rSpans.m_bProcessedVertices.assign( 2 * (rSpans.m_lEdgeCount + rSpans.m_lWireEdgeCount), false);
+        rSpans.m_bProcessedVertices.assign( rSpans.m_lShellVertexCount + rSpans.m_lVertexCount, false);
         for(iGlobal=rSpans.m_lEdgeStartIndex, iLocal=0; iLocal<rSpans.m_lEdgeCount; iGlobal++, iLocal++)
           {
             // locals
@@ -4189,6 +4190,15 @@ SmBoolean bDebugMe = FALSE;
             rEdgeData.m_lCurve        = prSmBrepData_ii->m_v3DCurves.GetSize();
             rEdgeData.m_lStartVertex  = rArrays.MapGlobalToLocal(rSpans.m_lShellVertexCount + rArrays.m_sEdgeVertexIndicesArray[iGlobal][0], rSpans.m_lVertexStartIndex)  ; 
             rEdgeData.m_lEndVertex    = rArrays.MapGlobalToLocal(rSpans.m_lShellVertexCount + rArrays.m_sEdgeVertexIndicesArray[iGlobal][1], rSpans.m_lVertexStartIndex)  ;
+            if (   rEdgeData.m_lStartVertex >= rSpans.m_bProcessedVertices.size()
+                || rEdgeData.m_lEndVertex   >= rSpans.m_bProcessedVertices.size())
+              {
+                // a vertex index past this Brep's vertices
+                TCHAR sMessage[SM_TBLOCK_SIZE];
+                SM_SPRINTF( sMessage, _T("BrepMove_OneUsdBrepToSMLibData: Malformed BrepArray: vertex index out of range for edge index %u"), iGlobal);
+                ERR_MSG(sMessage);
+                return SM_ERR_INVALID_INPUT;
+              }
             rEdgeData.m_lPrimEU       = rSpans.m_iProcessedEdge_1stEdgeuses[iLocal] ;
 
             // make unused values look like SMLib unused values (simplifies debugging)
@@ -4301,6 +4311,14 @@ SmBoolean bDebugMe = FALSE;
                 sEllipseCleanup.Clear();
                 rSpans.m_lEdgeEllipseCurve3d_StartIndex++ ;
               }
+            else
+              {
+                // An unknown curve type would leave the edge without a curve.
+                TCHAR sMessage[SM_TBLOCK_SIZE];
+                SM_SPRINTF( sMessage, _T("BrepMove_OneUsdBrepToSMLibData: Malformed BrepArray: unsupported edge curve type for edge index %u"), iGlobal);
+                ERR_MSG(sMessage);
+                return SM_ERR_INVALID_INPUT;
+              }
 
             // accumulate topology data counts
             if(rSpans.m_bProcessedVertices[ rEdgeData.m_lStartVertex ] == false)
@@ -4339,6 +4357,15 @@ SmBoolean bDebugMe = FALSE;
             rWireEdgeData.m_lCurve        = prSmBrepData_ii->m_v3DCurves.GetSize();
             rWireEdgeData.m_lStartVertex  = rArrays.MapGlobalToLocal(rSpans.m_lShellVertexCount + rArrays.m_sWireEdgeVertexIndicesArray[iGlobal][0], rSpans.m_lVertexStartIndex)  ; 
             rWireEdgeData.m_lEndVertex    = rArrays.MapGlobalToLocal(rSpans.m_lShellVertexCount + rArrays.m_sWireEdgeVertexIndicesArray[iGlobal][1], rSpans.m_lVertexStartIndex)  ; 
+            if (   rWireEdgeData.m_lStartVertex >= rSpans.m_bProcessedVertices.size()
+                || rWireEdgeData.m_lEndVertex   >= rSpans.m_bProcessedVertices.size())
+              {
+                // a vertex index past this Brep's vertices
+                TCHAR sMessage[SM_TBLOCK_SIZE];
+                SM_SPRINTF( sMessage, _T("BrepMove_OneUsdBrepToSMLibData: Malformed BrepArray: vertex index out of range for wire edge index %u"), iGlobal);
+                ERR_MSG(sMessage);
+                return SM_ERR_INVALID_INPUT;
+              }
             rWireEdgeData.m_lPrimEU       = iLocal - rSpans.m_lEdgeCount;     // iLocal = WireEdge index, need = WireEdge_Edgeuse index = WireEdge_index - EdgeCount.
 
             // make unused values look like SMLib unused values (simplifies debugging)
@@ -4450,6 +4477,14 @@ SmBoolean bDebugMe = FALSE;
                 prSmBrepData_ii->m_v3DCurves.Add(pEllipse);
                 sEllipseCleanup.Clear();
                 rSpans.m_lWireEdgeEllipseCurve3d_StartIndex++ ;
+              }
+            else
+              {
+                // An unknown curve type would leave the wire edge without a curve.
+                TCHAR sMessage[SM_TBLOCK_SIZE];
+                SM_SPRINTF( sMessage, _T("BrepMove_OneUsdBrepToSMLibData: Malformed BrepArray: unsupported wire edge curve type for wire edge index %u"), iGlobal);
+                ERR_MSG(sMessage);
+                return SM_ERR_INVALID_INPUT;
               }
 
             // accumulate topology data counts

@@ -2713,6 +2713,31 @@ SmStatus SmStitch::StitchIntoSolid
   if (lNumLamina == 0) {
       SmTArray<SmRegion*> sRegions;
       pBrepToStitch->GetRegions(sRegions);
+      // Closed shells of merged sheets enclose regions marked void with void on every side: classify them as
+      // nested solids. A region that has material or borders it keeps its flag, so a cavity stays void.
+      SmTArray<SmBoolean> sOldIsVoid; // UNSURE = classify this region
+      SmBoolean bClassify = FALSE;
+      for (ULONG ii=0; ii<sRegions.GetSize(); ii++) {
+          SmBoolean bKeep = sRegions[ii]->IsVoid() != TRUE;
+          SmTArray<SmShell*> sShells, sMated;
+          sRegions[ii]->GetShells(sShells);
+          for (ULONG jj=0; jj<sShells.GetSize() && !bKeep; jj++) {
+              SER(sShells[jj]->GetMatedShells(sMated));
+              for (ULONG kk=0; kk<sMated.GetSize() && !bKeep; kk++) {
+                  bKeep = sMated[kk]->GetRegion()->IsVoid() != TRUE;
+              }
+          }
+          sOldIsVoid.Add(bKeep ? sRegions[ii]->IsVoid() : UNSURE);
+          bClassify = bClassify || !bKeep;
+      }
+      if (sRegions.GetSize() > 1 && bClassify) {
+          SER(pBrepToStitch->FindAndSetInfiniteRegion(NULL, SM_VS_NESTEDSOLID));
+          for (ULONG ii=0; ii<sRegions.GetSize(); ii++) {
+              if (sOldIsVoid[ii] != UNSURE) {
+                  sRegions[ii]->SetIsVoid(sOldIsVoid[ii]);
+              }
+          }
+      }
       if (sRegions.GetSize() > 1) {
           rbProducesASolid = TRUE;
       }

@@ -216,7 +216,8 @@ public:
     double dInsideRadius,                   // in : Inside Radius measured from Z Axis, [greater than zero]                                 
     double dOutsideRadius,                  // in : Outside Radius measured from Z Axis, [greater than InsideRadius]                        
     double dStartAngDeg,                    // in : Start Position measured from X Axis in YX plane, [-360 to 360]                          
-    double dEndAngDeg,                      // in : Start Position measured from X Axis in YX plane, [EndAng-StartAng in range:(0 to 360]   
+    double dEndAngDeg,                      // in : End angle; sweep in (0,360] with
+                                            //    : dEndAngDeg - dStartAngDeg <= 360, else sweep is rejected
     const  SmAxis2Placement & crRefFrame    // in : Z Axis  = Cylinder centers                                                              
                                             //    : Origin  = Bot of CylBox                                                                 
                                             //    : XY Axes = Plane of Start and End angles measured from X Axis                            

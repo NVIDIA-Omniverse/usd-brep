@@ -2388,6 +2388,101 @@ static SmStatus usdBrep_TestPointShellOccurrencePacking()
     return SM_SUCCESS;
 }
 
+// Every count or index in packed BrepArray data that runs past its arrays must be
+// rejected by span setup and by the one-Brep converter.
+static SmStatus usdBrep_TestPackedSpansRejectOutOfRangeData()
+{
+    usdBrep_WriteString("\n\n***************************************************************************************************\n");
+    usdBrep_WriteString("Test, usdBrep_TestPackedSpansRejectOutOfRangeData: out-of-range packed counts and indices\n");
+    usdBrep_WriteString("***************************************************************************************************\n");
+
+    SmStatus sRtn = SM_SUCCESS;
+    // Wrong array sizes and out-of-range indices are covered by the brep_validator fixtures in test_omni_solid.py.
+    const char* cpCases[] = { "face:loopCount", "shell:wireEdgeCount",
+                              // counts whose sum wraps in 32 bits
+                              "face:loopCount wrap", "region:shellCount wrap", "shell:faceuseCount wrap",
+                              "loop:edgeuseCount wrap", "shell:wireEdgeCount wrap",
+                              // parallel arrays the converter reads per element
+                              "empty region:type", "empty face:surfaceType", "empty face:trimType", "empty face:range",
+                              "empty edgeuse:nextRadialEUIndex", "empty edgeuse:orientationType", "empty edge:range",
+                              "empty edge:curveType", "empty vertex:pointType" };
+    for (size_t lCase = 0; lCase < sizeof(cpCases) / sizeof(cpCases[0]); lCase++)
+    {
+        UsdStageRefPtr sStage;
+        UsdPrim sBrepArrayPrim;
+        UsdBrepArrayData sArrays;
+        SER(createBoxBrepArrayStage(sStage, sBrepArrayPrim, sArrays));
+        switch (lCase)
+        {
+            case 0: sArrays.m_sFaceLoopCountArray[0] = 1000; break;
+            case 1: sArrays.m_sShellWireEdgeCountArray[0] = 1000; break;
+            case 2: sArrays.m_sFaceLoopCountArray[0] = 4294967295U; break;
+            case 3: sArrays.m_sRegionShellCountArray[0] = 4294967295U; break;
+            case 4: sArrays.m_sShellFaceuseCountArray[0] = 4294967290U; break;
+            case 5: sArrays.m_sLoopEdgeuseCountArray[0] = 4294967295U; break;
+            case 6: sArrays.m_sShellWireEdgeCountArray[0] = 1; sArrays.m_sShellWireEdgeCountArray[1] = 4294967295U; break;
+            case 7: sArrays.m_sRegionTypeArray.clear(); break;
+            case 8: sArrays.m_sFaceSurfaceTypeArray.clear(); break;
+            case 9: sArrays.m_sFaceTrimTypeArray.clear(); break;
+            case 10: sArrays.m_sFaceRangeArray.clear(); break;
+            case 11: sArrays.m_sEdgeuseNextRadialEUIndexArray.clear(); break;
+            case 12: sArrays.m_sEdgeuseOrientationTypeArray.clear(); break;
+            case 13: sArrays.m_sEdgeRangeArray.clear(); break;
+            case 14: sArrays.m_sEdgeCurveTypeArray.clear(); break;
+            case 15: sArrays.m_sVertexPointTypeArray.clear(); break;
+        }
+
+        UsdBrepArraySpans sSpans;
+        SmContext sContext;
+        UsdBrepArraySpans sConverterSpans;
+        SmBrep* pBrep = nullptr;
+        if (   sSpans.SetStartsAndCountsForBrepIndex(sArrays, 0, TRUE, TRUE)
+            || SMU_BrepConvert::BrepMove_OneUsdBrepToSMLib(sContext, sArrays, sConverterSpans, 0, pBrep, FALSE) != SM_ERR_INVALID_INPUT
+            || pBrep != nullptr)
+        {
+            usdBrep_WriteString(std::string("  FAIL: out-of-range ") + cpCases[lCase] + " was accepted\n");
+            delete pBrep;
+            sRtn = SM_ERR;
+        }
+    }
+
+    // A wire edge vertex index past the Brep's vertices: a box with one internal wire edge.
+    {
+        SmContext sContext;
+        SmBrep* pBrep = new (sContext) SmBrep();
+        SmObjDelete sClean(pBrep);
+        SmPrimitiveCreation sPrimitiveCreation(pBrep->GetInfiniteRegion());
+        SER(sPrimitiveCreation.CreateBox(10.0, 10.0, 10.0, SmAxis2Placement()));
+        SmTArray<SmRegion*> sRegions;
+        SmTArray<SmVertex*> sVertices;
+        pBrep->GetRegions(sRegions);
+        pBrep->GetVertices(sVertices);
+        SmPoint3d sEnd(5, 5, 5);
+        SmLine* pLine = new (sContext) SmLine(sVertices[0]->GetPoint(), sEnd, 3, &sContext);
+        SmEdge* pNewEdge = nullptr;
+        SmVertex* pNewVertex = nullptr;
+        SER(pBrep->MakeWireEdgeVertex(sRegions.GetLast(), sVertices[0], pLine, SmExtent1d(0, 1), SM_OT_SAME, sEnd, pNewEdge, pNewVertex));
+
+        std::vector<SmBrep*> sBreps = { pBrep };
+        UsdBrepArrayData sArrays;
+        SER(SMU_BrepConvert::BrepAppend_SMLibToUsdBrep(sBreps, sArrays, nullptr, false /*bExportUVCurves*/));
+        UsdBrepArraySpans sSpans;
+        if (sArrays.m_sWireEdgeVertexIndicesArray.size() != 1 || !sSpans.SetStartsAndCountsForBrepIndex(sArrays, 0, TRUE, TRUE))
+        {
+            usdBrep_WriteString("  FAIL: wire edge box arrays are unsuitable for the out-of-range test\n");
+            return SM_ERR;
+        }
+        sArrays.m_sWireEdgeVertexIndicesArray[0] = GfVec2i(1000, 0);
+        UsdBrepArraySpans sMalformedSpans;
+        if (sMalformedSpans.SetStartsAndCountsForBrepIndex(sArrays, 0, TRUE, TRUE))
+        {
+            usdBrep_WriteString("  FAIL: out-of-range wireEdge:vertexIndices was accepted\n");
+            sRtn = SM_ERR;
+        }
+    }
+    return sRtn;
+}
+
 /***********************************************************************
 PURPOSE --- Regression: a BrepArray import must fail atomically when any
             packed Brep cannot be converted to SMLib.
@@ -2837,10 +2932,8 @@ SmStatus my_test_healer_no_crash()
 
     if (!std::filesystem::exists(sFixture))
     {
-        // Fixture missing (e.g. Git LFS not pulled): skip rather than fail so a
-        // pointer-only checkout does not turn this crash gate into a hard failure.
-        usdBrep_WriteString("  SKIP: fixture not found: " + sFixture + "\n");
-        return SM_SUCCESS;
+        usdBrep_WriteString("  FAIL: fixture not found: " + sFixture + "\n");
+        return SM_ERR;
     }
 
     UsdStageRefPtr sStage = UsdStage::Open(sFixture);
@@ -3048,6 +3141,13 @@ SmStatus my_test_usd()
     {
         sRtn = sStat;
         usdBrep_WriteString("Failed: usdBrep_TestConversionFailurePropagation\n\n");
+    }
+
+    sStat = usdBrep_TestPackedSpansRejectOutOfRangeData();
+    if (sStat != SM_SUCCESS)
+    {
+        sRtn = sStat;
+        usdBrep_WriteString("Failed: usdBrep_TestPackedSpansRejectOutOfRangeData\n\n");
     }
 
     sStat = usdBrep_TestUsdCylinderPrimIsSmCylinder();

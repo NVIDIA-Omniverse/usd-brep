@@ -4135,7 +4135,7 @@ SmBoolean bDebugMe = FALSE ;
 //  // End obsolete - complicated version of sms_ReviewStartAndStopOnSeamCrvClassifies 
 
 /*******************************************************************//**
-PURPOSE: SetProps_Stage3 helper function
+PURPOSE: SetProps_Stage4 helper function
          After SetProps_Stage3 calls SmLoopProps::SetProps on all FaceLoops
          this method is called to set the m_sLoopProps[ii].Containment/Area_Loop/Orient 
          properties.
@@ -4270,9 +4270,9 @@ SmStatus SmFace::ClassifyLoops
   rOrderedNoAreaIndices.ReSet() ;
   
   // init input - make sure we have FaceProps after Fix_TolSizes()
-  if(rFaceProps.m_ePropStage < SM_PROPSTAGE_2)
-    { rFaceProps.SetProps_Stage2(this, rFaceProps.m_lFaceIndx == SM_UNDEF_ULONG ? 0 : rFaceProps.m_lFaceIndx, SM_HO_ALL) ; }  // SM_HO_ALL assumes all healable probs can be ignored now
-  rCrvClassification.ReSet() ; 
+  if(!rFaceProps.HasProps(SM_PROPSTAGE_3,this))
+    { SER(rFaceProps.SetProps_Stage3 (this, rFaceProps.m_lFaceIndx == SM_UNDEF_ULONG ? 0 : rFaceProps.m_lFaceIndx, SM_HO_ALL, SM_UNDEF_ULONG)); }
+  rCrvClassification.ReSet() ;
 
   // locals
   ULONG ii, jj, j1 ;
@@ -21502,12 +21502,14 @@ SmStatus  SmFace::GetPointsInFace
              ?  (lPointCount/iTrimCurveCnt) + 1
              :  (lPointCount/iTrimCurveCnt) ;
 
+      dUInc = sUInterval.GetLength() / (double)(iTrimCurveCnt+1) ;
+      dU    = sUInterval.GetMin() + dUInc ;
       dVInc = dVInc / (double)(jCnt+1) ;
 
       // generate an array of sample points
       for(ii=0;ii<iTrimCurveCnt;ii++,dU+=dUInc)
         {
-          for(jj=0,dV=dVInc;jj<jCnt;jj++,dV+=dVInc)
+          for(jj=0,dV=sVInterval.GetMin()+dVInc;jj<jCnt;jj++,dV+=dVInc)
             {
               if(rUV.GetSize() == lPointCount) break ;
               dVDither = (lPointCount > 1) ? (((double)rand()-(double)(RAND_MAX/2)) / (1.2 * (double)(RAND_MAX))) * dVInc

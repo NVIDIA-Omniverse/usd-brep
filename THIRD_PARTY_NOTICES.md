@@ -230,7 +230,7 @@ This product includes software developed at:
 
 ## Python Software Foundation - CPython runtime library - Python Software Foundation License Version 2
 
-Component: `python` (version 3.12.15), the runtime library only
+Component: `python` (version 3.12.16), the runtime library only
 
 Attribution Statements: The bundled OpenUSD libraries link against the CPython runtime
 library, so the release package ships it in `extraLibs/` (`python3.dll` and
@@ -304,14 +304,14 @@ Agreement.
 
 ## INRIA, CMU, Microsoft Corporation and HACL* Contributors - HACL* - MIT License
 
-Component: HACL* (CPython 3.12.15's `Modules/_hacl`, built into `python312.dll` on Windows)
+Component: HACL* (CPython 3.12.16's `Modules/_hacl`, built into `python312.dll` on Windows)
 
 Attribution Statements: CPython's Windows build compiles HACL*'s MD5, SHA-1, SHA-2 and SHA-3
 code into `python312.dll`, which the Windows release package ships in `extraLibs/`. The
 Linux `libpython3.12.so` does not contain it. Source code is available at
 https://github.com/hacl-star/hacl-star.
 
-License Text(https://github.com/python/cpython/blob/v3.12.15/Modules/_hacl/Hacl_Hash_SHA3.c)
+License Text(https://github.com/python/cpython/blob/v3.12.16/Modules/_hacl/Hacl_Hash_SHA3.c)
 
 ```
 MIT License
@@ -336,6 +336,135 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+---
+
+## Alliance for Open Media and Joe Drago - libaom and libavif (OpenUSD's hioAvif plugin) - BSD 2-Clause License and Alliance for Open Media Patent License 1.0
+
+Component: libaom (version 3.12.1, AV1 decoder only) and libavif (version 1.0.1), built into
+OpenUSD's `hioAvif` image plugin (`plugin/usd/hioAvif.so`, `hioAvif.dll`)
+
+Attribution Statements: OpenUSD reads AVIF image files through its `hioAvif` plugin, which
+the release packages ship; the wheel does not. OpenUSD compiles only the decoding parts of
+libaom and libavif into it. Their BSD 2-Clause license texts are in OpenUSD's `LICENSE.txt`
+(see the OpenUSD entry above). libaom also comes with the Alliance for Open Media Patent
+License 1.0 (its `PATENTS` file), which OpenUSD's `LICENSE.txt` does not include. Source code
+is available at https://aomedia.googlesource.com/aom/ and https://github.com/AOMediaCodec/libavif.
+OpenUSD's `pxr/imaging/plugin/hioAvif/README.md` names libavif v1.0.4 and libaom v3.8.3, but
+the vendored sources are libaom 3.12.1 (`aom_version.h`, the version the plugin reports) and
+libavif code from after its v1.0.1 release (`avif.h`: 1.0.1 with `AVIF_VERSION_DEVEL 1`).
+
+License Text(https://aomedia.googlesource.com/aom/+/refs/tags/v3.12.1/PATENTS)
+
+```
+Alliance for Open Media Patent License 1.0
+
+1. License Terms.
+
+1.1. Patent License. Subject to the terms and conditions of this License, each
+     Licensor, on behalf of itself and successors in interest and assigns,
+     grants Licensee a non-sublicensable, perpetual, worldwide, non-exclusive,
+     no-charge, royalty-free, irrevocable (except as expressly stated in this
+     License) patent license to its Necessary Claims to make, use, sell, offer
+     for sale, import or distribute any Implementation.
+
+1.2. Conditions.
+
+1.2.1. Availability. As a condition to the grant of rights to Licensee to make,
+       sell, offer for sale, import or distribute an Implementation under
+       Section 1.1, Licensee must make its Necessary Claims available under
+       this License, and must reproduce this License with any Implementation
+       as follows:
+
+       a. For distribution in source code, by including this License in the
+          root directory of the source code with its Implementation.
+
+       b. For distribution in any other form (including binary, object form,
+          and/or hardware description code (e.g., HDL, RTL, Gate Level Netlist,
+          GDSII, etc.)), by including this License in the documentation, legal
+          notices, and/or other written materials provided with the
+          Implementation.
+
+1.2.2. Additional Conditions. This license is directly from Licensor to
+       Licensee.  Licensee acknowledges as a condition of benefiting from it
+       that no rights from Licensor are received from suppliers, distributors,
+       or otherwise in connection with this License.
+
+1.3. Defensive Termination. If any Licensee, its Affiliates, or its agents
+     initiates patent litigation or files, maintains, or voluntarily
+     participates in a lawsuit against another entity or any person asserting
+     that any Implementation infringes Necessary Claims, any patent licenses
+     granted under this License directly to the Licensee are immediately
+     terminated as of the date of the initiation of action unless 1) that suit
+     was in response to a corresponding suit regarding an Implementation first
+     brought against an initiating entity, or 2) that suit was brought to
+     enforce the terms of this License (including intervention in a third-party
+     action by a Licensee).
+
+1.4. Disclaimers. The Reference Implementation and Specification are provided
+     "AS IS" and without warranty. The entire risk as to implementing or
+     otherwise using the Reference Implementation or Specification is assumed
+     by the implementer and user. Licensor expressly disclaims any warranties
+     (express, implied, or otherwise), including implied warranties of
+     merchantability, non-infringement, fitness for a particular purpose, or
+     title, related to the material. IN NO EVENT WILL LICENSOR BE LIABLE TO
+     ANY OTHER PARTY FOR LOST PROFITS OR ANY FORM OF INDIRECT, SPECIAL,
+     INCIDENTAL, OR CONSEQUENTIAL DAMAGES OF ANY CHARACTER FROM ANY CAUSES OF
+     ACTION OF ANY KIND WITH RESPECT TO THIS LICENSE, WHETHER BASED ON BREACH
+     OF CONTRACT, TORT (INCLUDING NEGLIGENCE), OR OTHERWISE, AND WHETHER OR
+     NOT THE OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+2. Definitions.
+
+2.1. Affiliate.  "Affiliate" means an entity that directly or indirectly
+     Controls, is Controlled by, or is under common Control of that party.
+
+2.2. Control. "Control" means direct or indirect control of more than 50% of
+     the voting power to elect directors of that corporation, or for any other
+     entity, the power to direct management of such entity.
+
+2.3. Decoder.  "Decoder" means any decoder that conforms fully with all
+     non-optional portions of the Specification.
+
+2.4. Encoder.  "Encoder" means any encoder that produces a bitstream that can
+     be decoded by a Decoder only to the extent it produces such a bitstream.
+
+2.5. Final Deliverable.  "Final Deliverable" means the final version of a
+     deliverable approved by the Alliance for Open Media as a Final
+     Deliverable.
+
+2.6. Implementation.  "Implementation" means any implementation, including the
+     Reference Implementation, that is an Encoder and/or a Decoder. An
+     Implementation also includes components of an Implementation only to the
+     extent they are used as part of an Implementation.
+
+2.7. License. "License" means this license.
+
+2.8. Licensee. "Licensee" means any person or entity who exercises patent
+     rights granted under this License.
+
+2.9. Licensor.  "Licensor" means (i) any Licensee that makes, sells, offers
+     for sale, imports or distributes any Implementation, or (ii) a person
+     or entity that has a licensing obligation to the Implementation as a
+     result of its membership and/or participation in the Alliance for Open
+     Media working group that developed the Specification.
+
+2.10. Necessary Claims.  "Necessary Claims" means all claims of patents or
+      patent applications, (a) that currently or at any time in the future,
+      are owned or controlled by the Licensor, and (b) (i) would be an
+      Essential Claim as defined by the W3C Policy as of February 5, 2004
+      (https://www.w3.org/Consortium/Patent-Policy-20040205/#def-essential)
+      as if the Specification was a W3C Recommendation; or (ii) are infringed
+      by the Reference Implementation.
+
+2.11. Reference Implementation. "Reference Implementation" means an Encoder
+      and/or Decoder released by the Alliance for Open Media as a Final
+      Deliverable.
+
+2.12. Specification. "Specification" means the specification designated by
+      the Alliance for Open Media as a Final Deliverable for which this
+      License was issued.
 ```
 
 ---
@@ -408,10 +537,10 @@ Terms: https://openusd.org/release/contributing_supplemental.html
 Component: `usd-validation-nvidia` pip package (provides `usd_validation_nvidia`,
 `omni.asset_validator`, and `omni.capabilities`)
 
-Attribution Statements: Used only by the optional `brep_validator` developer/test
-tooling to run USD asset-validation rules. It is a pure-Python package obtained via
-`pip install usd-validation-nvidia` (not via packman) and is not redistributed with the
-USD BRep product. Distribution: https://pypi.org/project/usd-validation-nvidia/.
+Attribution Statements: An optional dependency that the user installs from PyPI with
+`pip install usd-brep[validation]`; it is not redistributed with the USD BRep product. Only
+the wheel's `brep_usdschema_validator` plugin uses it, to run USD asset-validation rules.
+Distribution: https://pypi.org/project/usd-validation-nvidia/.
 
 License: the package is dual-licensed by content type, as stated in the `LICENSE` file it
 ships: its source code is under the Apache License, Version 2.0 and its
@@ -530,8 +659,8 @@ Transitive dependencies, by declared license:
   rather than under this repository's primary license. See `LICENSE` and the entry above
   for the full text.
 * The `usd-validation-nvidia` entry above is another exception: it is not a packman
-  dependency but a pip package used solely by the optional `brep_validator` dev/test
-  tooling. It is listed for completeness and is likewise not redistributed with the product.
+  dependency but an optional pip dependency of the wheel that the user installs. It is not
+  redistributed with the product.
 * The optional GUI developer-tool entry above is a further exception of the same kind: the
   packages come from PyPI via `uv.lock`, not from packman, and are not redistributed with
   the product.

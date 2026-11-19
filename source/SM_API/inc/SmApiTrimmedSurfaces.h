@@ -41,7 +41,9 @@ SMAPI_EXPORT SmApiStatus SmApiTrimSurfaceWith3dCurves(
 );
 
 SMAPI_EXPORT SmApiStatus SmApiTrimProjectParallel( 
-    SmObject* pObject,                 ///< [in ]: Brep or standalone Surface to trim (consumed on success)            <br>
+    SmObject* pObject,                 ///< [in/out]: Brep: trimmed in place, left edit-enabled, and returned          <br>
+                                       ///<           as rpResult. Standalone Surface: consumed into a new             <br>
+                                       ///<           rpResult on success.                                             <br>
     SmBSplineCurve* crCurveToProject,  ///< [in ]: Curve to project to the faces                                       <br>
     const SmVector3d& crProjectionDirection, ///< [in ]: Defines direction of projection                                     <br>
     const SmPoint3d & crReferencePoint,      ///< [in ]: Used only if trimType is SM_TT_KEEP_POINT or SM_TT_DELETE_POINT.    <br>

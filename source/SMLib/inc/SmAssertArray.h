@@ -246,6 +246,7 @@ public:
                                     
   const TCHAR * m_pName ;           // Name of test used in Dump comments     
   const TCHAR * m_pMessage ;        // Description of test used in Dump comments 
+  TCHAR       * m_pOwnedMessage ;   // Our copy of a caller's message (m_pMessage points into it), or NULL
   const TCHAR * m_pMessageForFile ; // Description of test used in Dump comments without values - to simplify log files for compare 
   // const TCHAR * m_pHealName ;       // Name(desc) of Healer Method
   // const TCHAR * m_pHealMessage ;    // Heal Message - only used for failed Heal attempts
@@ -308,7 +309,12 @@ public:
   SmBoolean        operator==(const SmAssertReport &crOther ) ;      
 
   // destructor
- ~SmAssertReport()  { m_pOwner = m_pOther = NULL; }
+ ~SmAssertReport() ;
+
+private:
+  // Copy pMessage into m_pOwnedMessage and point m_pMessage at it, so the report never keeps a caller's buffer.
+  void             StoreMessage(const TCHAR * pMessage) ;
+public:
 
   // obsolete
   // // Heal AssertFailure Try (when Owner is derived from SmObject)

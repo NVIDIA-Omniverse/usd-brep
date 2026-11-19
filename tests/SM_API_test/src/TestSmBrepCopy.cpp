@@ -74,8 +74,44 @@ static SmStatus CheckApiCopy(SmBrep& source)
     return CheckCopyRepresentation(source, *copy);
 }
 
+// A surface whose Copy fails, like SmSTEPSurface and SmCurveBoundedSurface,
+// which have no Copy of their own; MergeBrep then stops partway through a copy.
+class UncopyableSurface : public SmBSplineSurface
+{
+public:
+    explicit UncopyableSurface(const SmBSplineSurface& crSurface) : SmBSplineSurface(crSurface) {}
+    SmStatus Copy(const SmContext&, SmSurface*&) const override { return SM_ERR; }
+};
+
+// SmApiBrepCopy reports a copy MergeBrep could not finish instead of returning
+// the incomplete Brep as success, and deletes it.
+static SmStatus CheckFailedCopyIsReported()
+{
+    const SmVector3d origin(0.0, 0.0, 0.0);
+    SmBrep* rawSource = NULL;
+    SER(SmApiCreateBox(origin, 4.0, 5.0, 6.0, rawSource));
+    std::unique_ptr<SmBrep> source(rawSource);
+    NER(rawSource);
+    SmTArray<SmFace*> faces;
+    source->GetFaces(faces);
+    SmSurface* nurb = NULL;
+    SER(faces[0]->GetSurface()->CopyAnalyticAsNurb(*source->GetContext(), nurb));
+    std::unique_ptr<SmSurface> nurbOwner(nurb);
+    NER(nurb);
+    if (!nurb->IsKindOf(SmBSplineSurface_TYPE))
+        return SM_ERR;
+    SmSurface* uncopyable = new (*source->GetContext()) UncopyableSurface(*(SmBSplineSurface*)nurb);
+    SER(source->ReplaceSurface(faces[0], uncopyable, FALSE));
+
+    SmBrep* rawCopy = NULL;
+    const SmApiStatus status = SmApiBrepCopy(source.get(), rawCopy);
+    std::unique_ptr<SmBrep> copy(rawCopy);
+    return (status != SM_SUCCESS && rawCopy == NULL) ? SM_SUCCESS : SM_ERR;
+}
+
 SmStatus TestSmBrepCopyRepresentation()
 {
+    SER(CheckFailedCopyIsReported());
     for (int shape = 0; shape < 5; ++shape)
     {
         const SmVector3d origin(0.0, 0.0, 0.0);

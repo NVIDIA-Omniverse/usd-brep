@@ -31,6 +31,16 @@
 class SmDerivSurfDefinition;
 class SmVertex;
 
+// Geometric evidence from one direction of a connected boundary walk.
+// ON distinguishes a completed sampled walk from an unresolved connection.
+enum SmSeamSideType
+{
+  SM_SEAM_SIDE_UNKNOWN, // No unique endpoint correspondence was available.
+  SM_SEAM_SIDE_MIN,     // The connected curve leaves the seam toward the minimum side.
+  SM_SEAM_SIDE_MAX,     // The connected curve leaves the seam toward the maximum side.
+  SM_SEAM_SIDE_ON       // The walk returns around the loop without an off-seam sample.
+};
+
 /*******************************************************************//**
 PURPOSE: This class represents topological edgeuses within a Brep.
 
@@ -282,6 +292,16 @@ public:
 
   // Return continuity of dihedral sector based on 5 point samples
   SmContinuityType    GetSectorContinuity  (double dAngTolDeg=SM_CONTINUITY_ANGLE) const; // NotUsed: in :
+
+  // Connected seam-side evidence, without UV trims or cached face properties.
+  SmStatus FindSeamSides
+   (double          dParameter,             // in : encounter parameter on this edge
+    SmSurfParamType eDirection,             // in : periodic parameter being crossed
+    double          dTolerance,             // in : 3D seam neighborhood
+    SmBoolean       bUseEdgeuseOrientation, // in : use stored directions, otherwise match connected endpoints
+    SmSeamSideType &reForwardSide,          // out: evidence toward the CCW edgeuse
+    SmSeamSideType &reBackwardSide)         // out: evidence toward the CW edgeuse
+   const;
 
   // Edge/Face   Gaps  
   // Edge/Vertex Gaps 

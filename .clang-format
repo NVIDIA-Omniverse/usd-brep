@@ -67,7 +67,7 @@ IncludeCategories:
   - Regex:           '<.+>'
     Priority:        9
 IndentCaseLabels: true
-IndentPPDirectives: AfterHash
+IndentPPDirectives: None
 IndentFunctionDeclarationAfterType: false
 IndentWidth: 4
 InsertBraces: true
